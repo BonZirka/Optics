@@ -1,0 +1,16 @@
+[dependencies]
+  lucida_macro = { path = "./libs/macro-optics/v0", version = "1.0.0" }
+  lucida = { path = "./libs/optics/v0", version = "1.0.0" }
+
+[package]
+  cjc-version = "0.57.3"
+  compile-option = "-O2 --debug-macro --dump-chil-debug"
+  description = "nothing here"
+  link-option = ""
+  name = "optics_experiments"
+  output-type = "executable"
+  override-compile-option = ""
+  src-dir = ""
+  target-dir = ""
+  version = "1.0.0"
+  package-configuration = {}
