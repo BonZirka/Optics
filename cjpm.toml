@@ -1,10 +1,17 @@
 [dependencies]
-  lucida_macro = { path = "./libs/macro-optics/v0", version = "1.0.0" }
-  lucida = { path = "./libs/optics/v0", version = "1.0.0" }
+  # lucida_macro = { path = "./libs/macro-optics/v0", version = "1.0.0" }
+  # lucida = { path = "./libs/optics/v0", version = "1.0.0" }
+  # lucida_macro = { path = "./libs/macro-optics/v1", version = "1.0.0" }
+  # lucida = { path = "./libs/optics/v1", version = "1.0.0" }
+  # lucida = { path = "./libs/optics/v1-laarhoven", version = "1.0.0" }
+  lucida = { path = "./libs/optics/v2", version = "1.0.0" }
+  # lucida_macro = { path = "./libs/macro-optics/v1-laarhoven", version = "1.0.0" }
+  # lucida_macro = { path = "./libs/macro-optics/v1-laarhoven-flat", version = "1.0.0" }
+  macro_test_utils = { path = "./libs/macro-test-utils/", version = "1.0.0" }
 
 [package]
   cjc-version = "0.57.3"
-  compile-option = "-O2 --debug-macro --dump-chil-debug"
+  compile-option = "-O2 --debug-macro"
   description = "nothing here"
   link-option = ""
   name = "optics_experiments"
@@ -14,3 +21,7 @@
   target-dir = ""
   version = "1.0.0"
   package-configuration = {}
+
+[target.x86_64-unknown-linux-gnu]
+  [target.x86_64-unknown-linux-gnu.bin-dependencies]
+    path-option = ["${CANGJIE_STDX_PATH}"]
