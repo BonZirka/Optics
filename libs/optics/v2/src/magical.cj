@@ -1,215 +1,84 @@
 package lucida
 
-public struct Magical<T>   {}
+public struct RegistryMagical<T> { }
 
-public struct Lenses<T>    {}
-public struct Prisms<T>    {}
-public struct Optionals<T> {}
-
-public enum Either<L, R> {
-    | Left(L)
-    | Right(R)
+public func __downcast_method_coerce<T, G>(_: RegistryMagical<T>, _: RegistryMagical<G>): RegistryIsos<T> {
+    RegistryIsos()
 }
 
-@Frozen
-public func magic<T>(_: T): Magical<T> {
-    Magical()
-}
+public struct RegistryIsos<T>      {} // (a) -> b, (b) -> a
+public struct RegistryLenses<T>    {} // (a) -> b, (a, b) -> a
+public struct RegistryPrisms<T>    {} // (a) -> Either a b, (b) -> a
+public struct RegistryAffines<T>   {} // (a) -> Either a b, (a, b) -> a
+public struct RegistrySetters<T>   {} // (a) -> a, (a, (b) -> b) -> a
 
 @Frozen
-public func composeForward<S, A, B>(_: Lenses<S>, _: Lenses<A>, _: Magical<B>) {
-    { l1view: (S) -> A, l2view: (A) -> B, _: (S, A) -> S, _: (A, B) -> A =>
-        { source: S => l2view(l1view(source)) }
-    }
+public func magic<T>(_: () -> T): RegistryMagical<T> {
+    RegistryMagical()
 }
 
 @Frozen
-public func composeBackward<S, A, B>(_: Lenses<S>, _: Lenses<A>, _: Magical<B>) {
-    { l1view: (S) -> A, _: (A) -> B, l1update: (S, A) -> S, l2update: (A, B) -> A =>
-        { source: S, focus: B => l1update(source, l2update(l1view(source), focus)) }
-    }
+public func magic<T>(): RegistryMagical<T> {
+    RegistryMagical()
 }
 
 @Frozen
-public func composeForward<S, A, B>(_: Prisms<S>, _: Prisms<A>, _: Magical<B>) {
-    {p1preview: (S) -> Either<S, A>, p2preview: (A) -> Either<A, B>, _: Any, _: Any =>
-        { source: S => 
-            if (let Right(prv1) <- p1preview(source) && let Right(res) <- p2preview(prv1)) {
-                Right<S, B>(res)
-            } else {
-                Left<S, B>(source)
-            }
-        }
-    }
+public func evalBackward<S, A>(optic: (A) -> S, _: S, target: A): S {
+    optic(target)
+}
+@Frozen
+public func evalBackward<S, A>(optic: (S, A) -> S, source: S, target: A): S {
+    optic(source, target)
 }
 
 @Frozen
-public func composeBackward<S, A, B>(_: Prisms<S>, _: Prisms<A>, _: Magical<B>) {
-    { _: Any, _: Any, p1build: (A) -> S, p2build: (B) -> A =>
-        { focus: B => p1build(p2build(focus)) }
-    }
+public func finalizingSetterForward<S, A>(optic: (A) -> S, target: A): (S) -> S {
+    { source: S => optic(target) }
 }
 
 @Frozen
-public func composeForward<S, A, B>(_: Optionals<S>, _: Optionals<A>, _: Magical<B>) {
-    { p1preview: (S) -> Either<S, A>, p2preview: (A) -> Either<A, B>, _: Any, _: Any =>
-        { source: S => 
-            if (let Right(prv1) <- p1preview(source) && let Right(res) <- p2preview(prv1)) {
-                Right<S, B>(res)
-            } else {
-                Left<S, B>(source)
-            }
-        }
-    }
+public func finalizingSetterForward<S, A>(optic: (S, A) -> S, target: A): (S) -> S {
+    { source: S => optic(source, target) }
 }
 
 @Frozen
-public func composeBackward<S, A, B>(_: Optionals<S>, _: Optionals<A>, _: Magical<B>) {
-    { p1preview: (S) -> Either<S, A>, p2preview: (A) -> Either<A, B>, p1update: (S, A) -> S, p2update: (A, B) -> A =>
-        { source: S, focus: B =>  
-            if (let Right(v1) <- p1preview(source) && let Right(_) <- p2preview(v1)) {
-                p1update(source, p2update(v1, focus))
-            } else {
-                source
-            }
-        }
-    }
+public func finalizingSetterForward<S, A>(optic: (S, (A) -> A) -> S, target: A): (S) -> S {
+    { source: S => optic(source, { x: A => target }) }
 }
 
 @Frozen
-public func composeForward<S, A, B>(_: Prisms<S>, _: Lenses<A>, _: Magical<B>) {
-    { p1preview: (S) -> Either<S, A>, l2view: (A) -> B, _: Any, _: Any =>
-        { source: S => 
-            if (let Right(prv1) <- p1preview(source)) {
-                Right<S, B>(l2view(prv1))
-            } else {
-                Left<S, B>(source)
-            }
-        }
-    }
-}
-@Frozen
-public func composeForward<S, A, B>(_: Lenses<S>, _: Prisms<A>, _: Magical<B>) {
-    { l1view: (S) -> A, p2preview: (A) -> Either<A, B>, _: Any, _: Any =>
-        { source: S => 
-            if (let Right(prv2) <- p2preview(l1view(source))) {
-                Right<S, B>(prv2)
-            } else {
-                Left<S, B>(source)
-            }
-        }
-    }
+public func finalizingSetterBackward<S, A>(optic: (A) -> S, target: A): (S, (A) -> A) -> S {
+    { source: S, modifier: (A) -> A => optic(modifier(target)) }
 }
 
 @Frozen
-public func composeForward<S, A, B>(_: Lenses<S>, _: Optionals<A>, _: Magical<B>) {
-    composeForward<S, A, B>(Lenses<S>(), Prisms<A>(), Magical<B>())
-}
-@Frozen
-public func composeForward<S, A, B>(_: Prisms<S>, _: Optionals<A>, _: Magical<B>) {
-    composeForward<S, A, B>(Prisms<S>(), Prisms<A>(), Magical<B>())
-}
-@Frozen
-public func composeForward<S, A, B>(_: Optionals<S>, _: Lenses<A>, _: Magical<B>) {
-    composeForward<S, A, B>(Prisms<S>(), Lenses<A>(), Magical<B>())
-}
-@Frozen
-public func composeForward<S, A, B>(_: Optionals<S>, _: Prisms<A>, _: Magical<B>) {
-    composeForward<S, A, B>(Prisms<S>(), Prisms<A>(), Magical<B>())
-}
-
-
-@Frozen
-public func composeBackward<S, A, B>(_: Prisms<S>, _: Lenses<A>, _: Magical<B>) {
-    { p1preview: (S) -> Either<S, A>, l2view: (A) -> B, p1build: (A) -> S, l2update: (A, B) -> A =>
-        { source: S, focus: B =>  
-            if (let Right(v1) <- p1preview(source)) {
-                p1build(l2update(v1, focus))
-            } else {
-                source
-            }
-        }
-    }
-}
-@Frozen
-public func composeBackward<S, A, B>(_: Lenses<S>, _: Prisms<A>, _: Magical<B>) {
-    { l1view: (S) -> A, p2preview: (A) -> Either<A, B>, l1update: (S, A) -> S, p2build: (B) -> A =>
-        { source: S, focus: B =>  
-            if (let Right(_) <- p2preview(l1view(source))) {
-                l1update(source, p2build(focus))
-            } else {
-                source
-            }
-        }
-    }
-}
-@Frozen
-public func composeBackward<S, A, B>(_: Lenses<S>, _: Optionals<A>, _: Magical<B>) {
-    { l1view: (S) -> A, o2preview: (A) -> Either<A, B>, l1update: (S, A) -> S, o2update: (A, B) -> A =>
-        { source: S, focus: B =>  
-            let t = l1view(source)
-            if (let Right(_) <- o2preview(t)) {
-                l1update(source, o2update(t, focus))
-            } else {
-                source
-            }
-        }
-    }
-}
-@Frozen
-public func composeBackward<S, A, B>(_: Prisms<S>, _: Optionals<A>, _: Magical<B>) {
-    { p1preview: (S) -> Either<S, A>, o2preview: (A) -> Either<A, B>, p1build: (A) -> S, o2update: (A, B) -> A =>
-        { source: S, focus: B =>  
-            if (let Right(v1) <- p1preview(source) && let Right(_) <- o2preview(v1)) {
-                p1build(o2update(v1, focus))
-            } else {
-                source
-            }
-        }
-    }
-}
-@Frozen
-public func composeBackward<S, A, B>(_: Optionals<S>, _: Lenses<A>, _: Magical<B>) {
-    { o1preview: (S) -> Either<S, A>, _: (A) -> B, o1update: (S, A) -> S, l2update: (A, B) -> A =>
-        { source: S, focus: B =>  
-            if (let Right(v1) <- o1preview(source)) {
-                o1update(source, l2update(v1, focus))
-            } else {
-                source
-            }
-        }
-    }
-}
-@Frozen
-public func composeBackward<S, A, B>(_: Optionals<S>, _: Prisms<A>, _: Magical<B>) {
-    { o1preview: (S) -> Either<S, A>, p2preview: (A) -> Either<A, B>, o1update: (S, A) -> S, p2build:  (B) -> A =>
-        { source: S, focus: B =>  
-            if (let Right(v1) <- o1preview(source) && let Right(_) <- p2preview(v1)) {
-                o1update(source, p2build(focus))
-            } else {
-                source
-            }
-        }
-    }
+public func finalizingSetterBackward<S, A>(optic: (S, A) -> S, target: A): (S, (A) -> A) -> S {
+    { source: S, modifier: (A) -> A => optic(source, modifier(target)) }
 }
 
 @Frozen
-public func whatExpect<S, A, B>(_: Lenses<S>,    _: Lenses<A>,    _: Magical<B>): Lenses<S>    { Lenses() }
-@Frozen
-public func whatExpect<S, A, B>(_: Prisms<S>,    _: Prisms<A>,    _: Magical<B>): Prisms<S>    { Prisms() }
-@Frozen
-public func whatExpect<S, A, B>(_: Optionals<S>, _: Optionals<A>, _: Magical<B>): Optionals<S> { Optionals() }
-@Frozen
-public func whatExpect<S, A, B>(_: Lenses<S>,    _: Prisms<A>,    _: Magical<B>): Optionals<S> { Optionals() }
-@Frozen
-public func whatExpect<S, A, B>(_: Prisms<S>,    _: Lenses<A>,    _: Magical<B>): Optionals<S> { Optionals() }
-@Frozen
-public func whatExpect<S, A, B>(_: Lenses<S>,    _: Optionals<A>, _: Magical<B>): Optionals<S> { Optionals() }
-@Frozen
-public func whatExpect<S, A, B>(_: Prisms<S>,    _: Optionals<A>, _: Magical<B>): Optionals<S> { Optionals() }
-@Frozen
-public func whatExpect<S, A, B>(_: Optionals<S>, _: Lenses<A>,    _: Magical<B>): Optionals<S> { Optionals() }
-@Frozen
-public func whatExpect<S, A, B>(_: Optionals<S>, _: Prisms<A>,    _: Magical<B>): Optionals<S> { Optionals() }
+public func finalizingSetterBackward<S, A>(optic: (S, (A) -> A) -> S, target: A): (S, (A) -> A) -> S {
+    { source: S, modifier: (A) -> A => optic(source, { x: A => modifier(target) }) }
+}
 
-// Testing idea
+@Frozen
+public func magicFirstClassDowncast<S, A>(_: Lens<S, A>): RegistryLenses<S> { RegistryLenses<S>() }
+@Frozen
+public func magicFirstClassDowncast<S, A>(_: Prism<S, A>): RegistryPrisms<S> { RegistryPrisms<S>() }
+@Frozen
+public func magicFirstClassDowncast<S, A>(_: Iso<S, A>): RegistryIsos<S> { RegistryIsos<S>() }
+@Frozen
+public func magicFirstClassDowncast<S, A>(_: Affine<S, A>): RegistryAffines<S> { RegistryAffines<S>() }
+@Frozen
+public func magicFirstClassDowncast<S, A>(_: Setter<S, A>): RegistrySetters<S> { RegistrySetters<S>() }
+
+@Frozen
+public func magicFirstClass<S, A>(_: Lens<S, A>): RegistryMagical<A> { RegistryMagical<A>() }
+@Frozen
+public func magicFirstClass<S, A>(_: Prism<S, A>): RegistryMagical<A> { RegistryMagical<A>() }
+@Frozen
+public func magicFirstClass<S, A>(_: Iso<S, A>): RegistryMagical<A> { RegistryMagical<A>() }
+@Frozen
+public func magicFirstClass<S, A>(_: Affine<S, A>): RegistryMagical<A> { RegistryMagical<A>() }
+@Frozen
+public func magicFirstClass<S, A>(_: Setter<S, A>): RegistryMagical<A> { RegistryMagical<A>() }

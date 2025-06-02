@@ -280,7 +280,7 @@ func deriveInterfaceViewDecls(params: ArrayList<FuncParam>, decl: Decl): ArrayLi
             } 
         } else { quote() }
         let focusType = it.paramType
-        let res: Decl = FuncDecl(quote(
+        let res = FuncDecl(quote(
             @Frozen
             $mod func $funcId(source: $pctorId): $focusType
         ))
@@ -325,7 +325,7 @@ func deriveInterfaceAccessorsDecls(params: ArrayList<FuncParam>, decl: Decl): Ar
             } 
         } else { quote() }
         let focusType = it.paramType
-        let res: Decl = FuncDecl(quote(
+        let res = FuncDecl(quote(
             @Frozen
             $mod func $funcId(_: Magical<$pctorId>): Magical<$focusType>
         ))
@@ -347,7 +347,7 @@ func deriveLensView(params: ArrayList<FuncParam>, decl: Decl): ArrayList<Decl> {
         let focusType = it.paramType
         let prev = argvars[i]
         argvars[i] = quote(focus)
-        let res: Decl = FuncDecl(quote(
+        let res = FuncDecl(quote(
             @Frozen
             $mod func $lensId(source: $pctorId): $focusType {
                 source.$(it.identifier)
@@ -371,7 +371,7 @@ func deriveLensUpdate(params: ArrayList<FuncParam>, decl: Decl): ArrayList<Decl>
         let focusType = it.paramType
         let prev = argvars[i]
         argvars[i] = quote(focus)
-        let res: Decl = FuncDecl(quote(
+        let res = FuncDecl(quote(
             @Frozen
             $mod func $lensId($sourceSetId: $pctorId, focus: $focusType): $pctorId {
                 $pctorId($(commaSeparated(argvars)))
@@ -396,7 +396,7 @@ func deriveOpticsAccessors(params: ArrayList<FuncParam>, decl: Decl): ArrayList<
         let focusType = it.paramType
         let prev = argvars[i]
         argvars[i] = quote(focus)
-        let res: Decl = FuncDecl(quote(
+        let res = FuncDecl(quote(
             @Frozen
             $mod func $lensId(_: Magical<$pctorId>): Magical<$focusType> {
                 Magical()

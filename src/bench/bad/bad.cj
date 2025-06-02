@@ -1,15 +1,11 @@
-package optics_experiments.bench.general
+package optics_experiments.bench.bad
 
 import std.deriving.*
 
 import std.unittest.*
 import std.unittest.testmacro.*
 
-import lucida.*
-import lucida_macro.*
-
 @Derive[ToString]
-@DeriveOptics
 public struct A {
     public A(
         public var x: B,
@@ -17,13 +13,72 @@ public struct A {
     ) { }
 }
 
+public let lensAx = Lens(
+    { source: A => source.x },
+    { source: A, focus: B => A(focus, source.y) }
+)
+public let lensAy = Lens(
+    { source: A => source.y },
+    { source: A, focus: String => A(source.x, focus) }
+)
+
 @Derive[ToString]
-@DeriveOptics
 public struct B {
     public B(
         public var x: String,
         public var y: String
     ) { }
+}
+
+public let lensBx = Lens(
+    { source: B => source.x },
+    { source: B, focus: String => B(focus, source.y) }
+)
+public let lensBy = Lens(
+    { source: B => source.y },
+    { source: B, focus: String => B(source.x, focus) }
+)
+
+public struct Lens<S, A> {
+    Lens(
+        public let view: (S) -> A,
+        public let update: (S, A) -> S
+    ) { }
+}
+
+public let best = Lens(
+    { source: A => source.x.y },
+    { source: A, focus: String =>
+        var tmp = source
+        tmp.x.y = focus
+        tmp
+    }
+)
+
+public let composed = Lens(
+    { source: A => source.x.y },
+    { source: A, focus: String => 
+        let x0 = idLens(source)
+        let x1 = compose(x0, lensAx)
+        let x2 = compose(x1, lensBy)
+        x2.update(source, focus)
+    }
+)
+
+public func compose<S, A, B>(a: Lens<S, A>, b: Lens<A, B>): Lens<S, B> {
+    Lens({ source: S =>
+        b.view(a.view(source))
+    },
+    { source: S, focus: B =>
+        a.update(source, b.update(a.view(source), focus))
+    })
+}
+
+public func idLens<T>(a: T): Lens<T, T> {
+    Lens(
+        { source: T => source },
+        { _: T, focus: T => focus }
+    )
 }
 
 public var test: Option<A> = None;
@@ -43,7 +98,13 @@ class StructMutBenchmark {
 
     @Bench
     func opticsBaseline(): Unit {
-        let bnw = @Lucida(bow.x.y, "New")
+        let bnw = composed.update(bow, "New")
+        test = bnw
+    }
+
+    @Bench
+    func bestOptics(): Unit {
+        let bnw = best.update(bow, "New")
         test = bnw
     }
 

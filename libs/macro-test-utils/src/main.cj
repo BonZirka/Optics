@@ -61,7 +61,7 @@ private func generateLucidaCall(current: UInt64, max: UInt64, initVar: Tokens, c
     let structName = Token(IDENTIFIER, "${structNamePrefix}${current}")
     if (current >= max) {
         quote(
-            @Lucida($(cont(initVar)).y = "New")
+            @Lucida($(cont(initVar)).y, "New")
         )
     } else {
         generateLucidaCall(current + 1, max, initVar) { prevCall: Tokens =>
@@ -105,7 +105,7 @@ private func generateStruct(current: UInt64, max: UInt64, cont: (Tokens) -> Toke
     let structName = Token(IDENTIFIER, "${structNamePrefix}${current}")
     let macroses = quote(
         @Derive[ToString]
-        @DeriveLenses
+        @DeriveOptics
     )
     if (current >= max) {
         let structDecl = quote(
