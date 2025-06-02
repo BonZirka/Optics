@@ -8,7 +8,7 @@ import lucida.*
 import lucida_macro.*
 import lucida.stdlib.*
 
-import serialization.serialization.*
+import stdx.serialization.serialization.*
 
 extend RegistryMagical<DataModel> {
     public func __downcast_method_serialization<T>(_: RegistryMagical<DataModel>): RegistryPrisms<DataModel> {

@@ -82,3 +82,23 @@ public func magicFirstClass<S, A>(_: Iso<S, A>): RegistryMagical<A> { RegistryMa
 public func magicFirstClass<S, A>(_: Affine<S, A>): RegistryMagical<A> { RegistryMagical<A>() }
 @Frozen
 public func magicFirstClass<S, A>(_: Setter<S, A>): RegistryMagical<A> { RegistryMagical<A>() }
+
+// ===== Fusion type-pinning helpers =====
+// Cangjie cannot infer lambda parameter types from the lambda body alone.
+// The macro passes a source-providing thunk () -> S whose return type pins S,
+// allowing the walk lambda (S) -> R / (S, R) -> S to be typed without an IIFE.
+
+@Frozen
+public func pinForward<S, R>(sourceThunk: () -> S, walk: (S) -> R): (S) -> R {
+    { s: S => walk(s) }
+}
+
+@Frozen
+public func pinBackward<S, R>(sourceThunk: () -> S, targetThunk: () -> R, walk: (S, R) -> S): (S, R) -> S {
+    { s: S, r: R => walk(s, r) }
+}
+
+@Frozen
+public func pinBackwardSourceless<S, R>(targetThunk: () -> R, walk: (R) -> S): (R) -> S {
+    { r: R => walk(r) }
+}

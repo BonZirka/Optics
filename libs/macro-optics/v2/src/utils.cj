@@ -70,5 +70,39 @@ func generics(targs: ArrayList<TypeNode>): Tokens {
     if (targs.size == 0) { quote() }
     else {
         quote(<$(commaSeparated(targs))>)
-    } 
+    }
+}
+
+// ===== Fused emission helpers =====
+
+/// Emits `let __magicalI = ...; let __opticsI = ...; let __fwdI = ...; let __bwdI = ...;`
+/// for a Derived (struct field) segment. The caller threads the next magical
+/// expression (referencing the local `__magical${index}` binding) into the next
+/// segment via `derivedNextMagicalExpr`.
+func emitDerivedLeafBindings(
+    index: Int64,
+    fieldTok: Token,
+    prevMagicalExpr: Tokens
+): Tokens {
+    let currMagical = Token(IDENTIFIER, "__magical${index}")
+    let opticsId   = Token(IDENTIFIER, "__optics${index}")
+    let fwdId      = Token(IDENTIFIER, "__fwd${index}")
+    let bwdId      = Token(IDENTIFIER, "__bwd${index}")
+    let accessForward  = Token(IDENTIFIER, "__${fieldTok.value}_impl_forward")
+    let accessBackward = Token(IDENTIFIER, "__${fieldTok.value}_impl_backward")
+    quote(
+        let $currMagical = $prevMagicalExpr
+        let $opticsId = $currMagical.__downcast($currMagical)
+        let $fwdId = $opticsId.$accessForward
+        let $bwdId = $opticsId.$accessBackward
+    )
+}
+
+/// Returns the next magical expression for a Derived segment, referencing the
+/// local `__magical${index}` binding (bound by `emitDerivedLeafBindings`) so the
+/// generated code stays linear in chain depth rather than exponential.
+func derivedNextMagicalExpr(index: Int64, fieldTok: Token): Tokens {
+    let currMagical = Token(IDENTIFIER, "__magical${index}")
+    let accessMagic = Token(IDENTIFIER, "__${fieldTok.value}_optics")
+    quote($currMagical.$accessMagic($currMagical))
 }

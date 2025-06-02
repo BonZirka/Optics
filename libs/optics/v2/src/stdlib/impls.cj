@@ -65,10 +65,12 @@ extend <T> RegistryAffines<Array<T>> <: __Stdlib_optics_impl<T> {
 
     @Frozen
     public func __method_at_impl_backward(_: RegistryMagical<Array<T>>, n: Int64): (Array<T>, T) -> Array<T> {
-        { source: Array<T>, focus: T => 
+        { source: Array<T>, focus: T =>
             if (let Some(_) <- source.get(n)) {
-                source[n] = focus
-                source
+                // Copy before writing: updates must never mutate the caller's array.
+                let updated = source.clone()
+                updated[n] = focus
+                updated
             } else {
                 source
             }

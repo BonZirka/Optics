@@ -4,11 +4,11 @@
   # lucida_macro = { path = "./libs/macro-optics/v1", version = "1.0.0" }
   # lucida = { path = "./libs/optics/v1", version = "1.0.0" }
   # lucida = { path = "./libs/optics/v1-laarhoven", version = "1.0.0" }
-  lucida = { path = "./libs/optics/v2", version = "1.0.0" }
-  lucida_macro = { path = "./libs/macro-optics/v2", version = "1.0.0" }
+  lucida = { path = "./libs/optics/v2" }
+  lucida_macro = { path = "./libs/macro-optics/v2" }
   # lucida_macro = { path = "./libs/macro-optics/v1-laarhoven", version = "1.0.0" }
   # lucida_macro = { path = "./libs/macro-optics/v1-laarhoven-flat", version = "1.0.0" }
-  macro_test_utils = { path = "./libs/macro-test-utils/", version = "1.0.0" }
+  macro_test_utils = { path = "./libs/macro-test-utils/" }
 
 [package]
   cjc-version = "0.57.3"

@@ -4,19 +4,25 @@ import std.ast.*
 import std.collection.*
 
 public macro Lucida(input: Tokens): Tokens {
-    // return quote(__FirstClassGetters.forward(Iso({ x: String => () }, { _: Unit => "Hello "})))
+    lucidaDispatch(false, input)
+}
+
+public macro Lucida(attr: Tokens, input: Tokens): Tokens {
+    lucidaDispatch(parseModifier(attr), input)
+}
+
+private func lucidaDispatch(unfuse: Bool, input: Tokens): Tokens {
     try {
         expansionMain { =>
-            evalOptics(parseOpticalExpression(input))
+            evalOptics(parseOpticalExpression(input), unfuse)
         }
     } catch (e: DiagReportException) {
-        // Sometimes it throws because it says, that input is from different files.
-        // diagReport(
-        //     DiagReportLevel.ERROR,
-        //     e.tokens,
-        //     e.message,
-        //     e.hint
-        // )
+        diagReport(
+            DiagReportLevel.ERROR,
+            e.tokens,
+            e.message,
+            e.hint
+        )
         quote($input)
     }
 }
@@ -29,25 +35,55 @@ private func expansionMain(cont: () -> Tokens): Tokens {
     )
 }
 
-private func evalOptics(expr: OpticalExpr): Tokens {
-    let forwardBackwardCont = composeOptics(expr.compositionNodes)
+private func isFusible(nodes: Array<CompositionNode>): Bool {
+    if (nodes.size == 0) { return false }
+    match (nodes[0]) {
+        case Optic(_) => return false
+        case _ => ()
+    }
+    for (i in 1..nodes.size) {
+        let node = nodes[i]
+        match (node) {
+            case Derived(_, k) => match (k) { case Unknown => return false case _ => () }
+            case UserDefined(_, _, _, k) => match (k) { case Unknown => return false case _ => () }
+            case Coerce(_) => ()
+            case _ => return false
+        }
+    }
+    return true
+}
+
+private func evalOptics(expr: OpticalExpr, unfuse: Bool): Tokens {
+    let nodes = expr.compositionNodes
     match (expr) {
-        case OpticsBackward(source, _, target) => forwardBackwardCont { forward: Token, backward: Token =>
-            quote($evalBackwardCallexprId($backward, $source, $target))
-        }
-        case OpticsForward(source, _) => forwardBackwardCont { forward: Token, backward: Token =>
-            quote($forward($source))
-        }
-        case FirstClassOptics(_) => forwardBackwardCont { forward: Token, backward: Token =>
-            quote($constructFirstClassCallexprId($forward, $backward))
-        }
-        case FirstClassSetter(_, target) => forwardBackwardCont { forward: Token, backward: Token =>
-            quote(
-                let $finalSetterForwardVarname = $finalizingSetterForwardCallexpr($backward, $target)
-                let $finalSetterBackwardVarname = $finalizingSetterBackwardCallexpr($backward, $target)
-                $constructFirstClassCallexprId($finalSetterForwardVarname, $finalSetterBackwardVarname)
-            )
-        }
+        case OpticsForward(source, _) =>
+            if (!unfuse && isFusible(nodes)) {
+                emitFusedForwardWalk(nodes, source)
+            } else {
+                composeOptics(nodes)({ forward: Token, backward: Token =>
+                    quote($forward($source))
+                })
+            }
+        case OpticsBackward(source, _, target) =>
+            if (!unfuse && isFusible(nodes)) {
+                emitFusedBackwardWalk(nodes, source, target)
+            } else {
+                composeOptics(nodes)({ forward: Token, backward: Token =>
+                    quote($evalBackwardCallexprId($backward, $source, $target))
+                })
+            }
+        case FirstClassOptics(_) =>
+            composeOptics(nodes)({ forward: Token, backward: Token =>
+                quote($constructFirstClassCallexprId($forward, $backward))
+            })
+        case FirstClassSetter(_, target) =>
+            composeOptics(nodes)({ forward: Token, backward: Token =>
+                quote(
+                    let $finalSetterForwardVarname = $finalizingSetterForwardCallexpr($backward, $target)
+                    let $finalSetterBackwardVarname = $finalizingSetterBackwardCallexpr($backward, $target)
+                    $constructFirstClassCallexprId($finalSetterForwardVarname, $finalSetterBackwardVarname)
+                )
+            })
     }
 }
 
@@ -57,25 +93,41 @@ private func composeOptics(nodes: Array<CompositionNode>): ((Token, Token) -> To
     var currentNode: ?CompositionNode = iter.next()
     let magicCont: ((Tokens) -> Tokens) -> Tokens = if (let Some(node) <- currentNode) {
         match (node) {
-            case Derived(input)     => throw Exception("WTF") // We change this case to `TypeOf, it should be impossible`
-            case Type(input)        => 
+            case Derived(input, _)     => throw DiagReportException(
+                "${mainMacroName}: a derived field optic cannot start a chain here",
+                input.toTokens(),
+                hint: "Start the chain with the owning value, @Type, @TypeOf or @Optic"
+            )
+            case Type(input)        =>
                 currentNode = iter.next()
                 unwrapType(input)
             case TypeOf(input)      =>
                 currentNode = iter.next()
                 unwrapTypeOf(input)
             case Optic(input)       => { x => x(quote()) }    // TODO: REMOVE after making normal CPS. It will never be used if we encounter Optic first
-            case Coerce(input)      => throw Exception("WTF") // We explicitly forbid that case while parsing
-            case UserDefined(name, _, args) => throw Exception("WTF") // throw Exception("NOT_IMPLEMENTED")
+            case Coerce(input)      => throw DiagReportException(
+                "${mainMacroName}: '${coercionFakeCallexprId.value}<Type>()' cannot start a chain",
+                input.toTokens()
+            )
+            case UserDefined(name, _, _, _) => throw DiagReportException(
+                "${mainMacroName}: user-defined method optics cannot start a chain",
+                name.toTokens(),
+                hint: "Start the chain with the owning value, @Type, @TypeOf or @Optic"
+            )
         }
-    } else { throw Exception("WTF") }
+    } else {
+        throw DiagReportException(
+            "${mainMacroName}: internal error: empty composition",
+            quote()
+        )
+    }
 
     var compositionCont: ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens = { _ => quote() }
     var first = true
     while (let Some(node) <- currentNode) {
         let currentCont = compositionCont
         match (node) {
-            case Derived(input) => 
+            case Derived(input, _) =>
                 if (first) {
                     compositionCont = { cont: (Tokens, Token, Token, Token, UInt64) -> Tokens =>
                         magicCont { currMagicalExpr: Tokens =>
@@ -89,8 +141,14 @@ private func composeOptics(nodes: Array<CompositionNode>): ((Token, Token) -> To
                         }
                     }
                 }
-            case Type(input)        => throw Exception("WTF") // Not really clear what is the Type/TypeOf in the middle
-            case TypeOf(input)      => throw Exception("WTF") // Not really clear what is the Type/TypeOf in the middle
+            case Type(input)        => throw DiagReportException(
+                "${mainMacroName}: @Type is only allowed at the start of a chain",
+                input.toTokens()
+            )
+            case TypeOf(input)      => throw DiagReportException(
+                "${mainMacroName}: @TypeOf is only allowed at the start of a chain",
+                input.toTokens()
+            )
             case Optic(input)       => 
                 if (first) {
                     compositionCont = { cont: (Tokens, Token, Token, Token, UInt64) -> Tokens =>
@@ -119,7 +177,7 @@ private func composeOptics(nodes: Array<CompositionNode>): ((Token, Token) -> To
                         }
                     }
                 }
-            case UserDefined(name, targs, args) =>
+            case UserDefined(name, targs, args, _) =>
                 if (first) {
                     compositionCont = { cont: (Tokens, Token, Token, Token, UInt64) -> Tokens =>
                         magicCont { currMagicalExpr: Tokens =>
@@ -143,6 +201,143 @@ private func composeOptics(nodes: Array<CompositionNode>): ((Token, Token) -> To
             cont(forward, backward)
         }
     }
+}
+
+private func isPureLensChain(nodes: Array<CompositionNode>): Bool {
+    for (i in 1..nodes.size) {
+        match (nodes[i]) {
+            case Derived(_, k) => match (k) { case Lens => () case _ => return false }
+            case _ => return false
+        }
+    }
+    return true
+}
+
+private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>): (Tokens, ArrayList<Token>, ArrayList<Token>) {
+    let startNode = nodes[0]
+    let startMagicalExpr: Tokens = match (startNode) {
+        case TypeOf(input) => quote($magicCallexprId({ => $input }))
+        case Type(input) => quote($magicCallexprId<$input>())
+        case _ => throw DiagReportException("internal: unsupported start anchor for fused emission", quote())
+    }
+    let bindings = ArrayList<Tokens>()
+    let fwdIds = ArrayList<Token>()
+    let bwdIds = ArrayList<Token>()
+    var prevMagical = startMagicalExpr
+    for (i in 1..nodes.size) {
+        let idx: Int64 = Int64(i - 1)
+        match (nodes[i]) {
+            case Derived(fieldTok, _) =>
+                bindings.add(emitDerivedLeafBindings(idx, fieldTok, prevMagical))
+                fwdIds.add(Token(IDENTIFIER, "__fwd${idx}"))
+                bwdIds.add(Token(IDENTIFIER, "__bwd${idx}"))
+                prevMagical = derivedNextMagicalExpr(idx, fieldTok)
+            case _ => throw DiagReportException("internal: non-Derived segment in pure-Lens fused path", quote())
+        }
+    }
+    var allBindings = quote()
+    for (b in bindings) {
+        allBindings = quote($allBindings $b)
+    }
+    (allBindings, fwdIds, bwdIds)
+}
+
+private func buildForwardWalk(fwdIds: ArrayList<Token>, src: Token): Tokens {
+    var walk = quote($src)
+    for (i in 0..fwdIds.size) {
+        let fwdId = fwdIds[i]
+        walk = quote($fwdId($walk))
+    }
+    walk
+}
+
+/// Builds backward walk using pre-bound forward intermediates.
+/// intermediates[i] = Token for i-th forward result (t0=src, t1=fwd0(t0), ...).
+/// Produces: __bwd0(__t0, __bwd1(__t1, ... __bwdN(__tN, fcs)...))
+private func buildBackwardWalk(
+    intermediates: Array<Token>,
+    bwdIds: ArrayList<Token>,
+    fcs: Token
+): Tokens {
+    var backwardInner = quote($fcs)
+    let n = bwdIds.size
+    for (i in 0..n) {
+        let bi = n - 1 - i
+        let bwdId = bwdIds[bi]
+        let srcAtI = intermediates[bi]
+        backwardInner = quote($bwdId($srcAtI, $backwardInner))
+    }
+    backwardInner
+}
+
+private func emitFusedForwardWalk(nodes: Array<CompositionNode>, source: Expr): Tokens {
+    if (!isPureLensChain(nodes)) {
+        return composeOptics(nodes)({ forward: Token, backward: Token =>
+            quote($forward($source))
+        })
+    }
+    let (allBindings, fwdIds, _) = emitLeafBindingsAndIds(nodes)
+    let src = idTok("src")
+    let forwardWalk = buildForwardWalk(fwdIds, src)
+    let forwardId = idTok("__fusedForward")
+    let forwardBinding = quote(
+        let $forwardId = $pinForwardCallexprId({ => $source }, { $src => $forwardWalk })
+    )
+    quote(
+        $allBindings
+        $forwardBinding
+        $forwardId($source)
+    )
+}
+
+private func emitFusedBackwardWalk(nodes: Array<CompositionNode>, source: Expr, target: Expr): Tokens {
+    if (!isPureLensChain(nodes)) {
+        return composeOptics(nodes)({ forward: Token, backward: Token =>
+            quote($evalBackwardCallexprId($backward, $source, $target))
+        })
+    }
+    let (allBindings, fwdIds, bwdIds) = emitLeafBindingsAndIds(nodes)
+    let src = idTok("src")
+    let fcs = idTok("fcs")
+
+    // Build forward intermediate bindings (inside the lambda body).
+    // t0 = src, t1 = __fwd0(t0), t2 = __fwd1(t1), ...
+    let n = fwdIds.size
+    let intermediates = ArrayList<Token>()
+    intermediates.add(src)
+    var lambdaBody = quote()
+    var prevT = src
+    for (i in 0..n) {
+        let tId = Token(IDENTIFIER, "__t${Int64(i)}")
+        let fwdId = fwdIds[i]
+        let binding = quote(let $tId = $fwdId($prevT))
+        lambdaBody = if (i == 0) {
+            quote($binding)
+        } else {
+            quote(
+                $lambdaBody
+                $binding
+            )
+        }
+        intermediates.add(tId)
+        prevT = tId
+    }
+
+    let backwardWalk = buildBackwardWalk(intermediates.toArray(), bwdIds, fcs)
+    lambdaBody = quote(
+        $lambdaBody
+        $backwardWalk
+    )
+
+    let backwardId = idTok("__fusedBackward")
+    let backwardBinding = quote(
+        let $backwardId = $pinBackwardCallexprId({ => $source }, { => $target }, { $src, $fcs => $lambdaBody })
+    )
+    quote(
+        $allBindings
+        $backwardBinding
+        $evalBackwardCallexprId($backwardId, $source, $target)
+    )
 }
 
 private func unwrapDerivedStart(input: Token): (Tokens) -> ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens {

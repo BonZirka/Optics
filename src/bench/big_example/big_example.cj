@@ -1,7 +1,10 @@
 package optics_experiments.bench.big_example
 
+import lucida.*
+import lucida_macro.*
+
 @DeriveOptics
-struct TheBigOne {
+public struct TheBigOne {
     public TheBigOne(
         public let a: String,
         public let b: Int64,
@@ -21,7 +24,7 @@ struct TheBigOne {
 }
 
 @DeriveOptics
-struct TheMiddleOne {
+public struct TheMiddleOne {
     public TheMiddleOne(
         public let a: String,
         public let b: Int64,
@@ -32,32 +35,28 @@ struct TheMiddleOne {
 }
 
 @DeriveOptics
-struct TheSmallOne {
+public struct TheSmallOne {
     public TheSmallOne(
         public let a: String,
         public let b: String
     ) { }
 }
 
-let example = { => 
-    let res = ArrayList<Employee>()
-    for (i in 0..10) {
-        res.add(Employee(
-            "Jonh Lennon ${i}",
-            i
-        ))
-    }
-    res.add(Employee(
-        "Mark",
-        10000
-    ))
+let example = { =>
+    let middle = TheMiddleOne(
+        "Middle Name",
+        42,
+        "Middle Description",
+        TheSmallOne("Inner A", "Inner B"),
+        ["tag1", "tag2", "tag3"]
+    )
     return TheBigOne(
         "Very Long String",
         128423,
-        TheMiddleOne(
-
-        ),
-        res.toArray(),
-        Info(1000000, Address("USA", "Atlanta"))
+        middle,
+        [middle],
+        [middle],
+        [middle],
+        "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8"
     )
 }()

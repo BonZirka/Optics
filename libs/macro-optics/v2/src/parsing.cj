@@ -49,8 +49,37 @@ enum OpticalExpr {
     }
 }
 
+func parseModifier(attr: Tokens): Bool {
+    // @Lucida[unfuse](...) -> attr = [unfuse] tokens
+    // @Lucida(...) -> attr = empty or just the bracket token from parser
+    if (attr.size == 0) { return false }
+    // Check for [modifier] pattern: first token is '[', last is ']'
+    if (attr.size >= 3 && attr[0].value == "[" && attr[attr.size - 1].value == "]") {
+        // Collect modifier name between brackets
+        let modifier = StringBuilder()
+        for (i in 1..attr.size - 1) {
+            modifier.append(attr[i].value)
+        }
+        let mod = modifier.toString()
+        if (mod == "unfuse") {
+            return true
+        }
+        throw DiagReportException(
+            "${mainMacroName}: unknown modifier [${mod}]",
+            attr
+        )
+    }
+    return false
+}
+
 func parseOpticalExpression(input: Tokens): OpticalExpr {
     let exprs = parseCommaSeparatedExpressions(input)
+    if (exprs.size == 0) {
+        throw DiagReportException(
+            "${mainMacroName} expects at least one argument",
+            input
+        )
+    }
     if (exprs.size > 2) {
         throw DiagReportException(
             "Expected 1-2 arguments, but got: ${exprs.size}",
@@ -83,7 +112,10 @@ func parseOpticalExpression(input: Tokens): OpticalExpr {
                 case _ => FirstClassSetter(compositionNodes, exprs[1])
             }
         case cexpr: CallExpr where cexpr.callFunc is RefExpr =>
-            let id = (cexpr.callFunc as RefExpr)?.identifier ?? throw Exception("WTF")
+            let id = (cexpr.callFunc as RefExpr)?.identifier ?? throw DiagReportException(
+                "${mainMacroName}: unexpected callee form",
+                cexpr.toTokens()
+            )
             if (id.value != opticFakeCallexprId.value) {
                 throw DiagReportException(
                     "Unknown expression, passed to ${mainMacroName} macro",
@@ -103,13 +135,22 @@ func parseOpticalExpression(input: Tokens): OpticalExpr {
     }
 }
 
+enum OpticKind {
+    | Lens       // total: forward returns A;          backward takes (S, A) -> S
+    | Prism      // partial: forward returns Either<S, A>; backward takes (A) -> S (sourceless)
+    | Affine     // partial: forward returns Either<S, A>; backward takes (S, A) -> S (sourceful)
+    | Iso        // total: forward returns A;          backward takes (A) -> S (sourceless)
+    | Unknown    // fallback to binary compose
+}
+
 enum CompositionNode {
-    | Derived(Token)        /// an identifier to derived optic
-    | Type(RefExpr)         /// typename with generics
-    | TypeOf(Tokens)        /// an expression, type of which should be inferred
-    | Optic(Token)          /// a reference to a first class optics
-    | Coerce(TypeNode)      /// coerce<Type>()
-    | UserDefined(Token, ArrayList<TypeNode>, ArrayList<Argument>) /// TODO
+    | Derived(Token, OpticKind)        // kind set by parser: . -> Lens, ?. -> Prism
+    | Type(RefExpr)                    // start anchor @Type(T)
+    | TypeOf(Tokens)                   // start anchor @TypeOf(x) or auto-derived from leading identifier
+    | Optic(Token)                     // start anchor @Optic(o); forces fallback
+    | Coerce(TypeNode)                 // kind = Iso
+    | UserDefined(Token, ArrayList<TypeNode>, ArrayList<Argument>, OpticKind)
+    // at/selectFirst -> Affine; everything else -> Unknown (fallback)
 }
 
 private func getCompositionNode(input: Expr): CompositionNode {
@@ -133,7 +174,8 @@ private func getCompositionNode(input: Expr): CompositionNode {
                 )}
                 Coerce(re.typeArguments[0])
             } else {
-                UserDefined(re.identifier, re.typeArguments, ce.arguments) // TODO: generics
+                let kind = if (re.identifier.value == "at" || re.identifier.value == "selectFirst") { Affine } else { Unknown }
+                UserDefined(re.identifier, re.typeArguments, ce.arguments, kind)
             }
         case re: RefExpr =>
             if (re.typeArguments.size != 0) {
@@ -143,7 +185,7 @@ private func getCompositionNode(input: Expr): CompositionNode {
                     hint: "Remove or redesign"
                 )
             }
-            Derived(re.identifier)
+            Derived(re.identifier, Lens)   // default kind; decomposeMemberAccessExpr overrides to Prism for ?.
         case _ => 
             throw DiagReportException(
                 "Some unexpected kind of token",
@@ -162,24 +204,33 @@ private func decomposeMemberAccessExpr(maccess: Expr): (?Expr, Array<Composition
         match (head) {
             case member: MemberAccess =>
                 let re = RefExpr(quote($(member.field)))
-                nodes.add(getCompositionNode(re))
-                head = member.baseExpr
+                let (kind, nextHead) = if (let Some(opt) <- (member.baseExpr as OptionalExpr)) {
+                    (Prism, opt.baseExpr)
+                } else {
+                    (Lens, member.baseExpr)
+                }
+                nodes.add(Derived(re.identifier, kind))
+                head = nextHead
             case ce: CallExpr =>
                 if (let Some(member) <- (ce.callFunc as MemberAccess)) {
                     let funcName = member.field
                     let genericParams = if (member.typeArguments.size == 0) { quote() } else { quote(<$(member.typeArguments)>)}
                     let arguments = ce.arguments
-                    let ce = CallExpr(quote($funcName$genericParams($arguments)))
-                    nodes.add(getCompositionNode(ce))
-                    head = member.baseExpr
+                    let ce2 = CallExpr(quote($funcName$genericParams($arguments)))
+                    nodes.add(getCompositionNode(ce2))
+                    head = if (let Some(opt) <- (member.baseExpr as OptionalExpr)) {
+                        opt.baseExpr
+                    } else {
+                        member.baseExpr
+                    }
                 } else { break }
             case _ => break
         }
     }
     let last = getCompositionNode(head)
-    let (base, out): /* WHY?! */ (?Expr, CompositionNode) = match (last) { // TODO, report type inference bug
-        case Derived(x) => (head, TypeOf(quote($x)))
-        case UserDefined(name, _, args) => (head, TypeOf(quote($name($args)))) // TODO: Remove
+    let (base, out): (?Expr, CompositionNode) = match (last) {
+        case Derived(x, _) => (head, TypeOf(quote($x)))
+        case UserDefined(name, _, args, _) => (head, TypeOf(quote($name($args))))
         case Coerce(t) => throw DiagReportException(
             "Cannot make '${coercionFakeCallexprId.value}<Type>()' method first",
             head.toTokens()

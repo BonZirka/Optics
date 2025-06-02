@@ -1,5 +1,6 @@
 [dependencies]
-  macro_test_utils = { path = "../../macro-test-utils/", version = "1.0.0" }
+  lucida_macro = { path = "../../macro-optics/v2" }
+  macro_test_utils = { path = "../../macro-test-utils/" }
 
 [package]
   cjc-version = "0.57.3"

@@ -32,6 +32,10 @@ let composeForwardCallexprId = quote(__OpticsCompositions.composeForward)
 let composeBackwardCallexprId = quote(__OpticsCompositions.composeBackward)
 let opticsUpcastCallexprId = quote(__OpticsCompositions.opticsUpcast)
 
+let pinForwardCallexprId = Token(IDENTIFIER, "pinForward")
+let pinBackwardCallexprId = Token(IDENTIFIER, "pinBackward")
+let pinBackwardSourcelessCallexprId = Token(IDENTIFIER, "pinBackwardSourceless")
+
 let downcastMethodCoerceId = Token(IDENTIFIER, "__downcast_method_coerce")
 let coerceForwardId  = Token(IDENTIFIER, "__method_coerce_impl_forward")
 let coerceBackwardId = Token(IDENTIFIER, "__method_coerce_impl_backward")
