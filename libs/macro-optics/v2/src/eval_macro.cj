@@ -203,14 +203,26 @@ private func composeOptics(nodes: Array<CompositionNode>): ((Token, Token) -> To
     }
 }
 
-private func isPureLensChain(nodes: Array<CompositionNode>): Bool {
+private func isFusableChain(nodes: Array<CompositionNode>): Bool {
     for (i in 1..nodes.size) {
         match (nodes[i]) {
-            case Derived(_, k) => match (k) { case Lens => () case _ => return false }
+            case Derived(_, _) => ()
+            case UserDefined(_, _, _, Affine) => ()
+            case Coerce(_) => ()
             case _ => return false
         }
     }
     return true
+}
+
+// Either-producing segments: prism (Derived) and affine (UserDefined) forwards
+// both return Either<T_in, A>, so both occupy the pinned prism slots.
+private func isEitherProducing(node: CompositionNode): Bool {
+    match (node) {
+        case Derived(_, Prism) => true
+        case UserDefined(_, _, _, Affine) => true
+        case _ => false
+    }
 }
 
 private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>): (Tokens, ArrayList<Token>, ArrayList<Token>) {
@@ -232,7 +244,20 @@ private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>): (Tokens, Arr
                 fwdIds.add(Token(IDENTIFIER, "__fwd${idx}"))
                 bwdIds.add(Token(IDENTIFIER, "__bwd${idx}"))
                 prevMagical = derivedNextMagicalExpr(idx, fieldTok)
-            case _ => throw DiagReportException("internal: non-Derived segment in pure-Lens fused path", quote())
+            case UserDefined(name, targs, args, Affine) =>
+                bindings.add(emitUserDefinedLeafBindings(idx, name, targs, args, prevMagical))
+                fwdIds.add(Token(IDENTIFIER, "__fwd${idx}"))
+                bwdIds.add(Token(IDENTIFIER, "__bwd${idx}"))
+                prevMagical = userDefinedNextMagicalExpr(idx, name, targs)
+            case Coerce(t) =>
+                bindings.add(emitCoerceLeafBindings(idx, t, prevMagical))
+                fwdIds.add(Token(IDENTIFIER, "__fwd${idx}"))
+                bwdIds.add(Token(IDENTIFIER, "__bwd${idx}"))
+                prevMagical = quote($magicCallexprId<$t>())
+            case _ => throw DiagReportException(
+                "${mainMacroName}: internal: unsupported segment in fused emission",
+                quote()
+            )
         }
     }
     var allBindings = quote()
@@ -242,19 +267,97 @@ private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>): (Tokens, Arr
     (allBindings, fwdIds, bwdIds)
 }
 
-private func buildForwardWalk(fwdIds: ArrayList<Token>, src: Token): Tokens {
-    var walk = quote($src)
-    for (i in 0..fwdIds.size) {
-        let fwdId = fwdIds[i]
-        walk = quote($fwdId($walk))
+/// Emits `{ param => <direct lens calls over fwdIds[from..upto)> }`; an empty
+/// range yields the identity lambda.
+private func emitLensRunLambda(fwdIds: ArrayList<Token>, from: Int64, upto: Int64, paramTok: Token): Tokens {
+    if (from >= upto) {
+        return quote(
+            { $paramTok => $paramTok }
+        )
     }
-    walk
+    var body = quote()
+    var prev = paramTok
+    var i = from
+    while (i < upto) {
+        let tId = Token(IDENTIFIER, "__t${Int64(i)}")
+        let binding = quote(let $tId = $(fwdIds[i])($prev))
+        body = quote(
+            $body
+            $binding
+        )
+        prev = tId
+        i = i + 1
+    }
+    return quote(
+        { $paramTok =>
+            $body
+            $prev
+        }
+    )
 }
 
-/// Builds backward walk using pre-bound forward intermediates.
-/// intermediates[i] = Token for i-th forward result (t0=src, t1=fwd0(t0), ...).
-/// Produces: __bwd0(__t0, __bwd1(__t1, ... __bwdN(__tN, fcs)...))
+/// Emits the fused forward for a Derived-only chain containing 1..4 prisms.
+/// The whole walk lives inside pinPrismForwardK; the macro emits only
+/// top-level sibling lambdas (lens runs between prisms) whose parameter and
+/// return types are pinned by the pre-bound segment forward ids, so Cangjie
+/// can infer them. Mirrors the library's composed semantics: any prism miss
+/// short-circuits to Left(original source), a full match yields Right(focus).
+private func emitPinnedPrismForward(nodes: Array<CompositionNode>, fwdIds: ArrayList<Token>, source: Expr): Tokens {
+    let prismIdx = ArrayList<Int64>()
+    for (i in 0..fwdIds.size) {
+        if (isEitherProducing(nodes[i + 1])) {
+            prismIdx.add(i)
+        }
+    }
+    let k = prismIdx.size
+    let pinFn = pinPrismForwardCallexprId(k)
+    let src = idTok("src")
+
+    var args = quote(
+        { => $source }
+    )
+    for (pi in prismIdx) {
+        args = quote(
+            $args,
+            $(fwdIds[pi])
+        )
+    }
+    // lens runs: before the first prism, between consecutive prisms, after the last
+    var prevSeg: Int64 = 0
+    for (idx in 0..k) {
+        let p = prismIdx[idx]
+        let paramTok = if (idx == 0) {
+            src
+        } else {
+            Token(IDENTIFIER, "__e${Int64(prismIdx[idx - 1])}")
+        }
+        let runLambda = emitLensRunLambda(fwdIds, prevSeg, p, paramTok)
+        args = quote(
+            $args,
+            $runLambda
+        )
+        prevSeg = p + 1
+    }
+    let lastParam = Token(IDENTIFIER, "__e${Int64(prismIdx[k - 1])}")
+    let finalRun = emitLensRunLambda(fwdIds, prismIdx[k - 1] + 1, fwdIds.size, lastParam)
+    args = quote(
+        $args,
+        $finalRun
+    )
+
+    let forwardId = idTok("__fusedForward")
+    return quote(
+        let $forwardId = $pinFn($args)
+        $forwardId($source)
+    )
+}
+
+/// Builds the right-to-left backward fold over pre-bound entering values.
+/// Derived and affine backwards are sourceful `(T_in, focus) -> T_in`; coerce
+/// backwards are sourceless `(focus) -> T_in` and consume only the accumulated
+/// value. Produces: __bwd0(src, __bwd1(t0, ... __bwdN(tN-1, fcs)...))
 private func buildBackwardWalk(
+    nodes: Array<CompositionNode>,
     intermediates: Array<Token>,
     bwdIds: ArrayList<Token>,
     fcs: Token
@@ -264,34 +367,62 @@ private func buildBackwardWalk(
     for (i in 0..n) {
         let bi = n - 1 - i
         let bwdId = bwdIds[bi]
-        let srcAtI = intermediates[bi]
-        backwardInner = quote($bwdId($srcAtI, $backwardInner))
+        backwardInner = match (nodes[bi + 1]) {
+            case Coerce(_) => quote($bwdId($backwardInner))
+            case _ => quote($bwdId($(intermediates[bi]), $backwardInner))
+        }
     }
     backwardInner
 }
 
 private func emitFusedForwardWalk(nodes: Array<CompositionNode>, source: Expr): Tokens {
-    if (!isPureLensChain(nodes)) {
-        return composeOptics(nodes)({ forward: Token, backward: Token =>
-            quote($forward($source))
-        })
+    if (countEitherSegments(nodes) == 0) {
+        // All-plain chain (pure lens, or lens/iso mixes): direct nested calls
+        let (allBindings, fwdIds, _) = emitLeafBindingsAndIds(nodes)
+        let src = idTok("src")
+        var walk = quote($src)
+        for (i in 0..fwdIds.size) {
+            walk = quote($(fwdIds[i])($walk))
+        }
+        let forwardId = idTok("__fusedForward")
+        let forwardBinding = quote(
+            let $forwardId = $pinForwardCallexprId({ => $source }, { $src => $walk })
+        )
+        quote(
+            $allBindings
+            $forwardBinding
+            $forwardId($source)
+        )
+    } else {
+        // Prism, affine, or non-lens chain
+        if (!isFusableChain(nodes) || countEitherSegments(nodes) > 8) {
+            // Chains with unsupported segments (e.g. Coerce) or more pinned
+            // slots than the helpers support — library composition
+            return composeOptics(nodes)({ forward: Token, backward: Token =>
+                quote($forward($source))
+            })
+        }
+        let (allBindings, fwdIds, _) = emitLeafBindingsAndIds(nodes)
+        let forwardEmission = emitPinnedPrismForward(nodes, fwdIds, source)
+        quote(
+            $allBindings
+            $forwardEmission
+        )
     }
-    let (allBindings, fwdIds, _) = emitLeafBindingsAndIds(nodes)
-    let src = idTok("src")
-    let forwardWalk = buildForwardWalk(fwdIds, src)
-    let forwardId = idTok("__fusedForward")
-    let forwardBinding = quote(
-        let $forwardId = $pinForwardCallexprId({ => $source }, { $src => $forwardWalk })
-    )
-    quote(
-        $allBindings
-        $forwardBinding
-        $forwardId($source)
-    )
+}
+
+private func countEitherSegments(nodes: Array<CompositionNode>): Int64 {
+    var count: Int64 = 0
+    for (i in 1..nodes.size) {
+        if (isEitherProducing(nodes[i])) {
+            count = count + 1
+        }
+    }
+    return count
 }
 
 private func emitFusedBackwardWalk(nodes: Array<CompositionNode>, source: Expr, target: Expr): Tokens {
-    if (!isPureLensChain(nodes)) {
+    if (!isFusableChain(nodes)) {
         return composeOptics(nodes)({ forward: Token, backward: Token =>
             quote($evalBackwardCallexprId($backward, $source, $target))
         })
@@ -300,43 +431,77 @@ private func emitFusedBackwardWalk(nodes: Array<CompositionNode>, source: Expr, 
     let src = idTok("src")
     let fcs = idTok("fcs")
 
-    // Build forward intermediate bindings (inside the lambda body).
-    // t0 = src, t1 = __fwd0(t0), t2 = __fwd1(t1), ...
-    let n = fwdIds.size
+    // Values entering each segment: [src, t0, ..., t_{n-1}]; the backward fold
+    // consumes them right-to-left. Prism payloads bind t_i in the guard pattern.
     let intermediates = ArrayList<Token>()
     intermediates.add(src)
-    var lambdaBody = quote()
-    var prevT = src
-    for (i in 0..n) {
-        let tId = Token(IDENTIFIER, "__t${Int64(i)}")
-        let fwdId = fwdIds[i]
-        let binding = quote(let $tId = $fwdId($prevT))
-        lambdaBody = if (i == 0) {
-            quote($binding)
-        } else {
-            quote(
-                $lambdaBody
-                $binding
-            )
-        }
-        intermediates.add(tId)
-        prevT = tId
-    }
-
-    let backwardWalk = buildBackwardWalk(intermediates.toArray(), bwdIds, fcs)
-    lambdaBody = quote(
-        $lambdaBody
-        $backwardWalk
-    )
+    let body = emitFusedBackwardBody(nodes, fwdIds, bwdIds, src, fcs, 0, src, intermediates)
 
     let backwardId = idTok("__fusedBackward")
     let backwardBinding = quote(
-        let $backwardId = $pinBackwardCallexprId({ => $source }, { => $target }, { $src, $fcs => $lambdaBody })
+        let $backwardId = $pinBackwardCallexprId({ => $source }, { => $target }, { $src, $fcs =>
+            $body
+        })
     )
     quote(
         $allBindings
         $backwardBinding
         $evalBackwardCallexprId($backwardId, $source, $target)
+    )
+}
+
+/// Emits the guarded forward walk plus right-to-left backward fold for segments
+/// `from..n-1`, consuming the value named `enterTok`. Derived backwards are all
+/// `(T_in, focus) -> T_in` with prism guards baked in, so a prism miss simply
+/// yields the original source; every emitted type is concrete. For pure lens
+/// chains no guards appear and the output matches the historical O(N) walk.
+private func emitFusedBackwardBody(
+    nodes: Array<CompositionNode>,
+    fwdIds: ArrayList<Token>,
+    bwdIds: ArrayList<Token>,
+    src: Token,
+    fcs: Token,
+    from: Int64,
+    enterTok: Token,
+    intermediates: ArrayList<Token>
+): Tokens {
+    let n = fwdIds.size
+    var stmts = quote()
+    var prev = enterTok
+    var i = from
+    while (i < n) {
+        // Either-producing segments (prisms and affines) need their forward
+        // unwrapped in the backward walk too — a miss keeps the source as-is.
+        if (isEitherProducing(nodes[i + 1])) { break }
+        let tId = Token(IDENTIFIER, "__t${Int64(i)}")
+        let binding = quote(let $tId = $(fwdIds[i])($prev))
+        stmts = quote(
+            $stmts
+            $binding
+        )
+        intermediates.add(tId)
+        prev = tId
+        i = i + 1
+    }
+    if (i >= n) {
+        let fold = buildBackwardWalk(nodes, intermediates.toArray(), bwdIds, fcs)
+        return quote(
+            $stmts
+            $fold
+        )
+    }
+    // Segment i is either-producing: its payload binds t_i; a miss keeps the
+    // source as-is.
+    let tId = Token(IDENTIFIER, "__t${Int64(i)}")
+    intermediates.add(tId)
+    let inner = emitFusedBackwardBody(nodes, fwdIds, bwdIds, src, fcs, i + 1, tId, intermediates)
+    return quote(
+        $stmts
+        if (let Right($tId) <- $(fwdIds[i])($prev)) {
+            $inner
+        } else {
+            $src
+        }
     )
 }
 

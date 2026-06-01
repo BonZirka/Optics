@@ -106,3 +106,59 @@ func derivedNextMagicalExpr(index: Int64, fieldTok: Token): Tokens {
     let accessMagic = Token(IDENTIFIER, "__${fieldTok.value}_optics")
     quote($currMagical.$accessMagic($currMagical))
 }
+
+/// Emits `let __magicalI = ...; let __opticsI = ...; let __fwdI = ...; let __bwdI = ...`
+/// for an affine method segment (`at` / `selectFirst`). The impl members take the
+/// registry plus the original call arguments and return the forward/backward
+/// function values, which is exactly the shape the fused walkers consume.
+func emitUserDefinedLeafBindings(
+    index: Int64,
+    name: Token,
+    targs: ArrayList<TypeNode>,
+    args: ArrayList<Argument>,
+    prevMagicalExpr: Tokens
+): Tokens {
+    let currMagical = Token(IDENTIFIER, "__magical${index}")
+    let opticsId   = Token(IDENTIFIER, "__optics${index}")
+    let fwdId      = Token(IDENTIFIER, "__fwd${index}")
+    let bwdId      = Token(IDENTIFIER, "__bwd${index}")
+    let accessForward  = Token(IDENTIFIER, "__method_${name.value}_impl_forward")
+    let accessBackward = Token(IDENTIFIER, "__method_${name.value}_impl_backward")
+    let downcastName   = Token(IDENTIFIER, "__downcast_method_${name.value}")
+    let gen = generics(targs)
+    quote(
+        let $currMagical = $prevMagicalExpr
+        let $opticsId = $currMagical.$downcastName$gen($currMagical)
+        let $fwdId = $opticsId.$accessForward$gen($currMagical, $(commaSeparated(args)))
+        let $bwdId = $opticsId.$accessBackward$gen($currMagical, $(commaSeparated(args)))
+    )
+}
+
+/// Returns the next magical expression for an affine method segment, referencing
+/// the local `__magical${index}` binding (bound by `emitUserDefinedLeafBindings`).
+func userDefinedNextMagicalExpr(index: Int64, name: Token, targs: ArrayList<TypeNode>): Tokens {
+    let currMagical = Token(IDENTIFIER, "__magical${index}")
+    let accessMagic = Token(IDENTIFIER, "__method_${name.value}_optics")
+    let gen = generics(targs)
+    quote($currMagical.$accessMagic$gen($currMagical))
+}
+
+/// Emits `let __magicalI = ...; let __nmagicI = ...; let __opticsI = ...;
+/// let __fwdI = ...; let __bwdI = ...` for a coerce (iso) segment. The coerce
+/// impl members take BOTH the source and the target registry; the target
+/// registry is `magic<Target>()`, which also becomes the next segment's
+/// magical expression.
+func emitCoerceLeafBindings(index: Int64, targs: TypeNode, prevMagicalExpr: Tokens): Tokens {
+    let currMagical = Token(IDENTIFIER, "__magical${index}")
+    let nextMagical = Token(IDENTIFIER, "__nmagic${index}")
+    let opticsId    = Token(IDENTIFIER, "__optics${index}")
+    let fwdId       = Token(IDENTIFIER, "__fwd${index}")
+    let bwdId       = Token(IDENTIFIER, "__bwd${index}")
+    quote(
+        let $currMagical = $prevMagicalExpr
+        let $nextMagical = $magicCallexprId<$targs>()
+        let $opticsId = $downcastMethodCoerceId($currMagical, $nextMagical)
+        let $fwdId = $opticsId.$coerceForwardId($currMagical, $nextMagical)
+        let $bwdId = $opticsId.$coerceBackwardId($currMagical, $nextMagical)
+    )
+}

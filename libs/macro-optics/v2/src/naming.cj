@@ -36,6 +36,10 @@ let pinForwardCallexprId = Token(IDENTIFIER, "pinForward")
 let pinBackwardCallexprId = Token(IDENTIFIER, "pinBackward")
 let pinBackwardSourcelessCallexprId = Token(IDENTIFIER, "pinBackwardSourceless")
 
+func pinPrismForwardCallexprId(k: Int64): Token {
+    Token(IDENTIFIER, "pinPrismForward${k}")
+}
+
 let downcastMethodCoerceId = Token(IDENTIFIER, "__downcast_method_coerce")
 let coerceForwardId  = Token(IDENTIFIER, "__method_coerce_impl_forward")
 let coerceBackwardId = Token(IDENTIFIER, "__method_coerce_impl_backward")

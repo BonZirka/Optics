@@ -21,7 +21,7 @@ class GenericDeriveLaws {
     @TestCase
     func gboxLensSet(): Unit {
         let b = GBox<Int64>(5)
-        let updated = @Lucida(b.v, 7)
+        let updated = @Lucida(b.v <- 7)
         @Assert(updated.v == 7)
         @Assert(b.v == 5)
     }

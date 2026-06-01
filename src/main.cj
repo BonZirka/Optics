@@ -17,11 +17,11 @@ public struct A {
 main() {
     let x = A("Hello")
     let firstClass = @Lucida(@TypeOf(x).coerce<String>())
-    let setter = @Lucida(@Optic(firstClass), "Bye")
+    let setter = @Lucida(@Optic(firstClass) <- "Bye")
     let evaled = @Lucida(x.@Optic(setter))
 
     println(evaled)
     let y = [3, 4, 5]
-    let updated = @Lucida(y.at(2), 100)
+    let updated = @Lucida(y.at(2) <- 100)
     println(updated)
 }

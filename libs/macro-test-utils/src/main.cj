@@ -61,7 +61,7 @@ private func generateLucidaCall(current: UInt64, max: UInt64, initVar: Tokens, c
     let structName = Token(IDENTIFIER, "${structNamePrefix}${current}")
     if (current >= max) {
         quote(
-            @Lucida($(cont(initVar)).y, "New")
+            @Lucida($(cont(initVar)).y <- "New")
         )
     } else {
         generateLucidaCall(current + 1, max, initVar) { prevCall: Tokens =>

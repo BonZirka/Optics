@@ -15,7 +15,7 @@ public let probeInstance = ProbeVal(1)
 class CrossFileLaws {
     @TestCase
     func crossFileBackward(): Unit {
-        let updated = @Lucida(probeInstance.f, 2)
+        let updated = @Lucida(probeInstance.f <- 2)
         @Assert(updated.f == 2)
     }
 

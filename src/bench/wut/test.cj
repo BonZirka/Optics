@@ -23,8 +23,8 @@ public let x = A("Hello")
 class StructMutBenchmark {
     @Bench
     func nativeBaseline(): Unit {
-        let firstClass = @Lucida(@TypeOf(x).x, "Bye")
-        let setter = @Lucida(@Optic(firstClass), "Bye")
+        let firstClass = @Lucida(@TypeOf(x).x <- "Bye")
+        let setter = @Lucida(@Optic(firstClass) <- "Bye")
         let evaled = @Lucida(x.@Optic(setter))
         println("")
     }

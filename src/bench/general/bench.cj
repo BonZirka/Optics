@@ -43,7 +43,13 @@ class StructMutBenchmark {
 
     @Bench
     func opticsBaseline(): Unit {
-        let bnw = @Lucida(bow.x.y, "New")
+        let bnw = @Lucida(bow.x.y <- "New")
+        test = bnw
+    }
+
+    @Bench
+    func unfusedOptics(): Unit {
+        let bnw = @Lucida[unfuse](bow.x.y <- "New")
         test = bnw
     }
 

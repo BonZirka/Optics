@@ -50,7 +50,7 @@ class EnumPrismLaws {
     @TestCase
     func nonMatchSetIsIdentity(): Unit {
         let sq = Shape.Square(5)
-        let updated = @Lucida(sq?.Circle, Nested(99))
+        let updated = @Lucida(sq?.Circle <- Nested(99))
         var identityKept = false
         match (updated) {
             case Square(v) => identityKept = v == 5
@@ -63,7 +63,7 @@ class EnumPrismLaws {
     @TestCase
     func chainedThroughPayloadField(): Unit {
         let c = Shape.Circle(Nested(3))
-        let updated = @Lucida(c?.Circle.n, 7)
+        let updated = @Lucida(c?.Circle.n <- 7)
         var updatedOk = false
         match (updated) {
             case Circle(inner) => updatedOk = inner.n == 7
@@ -73,7 +73,7 @@ class EnumPrismLaws {
 
         // non-matching source stays untouched
         let sq = Shape.Square(4)
-        let untouched = @Lucida(sq?.Circle.n, 7)
+        let untouched = @Lucida(sq?.Circle.n <- 7)
         var untouchedOk = false
         match (untouched) {
             case Square(v) => untouchedOk = v == 4

@@ -70,7 +70,7 @@ class DslLaws {
     @TestCase
     func deepChainBackwardIsImmutable(): Unit {
         let o = sampleOrder()
-        let updated = @Lucida(o.customer.address.city.name, "Denver")
+        let updated = @Lucida(o.customer.address.city.name <- "Denver")
         @Assert(updated.customer.address.city.name == "Denver")
         // original immutable
         @Assert(o.customer.address.city.name == "Atlanta")
@@ -85,7 +85,7 @@ class DslLaws {
     func deepChainRoundTrip(): Unit {
         let o = sampleOrder()
         let current = @Lucida(o.customer.address.city.zip)
-        let rewritten = @Lucida(o.customer.address.city.zip, current)
+        let rewritten = @Lucida(o.customer.address.city.zip <- current)
         @Assert(ordersEqualLeafwise(rewritten, o))
     }
 
@@ -93,8 +93,8 @@ class DslLaws {
     @TestCase
     func doubleSetIdempotent(): Unit {
         let o = sampleOrder()
-        let once = @Lucida(o.id, 42)
-        let twice = @Lucida(once.id, 42)
+        let once = @Lucida(o.id <- 42)
+        let twice = @Lucida(once.id <- 42)
         @Assert(ordersEqualLeafwise(twice, once))
     }
 
@@ -102,7 +102,7 @@ class DslLaws {
     @TestCase
     func stdlibAtLaws(): Unit {
         let nums = [10, 20, 30]
-        let bumped = @Lucida(nums.at(1), 99)
+        let bumped = @Lucida(nums.at(1) <- 99)
         @Assert(bumped[0] == 10)
         @Assert(bumped[1] == 99)
         @Assert(bumped[2] == 30)
@@ -110,7 +110,7 @@ class DslLaws {
         // immutability: the caller's array must be untouched (CoW aliasing bug class)
         @Assert(nums[1] == 20)
 
-        let untouched = @Lucida(nums.at(7), 99)
+        let untouched = @Lucida(nums.at(7) <- 99)
         @Assert(untouched.size == 3)
         @Assert(untouched[0] == 10 && untouched[1] == 20 && untouched[2] == 30)
 
@@ -136,12 +136,12 @@ class DslLaws {
         staff.add(Employee2("other", 300))
         let arr = staff.toArray()
 
-        let raised = @Lucida(arr.selectFirst({ e: Employee2 => e.name == "dup" }).salary, 999)
+        let raised = @Lucida(arr.selectFirst({ e: Employee2 => e.name == "dup" }).salary <- 999)
         @Assert(raised[0].salary == 999)
         @Assert(raised[1].salary == 200)
         @Assert(raised[2].salary == 300)
 
-        let miss = @Lucida(arr.selectFirst({ e: Employee2 => e.name == "nobody" }).salary, 999)
+        let miss = @Lucida(arr.selectFirst({ e: Employee2 => e.name == "nobody" }).salary <- 999)
         @Assert(miss.size == 3)
         @Assert(miss[0].salary == 100)
         @Assert(miss[1].salary == 200)
@@ -162,7 +162,7 @@ class DslLaws {
     @TestCase
     func typeOfSetterForm(): Unit {
         let c = City("Atlanta", 30301)
-        let setter = @Lucida(@TypeOf(c).zip, 99999)
+        let setter = @Lucida(@TypeOf(c).zip <- 99999)
         let rewritten = setter.modify(c, { _: Int64 => 99999 })
         @Assert(rewritten.zip == 99999)
         // source immutable
@@ -173,11 +173,11 @@ class DslLaws {
     @TestCase
     func aggregateAndEnumMixSanity(): Unit {
         let holder = Order(3, Customer("x", Address(City("y", 1))))
-        let renamed = @Lucida(holder.customer.name, "y")
+        let renamed = @Lucida(holder.customer.name <- "y")
         @Assert(renamed.customer.name == "y")
 
         let sq = Shape.Square(5)
-        let kept = @Lucida(sq?.Circle.n, 77)
+        let kept = @Lucida(sq?.Circle.n <- 77)
         var keptSquare = false
         match (kept) {
             case Square(v) => keptSquare = v == 5

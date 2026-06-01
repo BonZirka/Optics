@@ -50,88 +50,137 @@ enum OpticalExpr {
 }
 
 func parseModifier(attr: Tokens): Bool {
-    // @Lucida[unfuse](...) -> attr = [unfuse] tokens
-    // @Lucida(...) -> attr = empty or just the bracket token from parser
     if (attr.size == 0) { return false }
-    // Check for [modifier] pattern: first token is '[', last is ']'
-    if (attr.size >= 3 && attr[0].value == "[" && attr[attr.size - 1].value == "]") {
-        // Collect modifier name between brackets
-        let modifier = StringBuilder()
-        for (i in 1..attr.size - 1) {
-            modifier.append(attr[i].value)
-        }
-        let mod = modifier.toString()
-        if (mod == "unfuse") {
-            return true
-        }
-        throw DiagReportException(
-            "${mainMacroName}: unknown modifier [${mod}]",
-            attr
-        )
+    if (attr.size == 1 && attr[0].value == "unfuse") {
+        return true
     }
-    return false
+    throw DiagReportException(
+        "${mainMacroName}: unknown modifier '${attr[0].value}'",
+        attr
+    )
 }
 
 func parseOpticalExpression(input: Tokens): OpticalExpr {
-    let exprs = parseCommaSeparatedExpressions(input)
-    if (exprs.size == 0) {
-        throw DiagReportException(
-            "${mainMacroName} expects at least one argument",
-            input
-        )
+    // Scan for '<-' token to detect assignment form: @Lucida(o.x.y <- 3)
+    var arrowIdx = -1
+    for (i in 0..input.size) {
+        if (input[i].value == "<-") {
+            arrowIdx = i
+            break
+        }
     }
-    if (exprs.size > 2) {
-        throw DiagReportException(
-            "Expected 1-2 arguments, but got: ${exprs.size}",
-            input
-        )
-    }
-    match (exprs[0]) {
-        case maccess: MemberAccess where exprs.size == 2 => 
-            let (baseExpr, compositionNodes) = decomposeMemberAccessExpr(maccess)
-            match (baseExpr) {
-                case Some(expr) => OpticsBackward(expr, compositionNodes, exprs[1])
-                case _ => FirstClassSetter(compositionNodes, exprs[1])
-            }
-        case maccess: MemberAccess where exprs.size == 1 => 
-            let (baseExpr, compositionNodes) = decomposeMemberAccessExpr(maccess)
-            match (baseExpr) {
-                case Some(expr) => OpticsForward(expr, compositionNodes)
-                case _ => FirstClassOptics(compositionNodes)
-            }
-        case cexpr: CallExpr where cexpr.callFunc is MemberAccess && exprs.size == 1 =>
-            let (baseExpr, compositionNodes) = decomposeMemberAccessExpr(cexpr)
-            match (baseExpr) {
-                case Some(expr) => OpticsForward(expr, compositionNodes)
-                case _ => FirstClassOptics(compositionNodes)
-            }
-        case cexpr: CallExpr where cexpr.callFunc is MemberAccess && exprs.size == 2 =>
-            let (baseExpr, compositionNodes) = decomposeMemberAccessExpr(cexpr)
-            match (baseExpr) {
-                case Some(expr) => OpticsBackward(expr, compositionNodes, exprs[1])
-                case _ => FirstClassSetter(compositionNodes, exprs[1])
-            }
-        case cexpr: CallExpr where cexpr.callFunc is RefExpr =>
-            let id = (cexpr.callFunc as RefExpr)?.identifier ?? throw DiagReportException(
-                "${mainMacroName}: unexpected callee form",
-                cexpr.toTokens()
+
+    if (arrowIdx >= 0) {
+        // Split at '<-': left = lens chain, right = value
+        let leftTokens = Tokens()
+        for (i in 0..arrowIdx) {
+            leftTokens.append(input[i])
+        }
+        let rightTokens = Tokens()
+        for (i in arrowIdx + 1..input.size) {
+            rightTokens.append(input[i])
+        }
+        let leftExprs = parseCommaSeparatedExpressions(leftTokens)
+        let rightExprs = parseCommaSeparatedExpressions(rightTokens)
+        if (leftExprs.size == 0) {
+            throw DiagReportException(
+                "${mainMacroName} expects a lens chain before '<-'",
+                input
             )
-            if (id.value != opticFakeCallexprId.value) {
+        }
+        if (rightExprs.size == 0) {
+            throw DiagReportException(
+                "${mainMacroName} expects a value after '<-'",
+                input
+            )
+        }
+        let lensExpr = leftExprs[0]
+        let valueExpr = rightExprs[0]
+        match (lensExpr) {
+            case maccess: MemberAccess =>
+                let (baseExpr, compositionNodes) = decomposeMemberAccessExpr(maccess)
+                match (baseExpr) {
+                    case Some(expr) => OpticsBackward(expr, compositionNodes, valueExpr)
+                    case _ => FirstClassSetter(compositionNodes, valueExpr)
+                }
+            case opt: OptionalExpr =>
+                let (baseExpr, compositionNodes) = decomposeMemberAccessExpr(opt)
+                match (baseExpr) {
+                    case Some(expr) => OpticsBackward(expr, compositionNodes, valueExpr)
+                    case _ => FirstClassSetter(compositionNodes, valueExpr)
+                }
+            case cexpr: CallExpr where cexpr.callFunc is MemberAccess =>
+                let (baseExpr, compositionNodes) = decomposeMemberAccessExpr(cexpr)
+                match (baseExpr) {
+                    case Some(expr) => OpticsBackward(expr, compositionNodes, valueExpr)
+                    case _ => FirstClassSetter(compositionNodes, valueExpr)
+                }
+            case cexpr: CallExpr where cexpr.callFunc is RefExpr =>
+                let id = (cexpr.callFunc as RefExpr)?.identifier ?? throw DiagReportException(
+                    "${mainMacroName}: unexpected callee form",
+                    cexpr.toTokens()
+                )
+                if (id.value != opticFakeCallexprId.value) {
+                    throw DiagReportException(
+                        "Unknown expression, passed to ${mainMacroName} macro",
+                        input
+                    )
+                }
+                let (_, compositionNodes) = decomposeMemberAccessExpr(cexpr)
+                FirstClassSetter(compositionNodes, valueExpr)
+            case _ =>
                 throw DiagReportException(
                     "Unknown expression, passed to ${mainMacroName} macro",
                     input
                 )
-            }
-            let (_, compositionNodes) = decomposeMemberAccessExpr(cexpr)
-            match {
-                case exprs.size == 1 => FirstClassOptics(compositionNodes)
-                case _ => FirstClassSetter(compositionNodes, exprs[1])
-            }
-        case _ => 
+        }
+    } else {
+        // No '<-': forward or first-class form
+        let exprs = parseCommaSeparatedExpressions(input)
+        if (exprs.size == 0) {
             throw DiagReportException(
-                "Unknown expression, passed to ${mainMacroName} macro",
+                "${mainMacroName} expects at least one argument",
                 input
             )
+        }
+        match (exprs[0]) {
+            case maccess: MemberAccess =>
+                let (baseExpr, compositionNodes) = decomposeMemberAccessExpr(maccess)
+                match (baseExpr) {
+                    case Some(expr) => OpticsForward(expr, compositionNodes)
+                    case _ => FirstClassOptics(compositionNodes)
+                }
+            case opt: OptionalExpr =>
+                let (baseExpr, compositionNodes) = decomposeMemberAccessExpr(opt)
+                match (baseExpr) {
+                    case Some(expr) => OpticsForward(expr, compositionNodes)
+                    case _ => FirstClassOptics(compositionNodes)
+                }
+            case cexpr: CallExpr where cexpr.callFunc is MemberAccess =>
+                let (baseExpr, compositionNodes) = decomposeMemberAccessExpr(cexpr)
+                match (baseExpr) {
+                    case Some(expr) => OpticsForward(expr, compositionNodes)
+                    case _ => FirstClassOptics(compositionNodes)
+                }
+            case cexpr: CallExpr where cexpr.callFunc is RefExpr =>
+                let id = (cexpr.callFunc as RefExpr)?.identifier ?? throw DiagReportException(
+                    "${mainMacroName}: unexpected callee form",
+                    cexpr.toTokens()
+                )
+                if (id.value != opticFakeCallexprId.value) {
+                    throw DiagReportException(
+                        "Unknown expression, passed to ${mainMacroName} macro",
+                        input
+                    )
+                }
+                let (_, compositionNodes) = decomposeMemberAccessExpr(cexpr)
+                FirstClassOptics(compositionNodes)
+            case _ =>
+                throw DiagReportException(
+                    "Unknown expression, passed to ${mainMacroName} macro",
+                    input
+                )
+        }
     }
 }
 
@@ -195,16 +244,24 @@ private func getCompositionNode(input: Expr): CompositionNode {
 }
 
 private func decomposeMemberAccessExpr(maccess: Expr): (?Expr, Array<CompositionNode>) {
-    assert(maccess is CallExpr || maccess is MemberAccess) {
-        "Expected 'CallExpr' or 'MemberAccess', but got: \n${maccess.dump()}"
+    assert(maccess is CallExpr || maccess is MemberAccess || maccess is OptionalExpr) {
+        "Expected 'CallExpr', 'MemberAccess', or 'OptionalExpr', but got: \n${maccess.dump()}"
     }
     var head: Expr = maccess
+    var forcePrism = false
+    if (let Some(opt) <- (maccess as OptionalExpr)) {
+        head = opt.baseExpr
+        forcePrism = true
+    }
     let nodes = ArrayList<CompositionNode>()
     while (true) {
         match (head) {
             case member: MemberAccess =>
                 let re = RefExpr(quote($(member.field)))
-                let (kind, nextHead) = if (let Some(opt) <- (member.baseExpr as OptionalExpr)) {
+                let (kind, nextHead) = if (forcePrism) {
+                    forcePrism = false
+                    (Prism, member.baseExpr)
+                } else if (let Some(opt) <- (member.baseExpr as OptionalExpr)) {
                     (Prism, opt.baseExpr)
                 } else {
                     (Lens, member.baseExpr)
@@ -218,7 +275,10 @@ private func decomposeMemberAccessExpr(maccess: Expr): (?Expr, Array<Composition
                     let arguments = ce.arguments
                     let ce2 = CallExpr(quote($funcName$genericParams($arguments)))
                     nodes.add(getCompositionNode(ce2))
-                    head = if (let Some(opt) <- (member.baseExpr as OptionalExpr)) {
+                    head = if (forcePrism) {
+                        forcePrism = false
+                        member.baseExpr
+                    } else if (let Some(opt) <- (member.baseExpr as OptionalExpr)) {
                         opt.baseExpr
                     } else {
                         member.baseExpr
