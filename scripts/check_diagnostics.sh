@@ -70,6 +70,34 @@ import lucida_macro.*
 func z(): Unit { let _ = @Lucida(3 + 4) }
 EOF
 
+probe "optic unknown field"       "unexpected token in fields" <<'EOF'
+package optics_experiments.test
+import lucida_macro.*
+@LucidaOptic[kolor: red]
+struct BadOptic1 {}
+EOF
+
+probe "optic bad kind"            "unknown kind" <<'EOF'
+package optics_experiments.test
+import lucida_macro.*
+@LucidaOptic[source: Int64, focus: Int64, kind: Setter]
+struct BadOptic2 {}
+EOF
+
+probe "optic non-empty carrier"   "carrier struct must be empty" <<'EOF'
+package optics_experiments.test
+import lucida_macro.*
+@LucidaOptic[source: Int64, focus: Int64, kind: Iso, forward: { src }, backward: { focus }]
+struct BadOptic3 { public BadOptic3(public let v: Int64) { } }
+EOF
+
+probe "optic src in sourceless backward" "has no src slot" <<'EOF'
+package optics_experiments.test
+import lucida_macro.*
+@LucidaOptic[source: Int64, focus: Int64, kind: Prism, forward: { Right(src) }, backward: { src }]
+struct BadOptic4 {}
+EOF
+
 echo "diagnostics gate: $PASS passed, $FAIL failed"
 if [ "$FAIL" -ne 0 ]; then exit 1; fi
 exit 0

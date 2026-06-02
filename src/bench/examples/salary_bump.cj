@@ -219,7 +219,7 @@ class BenchBumpSerialized {
 
     @Bench
     func opticsBaseline(): Unit {
-        test2 = @Lucida(serialized.serialization<Department>()
+        test2 = @Lucida[unfuse](serialized.serialization<Department>()
             .information.address.city <- "Melbourne")
     }
 

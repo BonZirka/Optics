@@ -199,7 +199,9 @@ enum CompositionNode {
     | Optic(Token)                     // start anchor @Optic(o); forces fallback
     | Coerce(TypeNode)                 // kind = Iso
     | UserDefined(Token, ArrayList<TypeNode>, ArrayList<Argument>, OpticKind)
-    // at/selectFirst -> Affine; everything else -> Unknown (fallback)
+    // Uniform-shape convention: every @LucidaOptic-declared method optic is
+    // affine-shaped, so all user methods classify as Affine (fused). Raw
+    // arbitrary-shape dunders must migrate to @LucidaOptic or @Lucida[unfuse].
 }
 
 private func getCompositionNode(input: Expr): CompositionNode {
@@ -223,8 +225,7 @@ private func getCompositionNode(input: Expr): CompositionNode {
                 )}
                 Coerce(re.typeArguments[0])
             } else {
-                let kind = if (re.identifier.value == "at" || re.identifier.value == "selectFirst") { Affine } else { Unknown }
-                UserDefined(re.identifier, re.typeArguments, ce.arguments, kind)
+                UserDefined(re.identifier, re.typeArguments, ce.arguments, Affine)
             }
         case re: RefExpr =>
             if (re.typeArguments.size != 0) {

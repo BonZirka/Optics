@@ -83,8 +83,30 @@ A chain is a member path whose segments resolve, in order, to:
 - `@Optic(firstClassOptic)` — splice a hand-built optic into a chain
 - `expr.coerce<T>()` — iso-based type coercion between single-field
   derivations
-- user method optics registered via `__method_<name>_impl_*` extends
-  (see `bench/examples/salary_bump.cj` for serialization prisms)
+- user method optics declared via `@LucidaOptic` — two body blocks, one kind:
+
+  ```cangjie
+  @LucidaOptic[
+      source: Array<T>
+      focus: T
+      kind: Affine            // Lens | Prism | Affine | Iso
+      args: (n: Int64)        // optional call-site arguments
+      forward:  { if (let Some(f) <- src.get(n)) { Right(f) } else { Left(src) } }
+      backward: { let a = src.clone(); a[n] = focus; a }
+  ]
+  struct at2<T> {}
+  ```
+
+  Fixed body slots: `src` (every forward; backward for Lens/Affine only) and
+  `focus` (last backward slot), plus names from `args:`. Declared optics fuse
+  in `@Lucida` chains automatically; `.`/`?.` behave identically for them.
+  Note that a chain whose (last) segment is a user optic always yields
+  `Either<S, A>` on forward reads — total kinds never produce `Left`, and
+  backward writes return the reconstructed source directly.
+  Hand-rolled `__method_<name>_impl_*` extends with arbitrary shapes are no
+  longer classified for fusion — re-declare via `@LucidaOptic` or annotate the
+  call site with `@Lucida[unfuse]` (see `bench/examples/salary_bump.cj` for a
+  serialization prism kept on the unfused path).
 
 Rules enforced with diagnostics rather than crashes: `@Lucida()` with no
 arguments, misplaced `@Type/@TypeOf`, coerce-first chains, and unknown chain
