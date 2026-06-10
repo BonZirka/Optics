@@ -103,6 +103,84 @@ public func pinBackwardSourceless<S, R>(targetThunk: () -> R, walk: (R) -> S): (
     { r: R => walk(r) }
 }
 
+/// Erases backward arity for kind-exact user optics: the fused backward fold
+/// always calls this two-argument form; the overload set dispatches on the
+/// bound backward's function type (sourceful (S, A) -> S vs sourceless (A) -> S).
+public func __bwdApply<S, A>(backward: (S, A) -> S, src: S, focus: A): S {
+    backward(src, focus)
+}
+
+public func __bwdApply<S, A>(backward: (A) -> S, src: S, focus: A): S {
+    backward(focus)
+}
+
+/// Total-expectation backward apply for user optics: the macro passes the
+/// segment's optics registry as a pure phantom. Sourceful kinds (Lens/Affine)
+/// and total sourceless kinds (Iso) have matching overloads; a '.'-marked
+/// PRISM write has none — unconditional rebuild on miss is exactly the
+/// semantics '.' must not grant a partial optic, so it fails to compile.
+public func __bwdApplyTotal<T, S, A>(_: RegistryLenses<T>, backward: (S, A) -> S, src: S, focus: A): S {
+    backward(src, focus)
+}
+
+public func __bwdApplyTotal<T, S, A>(_: RegistryAffines<T>, backward: (S, A) -> S, src: S, focus: A): S {
+    backward(src, focus)
+}
+
+public func __bwdApplyTotal<T, S, A>(_: RegistryIsos<T>, backward: (A) -> S, src: S, focus: A): S {
+    backward(focus)
+}
+
+@Deprecated[message: "@Lucida: '.'-write through a prism — '.'-writes assert a match and would rebuild the source unconditionally on miss. Use '?.' to preserve the source on miss.", strict: true]
+public func __bwdApplyTotal<T, S, A>(_: RegistryPrisms<T>, backward: (A) -> S, src: S, focus: A): S {
+    backward(focus)
+}
+
+// ===== Per-segment forward gates =====
+// The macro wraps EVERY segment's forward binding with one of these, so the
+// operator mark is checked against the segment's kind registry right at the
+// binding site — mid-chain or tail, derived, user, or stdlib. Total-marked
+// ('.') segments pass through Lenses/Isos; a Prisms/Affines registry means
+// the mark contradicts a partial kind. Partial-marked ('?.') segments pass
+// through Prisms/Affines (Either forward); a Lenses/Isos registry means the
+// mark contradicts a total kind. Bodies are identities: the gates exist for
+// overload resolution, and inlining makes them free at runtime.
+public func __fwdApplyTotal<T, S, A>(_: RegistryLenses<T>, forward: (S) -> A): (S) -> A {
+    forward
+}
+
+public func __fwdApplyTotal<T, S, A>(_: RegistryIsos<T>, forward: (S) -> A): (S) -> A {
+    forward
+}
+
+@Deprecated[message: "@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Either, so a total read is impossible. Use '?.' and match Right/Left.", strict: true]
+public func __fwdApplyTotal<T, S, A>(_: RegistryPrisms<T>, forward: (S) -> Either<S, A>): (S) -> Either<S, A> {
+    forward
+}
+
+@Deprecated[message: "@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Either, so a total read is impossible. Use '?.' and match Right/Left.", strict: true]
+public func __fwdApplyTotal<T, S, A>(_: RegistryAffines<T>, forward: (S) -> Either<S, A>): (S) -> Either<S, A> {
+    forward
+}
+
+public func __fwdApplyPartial<T, S, A>(_: RegistryPrisms<T>, forward: (S) -> Either<S, A>): (S) -> Either<S, A> {
+    forward
+}
+
+public func __fwdApplyPartial<T, S, A>(_: RegistryAffines<T>, forward: (S) -> Either<S, A>): (S) -> Either<S, A> {
+    forward
+}
+
+@Deprecated[message: "@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Either to unwrap. Use '.' for a plain read.", strict: true]
+public func __fwdApplyPartial<T, S, A>(_: RegistryLenses<T>, forward: (S) -> A): (S) -> A {
+    forward
+}
+
+@Deprecated[message: "@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Either to unwrap. Use '.' for a plain read.", strict: true]
+public func __fwdApplyPartial<T, S, A>(_: RegistryIsos<T>, forward: (S) -> A): (S) -> A {
+    forward
+}
+
 // ===== Fused prism-chain forward =====
 // The macro emits only top-level sibling lambdas (segment runs); every lambda's
 // parameter and return type is pinned by the concrete pre-bound segment forward

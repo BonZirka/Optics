@@ -44,8 +44,8 @@ private func isFusible(nodes: Array<CompositionNode>): Bool {
     for (i in 1..nodes.size) {
         let node = nodes[i]
         match (node) {
-            case Derived(_, k) => match (k) { case Unknown => return false case _ => () }
-            case UserDefined(_, _, _, k) => match (k) { case Unknown => return false case _ => () }
+            case Derived(_, _) => ()
+            case UserDefined(_, _, _, _) => ()
             case Coerce(_) => ()
             case _ => return false
         }
@@ -207,7 +207,7 @@ private func isFusableChain(nodes: Array<CompositionNode>): Bool {
     for (i in 1..nodes.size) {
         match (nodes[i]) {
             case Derived(_, _) => ()
-            case UserDefined(_, _, _, Affine) => ()
+            case UserDefined(_, _, _, _) => ()
             case Coerce(_) => ()
             case _ => return false
         }
@@ -215,12 +215,13 @@ private func isFusableChain(nodes: Array<CompositionNode>): Bool {
     return true
 }
 
-// Either-producing segments: prism (Derived) and affine (UserDefined) forwards
-// both return Either<T_in, A>, so both occupy the pinned prism slots.
+// Either-producing segments: derived prisms and partially-marked user optics
+// ('?.') return Either<T_in, A> and occupy the pinned prism slots; totally-marked
+// ('.') user optics walk like derived lenses.
 private func isEitherProducing(node: CompositionNode): Bool {
     match (node) {
         case Derived(_, Prism) => true
-        case UserDefined(_, _, _, Affine) => true
+        case UserDefined(_, _, _, total) => !total
         case _ => false
     }
 }
@@ -244,7 +245,7 @@ private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>): (Tokens, Arr
                 fwdIds.add(Token(IDENTIFIER, "__fwd${idx}"))
                 bwdIds.add(Token(IDENTIFIER, "__bwd${idx}"))
                 prevMagical = derivedNextMagicalExpr(idx, fieldTok)
-            case UserDefined(name, targs, args, Affine) =>
+            case UserDefined(name, targs, args, _) =>
                 bindings.add(emitUserDefinedLeafBindings(idx, name, targs, args, prevMagical))
                 fwdIds.add(Token(IDENTIFIER, "__fwd${idx}"))
                 bwdIds.add(Token(IDENTIFIER, "__bwd${idx}"))
@@ -344,7 +345,6 @@ private func emitPinnedPrismForward(nodes: Array<CompositionNode>, fwdIds: Array
         $args,
         $finalRun
     )
-
     let forwardId = idTok("__fusedForward")
     return quote(
         let $forwardId = $pinFn($args)
@@ -369,6 +369,16 @@ private func buildBackwardWalk(
         let bwdId = bwdIds[bi]
         backwardInner = match (nodes[bi + 1]) {
             case Coerce(_) => quote($bwdId($backwardInner))
+            case UserDefined(_, _, _, total) =>
+                // Total-marked segments go through the registry-gated apply so a
+                // '.'-marked PRISM write (unconditional rebuild on miss) fails to
+                // compile; partial-marked segments accept either backward arity.
+                if (total) {
+                    let opticsId = Token(IDENTIFIER, "__optics${Int64(bi)}")
+                    quote($bwdApplyTotalCallexprId($opticsId, $bwdId, $(intermediates[bi]), $backwardInner))
+                } else {
+                    quote($bwdApplyCallexprId($bwdId, $(intermediates[bi]), $backwardInner))
+                }
             case _ => quote($bwdId($(intermediates[bi]), $backwardInner))
         }
     }
@@ -377,15 +387,21 @@ private func buildBackwardWalk(
 
 private func emitFusedForwardWalk(nodes: Array<CompositionNode>, source: Expr): Tokens {
     if (countEitherSegments(nodes) == 0) {
-        // All-plain chain (pure lens, or lens/iso mixes): direct nested calls
+        // All-plain chain (pure lens, or lens/iso mixes): direct nested calls.
+        // The READ walk runs through gated copies of the segment forwards so
+        // the operator mark is checked against each segment's kind registry
+        // (writes keep the ungated forwards: a '.'-write through an affine is
+        // legal — its backward is sourceful).
         let (allBindings, fwdIds, _) = emitLeafBindingsAndIds(nodes)
+        let (gateBindings, gatedIds) = emitFwdGateBindings(nodes, fwdIds)
         let src = idTok("src")
         var walk = quote($src)
-        for (i in 0..fwdIds.size) {
-            walk = quote($(fwdIds[i])($walk))
+        for (i in 0..gatedIds.size) {
+            walk = quote($(gatedIds[i])($walk))
         }
         let forwardId = idTok("__fusedForward")
         let forwardBinding = quote(
+            $gateBindings
             let $forwardId = $pinForwardCallexprId({ => $source }, { $src => $walk })
         )
         quote(
@@ -396,19 +412,45 @@ private func emitFusedForwardWalk(nodes: Array<CompositionNode>, source: Expr): 
     } else {
         // Prism, affine, or non-lens chain
         if (!isFusableChain(nodes) || countEitherSegments(nodes) > 8) {
-            // Chains with unsupported segments (e.g. Coerce) or more pinned
-            // slots than the helpers support — library composition
+            // Non-fusable chains or more pinned slots than the helpers support
+            // — library composition
             return composeOptics(nodes)({ forward: Token, backward: Token =>
                 quote($forward($source))
             })
         }
         let (allBindings, fwdIds, _) = emitLeafBindingsAndIds(nodes)
-        let forwardEmission = emitPinnedPrismForward(nodes, fwdIds, source)
+        let (gateBindings, gatedIds) = emitFwdGateBindings(nodes, fwdIds)
+        let forwardEmission = emitPinnedPrismForward(nodes, gatedIds, source)
         quote(
             $allBindings
+            $gateBindings
             $forwardEmission
         )
     }
+}
+
+// Emits `let __gfwdI = __fwdApplyTotal|Partial(__opticsI, __fwdI)` for every
+// segment: a registry-checked identity for READ walks. Total-marked segments
+// gate through Lenses/Isos (a Prisms/Affines registry is a '.'-on-partial
+// mis-mark); partial-marked segments gate through Prisms/Affines (a
+// Lenses/Isos registry is a '?.'-on-total mis-mark). Strict-deprecated
+// overloads turn mis-marks into bespoke errors mid-chain or at the tail.
+private func emitFwdGateBindings(nodes: Array<CompositionNode>, fwdIds: ArrayList<Token>): (Tokens, ArrayList<Token>) {
+    var bindings = quote()
+    let gatedIds = ArrayList<Token>()
+    for (i in 1..nodes.size) {
+        let idx: Int64 = Int64(i - 1)
+        let opticsId = Token(IDENTIFIER, "__optics${idx}")
+        let fwdId = fwdIds[idx]
+        let gate = if (isEitherProducing(nodes[i])) { fwdApplyPartialCallexprId } else { fwdApplyTotalCallexprId }
+        let gid = Token(IDENTIFIER, "__gfwd${idx}")
+        bindings = quote(
+            $bindings
+            let $gid = $gate($opticsId, $fwdId)
+        )
+        gatedIds.add(gid)
+    }
+    return (bindings, gatedIds)
 }
 
 private func countEitherSegments(nodes: Array<CompositionNode>): Int64 {

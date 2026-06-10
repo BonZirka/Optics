@@ -102,7 +102,7 @@ class DslLaws {
     @TestCase
     func stdlibAtLaws(): Unit {
         let nums = [10, 20, 30]
-        let bumped = @Lucida(nums.at(1) <- 99)
+        let bumped = @Lucida(nums?.at(1) <- 99)
         @Assert(bumped[0] == 10)
         @Assert(bumped[1] == 99)
         @Assert(bumped[2] == 30)
@@ -110,18 +110,18 @@ class DslLaws {
         // immutability: the caller's array must be untouched (CoW aliasing bug class)
         @Assert(nums[1] == 20)
 
-        let untouched = @Lucida(nums.at(7) <- 99)
+        let untouched = @Lucida(nums?.at(7) <- 99)
         @Assert(untouched.size == 3)
         @Assert(untouched[0] == 10 && untouched[1] == 20 && untouched[2] == 30)
 
         // source-form read returns Either: Right(focus) / Left(original)
         var leftOk = false
-        if (let Left(src) <- @Lucida(nums.at(7))) {
+        if (let Left(src) <- @Lucida(nums?.at(7))) {
             leftOk = src.size == 3
         }
         @Assert(leftOk)
         var rightOk = false
-        if (let Right(fv) <- @Lucida(nums.at(0))) {
+        if (let Right(fv) <- @Lucida(nums?.at(0))) {
             rightOk = fv == 10
         }
         @Assert(rightOk)
@@ -136,12 +136,12 @@ class DslLaws {
         staff.add(Employee2("other", 300))
         let arr = staff.toArray()
 
-        let raised = @Lucida(arr.selectFirst({ e: Employee2 => e.name == "dup" }).salary <- 999)
+        let raised = @Lucida(arr?.selectFirst({ e: Employee2 => e.name == "dup" }).salary <- 999)
         @Assert(raised[0].salary == 999)
         @Assert(raised[1].salary == 200)
         @Assert(raised[2].salary == 300)
 
-        let miss = @Lucida(arr.selectFirst({ e: Employee2 => e.name == "nobody" }).salary <- 999)
+        let miss = @Lucida(arr?.selectFirst({ e: Employee2 => e.name == "nobody" }).salary <- 999)
         @Assert(miss.size == 3)
         @Assert(miss[0].salary == 100)
         @Assert(miss[1].salary == 200)

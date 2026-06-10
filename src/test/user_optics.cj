@@ -64,7 +64,7 @@ class UserAffineOpticLaws {
     func forwardMatch(): Unit {
         let xs = [1, 2, 3]
         var ok = false
-        match (@Lucida(xs.at2(1))) {
+        match (@Lucida(xs?.at2(1))) {
             case Right(r) => ok = (r == 2)
             case _ => ()
         }
@@ -75,7 +75,7 @@ class UserAffineOpticLaws {
     func forwardMissIsIdentity(): Unit {
         let xs = [1, 2, 3]
         var ok = false
-        match (@Lucida(xs.at2(10))) {
+        match (@Lucida(xs?.at2(10))) {
             case Left(l) => ok = (l == xs)
             case _ => ()
         }
@@ -85,7 +85,7 @@ class UserAffineOpticLaws {
     @TestCase
     func backwardUpdate(): Unit {
         let xs = [1, 2, 3]
-        let updated = @Lucida(xs.at2(1) <- 9)
+        let updated = @Lucida(xs?.at2(1) <- 9)
         @Assert(updated[1] == 9)
         @Assert(updated[0] == 1 && updated[2] == 3)
     }
@@ -93,7 +93,7 @@ class UserAffineOpticLaws {
     @TestCase
     func backwardMissIsIdentity(): Unit {
         let xs = [1, 2, 3]
-        let updated = @Lucida(xs.at2(10) <- 9)
+        let updated = @Lucida(xs?.at2(10) <- 9)
         @Assert(updated == xs)
     }
 }
@@ -103,12 +103,7 @@ class UserLensIsoPrismLaws {
     @TestCase
     func lensForward(): Unit {
         let b = UBox(3)
-        var ok = false
-        match (@Lucida(b.uBoxLens())) {
-            case Right(r) => ok = (r == 3)
-            case _ => ()
-        }
-        @Assert(ok)
+        @Assert(@Lucida(b.uBoxLens()) == 3)
     }
 
     @TestCase
@@ -120,12 +115,7 @@ class UserLensIsoPrismLaws {
     @TestCase
     func isoForward(): Unit {
         let m = ULen(5)
-        var ok = false
-        match (@Lucida(m.uLenIso())) {
-            case Right(r) => ok = (r == 5)
-            case _ => ()
-        }
-        @Assert(ok)
+        @Assert(@Lucida(m.uLenIso()) == 5)
     }
 
     @TestCase
@@ -138,7 +128,7 @@ class UserLensIsoPrismLaws {
     func prismForwardMatch(): Unit {
         let m = UMaybe.UJust(7)
         var ok = false
-        match (@Lucida(m.uJust())) {
+        match (@Lucida(m?.uJust())) {
             case Right(r) => ok = (r == 7)
             case _ => ()
         }
@@ -148,7 +138,7 @@ class UserLensIsoPrismLaws {
     @TestCase
     func prismForwardMissCarriesSource(): Unit {
         let m = UMaybe.UNothing
-        let fwd = @Lucida(m.uJust())
+        let fwd = @Lucida(m?.uJust())
         var ok = false
         match (fwd) {
             case Left(l) =>
@@ -164,7 +154,7 @@ class UserLensIsoPrismLaws {
     @TestCase
     func prismBackward(): Unit {
         let m = UMaybe.UJust(7)
-        let bwd = @Lucida(m.uJust() <- 9)
+        let bwd = @Lucida(m?.uJust() <- 9)
         var ok = false
         match (bwd) {
             case UJust(v) => ok = (v == 9)
@@ -176,7 +166,7 @@ class UserLensIsoPrismLaws {
     @TestCase
     func prismBackwardMissIsIdentity(): Unit {
         let m = UMaybe.UNothing
-        let bwd = @Lucida(m.uJust() <- 9)
+        let bwd = @Lucida(m?.uJust() <- 9)
         var ok = false
         match (bwd) {
             case UNothing => ok = true
@@ -205,7 +195,7 @@ class UserMixedChainLaws {
     func userTailAfterBuiltinAffine(): Unit {
         let bs = [UBox(1), UBox(2)]
         var ok = false
-        match (@Lucida(bs.at2(0).uBoxLens())) {
+        match (@Lucida(bs?.at2(0).uBoxLens())) {
             case Right(r) => ok = (r == 1)
             case _ => ()
         }
@@ -215,7 +205,7 @@ class UserMixedChainLaws {
     @TestCase
     func userTailAfterBuiltinAffineBackward(): Unit {
         let bs = [UBox(1), UBox(2)]
-        let updated = @Lucida(bs.at2(0).uBoxLens() <- 7)
+        let updated = @Lucida(bs?.at2(0).uBoxLens() <- 7)
         @Assert(updated[0].v == 7 && updated[1].v == 2)
     }
 
@@ -223,7 +213,7 @@ class UserMixedChainLaws {
     func userPrismAfterBuiltinAffine(): Unit {
         let ms = [UMaybe.UJust(1), UMaybe.UNothing]
         var ok = false
-        match (@Lucida(ms.at2(0).uJust())) {
+        match (@Lucida(ms?.at2(0)?.uJust())) {
             case Right(r) => ok = (r == 1)
             case _ => ()
         }
@@ -234,7 +224,7 @@ class UserMixedChainLaws {
     func userPrismAfterBuiltinAffineMissCarriesOriginalSource(): Unit {
         let ms = [UMaybe.UJust(1), UMaybe.UNothing]
         var ok = false
-        match (@Lucida(ms.at2(1).uJust())) {
+        match (@Lucida(ms?.at2(1)?.uJust())) {
             case Left(l) => ok = sameMaybe(l, ms)
             case _ => ()
         }

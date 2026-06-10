@@ -35,6 +35,10 @@ let opticsUpcastCallexprId = quote(__OpticsCompositions.opticsUpcast)
 let pinForwardCallexprId = Token(IDENTIFIER, "pinForward")
 let pinBackwardCallexprId = Token(IDENTIFIER, "pinBackward")
 let pinBackwardSourcelessCallexprId = Token(IDENTIFIER, "pinBackwardSourceless")
+let bwdApplyCallexprId = Token(IDENTIFIER, "__bwdApply")
+let bwdApplyTotalCallexprId = Token(IDENTIFIER, "__bwdApplyTotal")
+let fwdApplyTotalCallexprId = Token(IDENTIFIER, "__fwdApplyTotal")
+let fwdApplyPartialCallexprId = Token(IDENTIFIER, "__fwdApplyPartial")
 
 func pinPrismForwardCallexprId(k: Int64): Token {
     Token(IDENTIFIER, "pinPrismForward${k}")

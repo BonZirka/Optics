@@ -202,7 +202,7 @@ class FusedPrismLaws {
     @TestCase
     func affinePrismForwardFallback(): Unit {
         let shapes = [Payload2D.Dot(1), Payload2D.Rect(Box(7))]
-        let fwd = @Lucida(shapes.selectFirst({ p: Payload2D => match (p) { case Rect(_) => true case _ => false } })?.Rect.w)
+        let fwd = @Lucida(shapes?.selectFirst({ p: Payload2D => match (p) { case Rect(_) => true case _ => false } })?.Rect.w)
         var ok = false
         match (fwd) {
             case Right(v) => ok = (v == 7)
@@ -215,7 +215,7 @@ class FusedPrismLaws {
     @TestCase
     func atPrismLensForwardMatch(): Unit {
         let shapes = [Payload2D.Dot(1), Payload2D.Rect(Box(7))]
-        let fwd = @Lucida(shapes.at(1)?.Rect.w)
+        let fwd = @Lucida(shapes?.at(1)?.Rect.w)
         var ok = false
         match (fwd) {
             case Right(v) => ok = (v == 7)
@@ -228,7 +228,7 @@ class FusedPrismLaws {
     @TestCase
     func selectFirstPrismLensBackward(): Unit {
         let shapes = [Payload2D.Dot(1), Payload2D.Rect(Box(5))]
-        let updated = @Lucida(shapes.selectFirst({ p: Payload2D => match (p) { case Rect(_) => true case _ => false } })?.Rect.w <- 7)
+        let updated = @Lucida(shapes?.selectFirst({ p: Payload2D => match (p) { case Rect(_) => true case _ => false } })?.Rect.w <- 7)
         var ok = false
         match (updated[1]) {
             case Rect(b) => ok = (b.w == 7)
@@ -247,7 +247,7 @@ class FusedPrismLaws {
     @TestCase
     func selectFirstPrismLensBackwardMissIsIdentity(): Unit {
         let shapes = [Payload2D.Dot(1), Payload2D.Dot(2)]
-        let updated = @Lucida(shapes.selectFirst({ p: Payload2D => match (p) { case Rect(_) => true case _ => false } })?.Rect.w <- 7)
+        let updated = @Lucida(shapes?.selectFirst({ p: Payload2D => match (p) { case Rect(_) => true case _ => false } })?.Rect.w <- 7)
         var ok = false
         match (updated[0]) {
             case Dot(v) => ok = (v == 1)
@@ -289,6 +289,46 @@ class FusedPrismLaws {
         let h = WBox(W1(Nested(3)))
         let updated = @Lucida(h.w.coerce<Nested>().n <- 9)
         @Assert(updated.w.f.n == 9)
+    }
+
+    // Derived prism -> iso tail: coerce participates in a pinned prism chain.
+    @TestCase
+    func coerceAfterPrismForwardMatch(): Unit {
+        let s = Shape.Circle(Nested(3))
+        let fwd = @Lucida(s?.Circle.coerce<Int64>())
+        var ok = false
+        match (fwd) {
+            case Right(v) => ok = (v == 3)
+            case _ => ()
+        }
+        @Assert(ok)
+    }
+
+    @TestCase
+    func coerceAfterPrismForwardMissCarriesSource(): Unit {
+        let s = Shape.Square(2)
+        let miss = @Lucida(s?.Circle.coerce<Int64>())
+        var ok = false
+        match (miss) {
+            case Left(src) => match (src) {
+                case Square(v) => ok = (v == 2)
+                case _ => ()
+            }
+            case _ => ()
+        }
+        @Assert(ok)
+    }
+
+    @TestCase
+    func coerceAfterPrismBackward(): Unit {
+        let s = Shape.Circle(Nested(3))
+        let updated = @Lucida(s?.Circle.coerce<Int64>() <- 5)
+        var ok = false
+        match (updated) {
+            case Circle(inner) => ok = (inner.n == 5)
+            case _ => ()
+        }
+        @Assert(ok)
     }
 
     // ===== backward regression pins (library fallback path) =====

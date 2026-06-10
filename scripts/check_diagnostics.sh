@@ -98,6 +98,79 @@ import lucida_macro.*
 struct BadOptic4 {}
 EOF
 
+probe "optic dot on partial"      "on a partial optic (Prism/Affine)" <<'EOF'
+package optics_experiments.test
+import lucida.*
+import lucida_macro.*
+public struct DotBox {
+    public DotBox(public let v: Int64) { }
+}
+@LucidaOptic[source: DotBox, focus: Int64, kind: Prism, forward: { Right(src.v) }, backward: { DotBox(focus) }]
+struct dotPartial {}
+func z1(): Unit { let _ = @Lucida(DotBox(1).dotPartial()) }
+EOF
+
+probe "optic question-dot on total" "on a total optic (Lens/Iso)" <<'EOF'
+package optics_experiments.test
+import lucida.*
+import lucida_macro.*
+public struct DotBox2 {
+    public DotBox2(public let v: Int64) { }
+}
+@LucidaOptic[source: DotBox2, focus: Int64, kind: Lens, forward: { src.v }, backward: { DotBox2(focus) }]
+struct qdotTotal {}
+func z2(): Unit { let _ = @Lucida(DotBox2(1)?.qdotTotal()) }
+EOF
+
+probe "optic dot-write on prism"  "rebuild the source unconditionally on miss" <<'EOF'
+package optics_experiments.test
+import lucida.*
+import lucida_macro.*
+public struct DotBox3 {
+    public DotBox3(public let v: Int64) { }
+}
+@LucidaOptic[source: DotBox3, focus: Int64, kind: Prism, forward: { Right(src.v) }, backward: { DotBox3(focus) }]
+struct dotPartialW {}
+func z3(): Unit {
+    let b = DotBox3(1)
+    let wr = @Lucida(b.dotPartialW() <- 9)
+    let _ = wr
+}
+EOF
+
+probe "optic question-dot on coerce" "on a total optic (coerce)" <<'EOF'
+package optics_experiments.test
+import lucida.*
+import lucida_macro.*
+func z4(): Unit {
+    let mb = MeterBox(Meters(7))
+    let rd = @Lucida(mb.m?.coerce<Int64>())
+    let _ = rd
+}
+EOF
+
+probe "optic dot mid-chain on derived prism" "on a partial optic (Prism/Affine)" <<'EOF'
+package optics_experiments.test
+import lucida.*
+import lucida_macro.*
+func z5(): Unit {
+    let h = PayloadHolder(Rect(Box(42)))
+    let rd = @Lucida(h.shape.Rect.w)
+    let _ = rd
+}
+EOF
+
+probe "optic question-dot on derived lens" "on a total optic (Lens/Iso)" <<'EOF'
+package optics_experiments.test
+import lucida.*
+import lucida_macro.*
+func z6(): Unit {
+    let mb = MeterBox(Meters(7))
+    let rd = @Lucida(mb.m?.v)
+    let _ = rd
+}
+EOF
+
 echo "diagnostics gate: $PASS passed, $FAIL failed"
 if [ "$FAIL" -ne 0 ]; then exit 1; fi
 exit 0

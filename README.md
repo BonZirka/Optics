@@ -5,7 +5,7 @@ affines, isos and setters with a `@Lucida` update DSL, a `@DeriveOptics` code
 generator, and a generated composition table.
 
 ```cangjie
-let updated = @Lucida(department.employees.selectFirst(e => e.name == "Mark").salary, 42000)
+let updated = @Lucida(department.employees?.selectFirst(e => e.name == "Mark").salary, 42000)
 ```
 
 Updates are **immutable** (they return a new value) and **law-abiding**: an
@@ -98,15 +98,26 @@ A chain is a member path whose segments resolve, in order, to:
   ```
 
   Fixed body slots: `src` (every forward; backward for Lens/Affine only) and
-  `focus` (last backward slot), plus names from `args:`. Declared optics fuse
-  in `@Lucida` chains automatically; `.`/`?.` behave identically for them.
-  Note that a chain whose (last) segment is a user optic always yields
-  `Either<S, A>` on forward reads — total kinds never produce `Left`, and
-  backward writes return the reconstructed source directly.
-  Hand-rolled `__method_<name>_impl_*` extends with arbitrary shapes are no
-  longer classified for fusion — re-declare via `@LucidaOptic` or annotate the
-  call site with `@Lucida[unfuse]` (see `bench/examples/salary_bump.cj` for a
-  serialization prism kept on the unfused path).
+  `focus` (last backward slot), plus names from `args:`. Generated members have
+  exactly the declared kind's shape (plain forward for Lens/Iso, `Either` for
+  Prism/Affine; backward arity per kind), and `__downcast_method_<name>` routes
+  to the kind's registry so `[unfuse]` composition stays kind-correct.
+
+  The `.`/`?.` operator decides semantics at every call site — user and stdlib
+  optics alike: `.` means a total read/write (plain result, like derived lens
+  segments), `?.` means partial (`Either` result carrying the original source
+  on miss, like derived prism segments). Wrong pairings fail to compile with
+  bespoke messages, checked per segment (mid-chain or tail) against each
+  segment's kind registry, routed through strict-`@Deprecated` diagnostic
+  overloads: `.` on a partial optic ("its forward returns Either... use `?.`"),
+  `?.` on a total one ("its forward cannot miss... use `.`"), and `.`-writes
+  through a prism ("would rebuild the source unconditionally on miss"). Coerce
+  segments are fixed-total, so `x?.coerce<T>()` is rejected at macro time.
+  Write `xs?.at(1)` for `Array.at`, `m?.uJust()` for a prism-typed user optic.
+  Hand-rolled `__method_<name>_impl_*` extends with arbitrary shapes should
+  migrate to `@LucidaOptic` or stay on `@Lucida[unfuse]` call sites (see
+  `bench/examples/salary_bump.cj` for a serialization prism kept on the
+  unfused path).
 
 Rules enforced with diagnostics rather than crashes: `@Lucida()` with no
 arguments, misplaced `@Type/@TypeOf`, coerce-first chains, and unknown chain

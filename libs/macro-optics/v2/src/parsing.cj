@@ -184,12 +184,12 @@ func parseOpticalExpression(input: Tokens): OpticalExpr {
     }
 }
 
+// Operator-derived kind expectation at parse level. The full kind matrix
+// (Affine/Iso semantics, registry mapping) is decided at the call site by the
+// optic's registry; the parser only records '.' (total) vs '?.' (partial).
 enum OpticKind {
-    | Lens       // total: forward returns A;          backward takes (S, A) -> S
-    | Prism      // partial: forward returns Either<S, A>; backward takes (A) -> S (sourceless)
-    | Affine     // partial: forward returns Either<S, A>; backward takes (S, A) -> S (sourceful)
-    | Iso        // total: forward returns A;          backward takes (A) -> S (sourceless)
-    | Unknown    // fallback to binary compose
+    | Lens       // '.'  on a derived member: total expectation
+    | Prism      // '?.' on a derived member: partial expectation
 }
 
 enum CompositionNode {
@@ -198,13 +198,12 @@ enum CompositionNode {
     | TypeOf(Tokens)                   // start anchor @TypeOf(x) or auto-derived from leading identifier
     | Optic(Token)                     // start anchor @Optic(o); forces fallback
     | Coerce(TypeNode)                 // kind = Iso
-    | UserDefined(Token, ArrayList<TypeNode>, ArrayList<Argument>, OpticKind)
-    // Uniform-shape convention: every @LucidaOptic-declared method optic is
-    // affine-shaped, so all user methods classify as Affine (fused). Raw
-    // arbitrary-shape dunders must migrate to @LucidaOptic or @Lucida[unfuse].
+    | UserDefined(Token, ArrayList<TypeNode>, ArrayList<Argument>, Bool)
+    // Bool = total: operator-derived call-site expectation.
+    // '.' (plain member access) => true, '?.' (OptionalExpr) => false.
 }
 
-private func getCompositionNode(input: Expr): CompositionNode {
+private func getCompositionNode(input: Expr, total!: Bool = true): CompositionNode {
     match (input) {
         case ce: CallExpr =>
             let re = ce.callFunc as RefExpr ?? throw DiagReportException("You've done something wrong", ce.toTokens())
@@ -225,7 +224,7 @@ private func getCompositionNode(input: Expr): CompositionNode {
                 )}
                 Coerce(re.typeArguments[0])
             } else {
-                UserDefined(re.identifier, re.typeArguments, ce.arguments, Affine)
+                UserDefined(re.identifier, re.typeArguments, ce.arguments, total)
             }
         case re: RefExpr =>
             if (re.typeArguments.size != 0) {
@@ -275,7 +274,18 @@ private func decomposeMemberAccessExpr(maccess: Expr): (?Expr, Array<Composition
                     let genericParams = if (member.typeArguments.size == 0) { quote() } else { quote(<$(member.typeArguments)>)}
                     let arguments = ce.arguments
                     let ce2 = CallExpr(quote($funcName$genericParams($arguments)))
-                    nodes.add(getCompositionNode(ce2))
+                    // The segment is partial ('?.') when an OptionalExpr is pending
+                    // from above or wraps this call's own base: `xs?.at2(1)`.
+                    let segTotal = !(forcePrism || (member.baseExpr is OptionalExpr))
+                    // Coerce is fixed-total (RegistryIsos); a '?.' mark promises a
+                    // partial read/write that cannot exist. Rejected here (not in
+                    // getCompositionNode) because ce2 is synthesized and its tokens
+                    // carry no positions for diagReport.
+                    if (funcName.value == coercionFakeCallexprId.value && !segTotal) { throw DiagReportException(
+                        "${mainMacroName}: '?.' on a total optic (coerce) — its forward cannot miss, so there is no Either to unwrap. Use '.' for a plain read.",
+                        ce.toTokens()
+                    )}
+                    nodes.add(getCompositionNode(ce2, total: segTotal))
                     head = if (forcePrism) {
                         forcePrism = false
                         member.baseExpr

@@ -179,21 +179,35 @@ private func emitUserOptic(
         quote(_: $registryMainId<$source>, $argParams)
     }
 
-    let fwdLambda = match (kindTok.value) {
-        case "Lens" | "Iso" => quote({ src: $source => Right<$source, $focus>($forwardBody) })
-        case _ => quote({ src: $source => $forwardBody })
+    let registryId = match (kindTok.value) {
+        case "Lens" => registryLensId
+        case "Iso" => registryIsoId
+        case "Prism" => registryPrismId
+        case _ => registryOptionalId // Affine
     }
+
+    // Kind-exact signatures (spec v2). All members keep the method-optic
+    // factory convention: take the registry + args, return the function value.
+    let fwdType = match (kindTok.value) {
+        case "Lens" | "Iso" => quote(($source) -> $focus)
+        case _ => quote(($source) -> Either<$source, $focus>)
+    }
+    let bwdType = match (kindTok.value) {
+        case "Lens" | "Affine" => quote(($source, $focus) -> $source)
+        case _ => quote(($focus) -> $source)
+    }
+    let fwdLambda = quote({ src: $source => $forwardBody })
     let bwdLambda = match (kindTok.value) {
         case "Lens" | "Affine" => quote({ src: $source, focus: $focus => $backwardBody })
-        case _ => quote({ _src: $source, focus: $focus => $backwardBody })
+        case _ => quote({ focus: $focus => $backwardBody })
     }
 
     return quote(
-        extend $genHdr $registryOptionalId<$source> {
-            public func $fwdId($sigTail): ($source) -> Either<$source, $focus> {
+        extend $genHdr $registryId<$source> {
+            public func $fwdId($sigTail): $fwdType {
                 $fwdLambda
             }
-            public func $bwdId($sigTail): ($source, $focus) -> $source {
+            public func $bwdId($sigTail): $bwdType {
                 $bwdLambda
             }
         }
@@ -201,8 +215,8 @@ private func emitUserOptic(
             public func $opticsId(_: $registryMainId<$source>): $registryMainId<$focus> {
                 $registryMainId<$focus>()
             }
-            public func $downcastId(_: $registryMainId<$source>): $registryOptionalId<$source> {
-                $registryOptionalId<$source>()
+            public func $downcastId(_: $registryMainId<$source>): $registryId<$source> {
+                $registryId<$source>()
             }
         }
     )
