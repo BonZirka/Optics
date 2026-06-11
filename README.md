@@ -119,6 +119,21 @@ A chain is a member path whose segments resolve, in order, to:
   `bench/examples/salary_bump.cj` for a serialization prism kept on the
   unfused path).
 
+  Optics over generic types work too — declare the parameters on the carrier
+  struct and use them in `source:`/`focus:`:
+
+  ```cangjie
+  @LucidaOptic[source: Box<T>, focus: T, kind: Lens, forward: { src.value }, backward: { Box(focus) }]
+  struct boxLens<T> {}
+  ```
+
+  Call sites stay unchanged (`@Lucida(box.boxLens())`) — inference resolves
+  `T` from the receiver. Multiple parameters work the same way — declare them
+  all on the carrier (`struct pairFirst<A, B> {}` over your own
+  `Pair<A, B>`-style type). `where` constraints are rejected at macro time.
+  Parameters must be declared on the carrier — the macro is syntactic and
+  cannot distinguish a free type variable from a concrete type argument.
+
 Rules enforced with diagnostics rather than crashes: `@Lucida()` with no
 arguments, misplaced `@Type/@TypeOf`, coerce-first chains, and unknown chain
 starts all produce compiler errors pointing at your code.

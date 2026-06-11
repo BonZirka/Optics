@@ -164,8 +164,20 @@ private func emitUserOptic(
     backwardBody: Tokens
 ): Tokens {
     let name = carrier.identifier
-    let gen: ?Tokens = if (carrier.isGenericDecl) { Some(carrier.genericParam.parameters) } else { None }
-    let genHdr = if (let Some(g) <- gen) { quote(<$g>) } else { quote() }
+    // `genericParam.parameters` yields bare identifiers without separator
+    // commas (e.g. <T, U> -> ['T', 'U']), so comma-join explicitly; single
+    // params are unaffected. Skips COMMA/NL defensively.
+    let genHdr = if (carrier.isGenericDecl) {
+        let parts = ArrayList<Tokens>()
+        carrier.genericParam.parameters |> forEach { t: Token =>
+            if (t.kind != TokenKind.COMMA && t.kind != TokenKind.NL) {
+                parts.add(Tokens(ArrayList<Token>([t])))
+            }
+        }
+        quote(<$(commaSeparated(parts))>)
+    } else {
+        quote()
+    }
 
     let fwdId = Token(IDENTIFIER, "__method_${name.value}_impl_forward")
     let bwdId = Token(IDENTIFIER, "__method_${name.value}_impl_backward")
@@ -236,6 +248,12 @@ public macro LucidaOptic(attr: Tokens, input: Tokens): Tokens {
                 "@LucidaOptic: carrier struct must be empty",
                 carrier.identifier.toTokens(),
                 hint: "The struct only carries the optic name and type parameters")
+        }
+        if (carrier.genericConstraint.size != 0) {
+            throw DiagReportException(
+                "@LucidaOptic: generic constraints ('where' clauses) are not supported",
+                carrier.identifier.toTokens(),
+                hint: "Remove the constraint or hand-write the optics")
         }
         let fields = splitOpticFields(attr)
 

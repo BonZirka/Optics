@@ -271,7 +271,9 @@ private func decomposeMemberAccessExpr(maccess: Expr): (?Expr, Array<Composition
             case ce: CallExpr =>
                 if (let Some(member) <- (ce.callFunc as MemberAccess)) {
                     let funcName = member.field
-                    let genericParams = if (member.typeArguments.size == 0) { quote() } else { quote(<$(member.typeArguments)>)}
+                    // typeArguments splices with '&' separators (supertype-list
+                    // semantics); the reconstructed call needs comma separation.
+                    let genericParams = if (member.typeArguments.size == 0) { quote() } else { quote(<$(commaSeparated(member.typeArguments))>) }
                     let arguments = ce.arguments
                     let ce2 = CallExpr(quote($funcName$genericParams($arguments)))
                     // The segment is partial ('?.') when an OptionalExpr is pending

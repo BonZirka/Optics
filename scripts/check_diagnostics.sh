@@ -171,6 +171,22 @@ func z6(): Unit {
 }
 EOF
 
+probe "optic where clause" "generic constraints ('where' clauses) are not supported" <<'EOF'
+package optics_experiments.test
+import lucida.*
+import lucida_macro.*
+public struct WBox2<T> {
+    public WBox2(public let v: T) { }
+}
+@LucidaOptic[source: WBox2<T>, focus: T, kind: Lens, forward: { src.v }, backward: { WBox2(focus) }]
+struct wbox2Lens<T> where T <: ToString {}
+func z7(): Unit {
+    let w = WBox2<Int64>(1)
+    let rd = @Lucida(w.wbox2Lens())
+    let _ = rd
+}
+EOF
+
 echo "diagnostics gate: $PASS passed, $FAIL failed"
 if [ "$FAIL" -ne 0 ]; then exit 1; fi
 exit 0
