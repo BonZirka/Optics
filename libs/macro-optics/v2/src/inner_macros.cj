@@ -6,10 +6,14 @@ import std.collection.*
 public macro Type(input: Tokens): Tokens {
     try {
         if (insideParentContext(mainMacroName[1..])) {
-            let re = input as RefExpr ?? throw DiagReportException(
-                "${typeMacroName}: macro input should be type (RefExpr)",
-                input
-            )
+            let re = if (input.size == 1) {
+                RefExpr(quote($input))
+            } else {
+                input as RefExpr ?? throw DiagReportException(
+                    "${typeMacroName}: macro input should be type (RefExpr)",
+                    input
+                )
+            }
             return quote($typeFakeCallexprId($re))
         }
         throw DiagReportException(
