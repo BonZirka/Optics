@@ -141,7 +141,7 @@ match (fwd) {
 @Assert(ok)
 ```
 
-Writes follow the same contract as the derived prisms: on a match the write
+Writes follow the same contract as the derived case optics: on a match the write
 rebuilds the case around the new payload; from a `UNothing` source the same
 write returns the source unchanged — the miss is an identity.
 
@@ -277,4 +277,6 @@ derive follows.
   for free, per field and per case.
 - [Chains](chains.md) — mixing `.` and `?.` segments, derived and
   user-declared, in one chain.
+- [First-class optics](../api/first-class.md) — the values a sourceless
+  chain mints, and the accessors they answer to.
 - [The DSL reference](../api/dsl.md) — every `@Lucida` form on one page.

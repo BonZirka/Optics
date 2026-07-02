@@ -48,7 +48,9 @@ and it takes one of two shapes, which decides what the expression is:
   chain's kind; a write mints a `Setter` with the new value baked in
   ([first-class optics](first-class.md)).
 
-One example of each, all from the suite:
+One example of each — the first two and the last two are verbatim from the
+suite; the middle two spell the sourceless forms (the suite's own lens-mint
+read is `@Lucida(@TypeOf(probeInstance).f)`):
 
 ```cangjie
 @Lucida(o.customer.address.city.name)              // read: "Atlanta"

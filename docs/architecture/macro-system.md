@@ -476,9 +476,9 @@ code-shape decision, not a semantic one, and the gate is small:
   already carries composed closures, so there is nothing to inline;
 - every segment after the anchor must be derived, user-defined, or a
   coercion — the node kinds whose members the macro can address by name;
-- a chain with partial segments fuses through the pinned prism walkers, and
+- a read with partial segments fuses through the pinned prism walkers, and
   those come in fixed arities — more than eight partial segments exceeds the
-  largest helper and falls back to composition.
+  largest helper and falls back to composition (writes are not capped).
 
 Any failed check routes the chain to the composed path — and so does
 `[unfuse]`, which skips the gate entirely. The fallback being *the* composed

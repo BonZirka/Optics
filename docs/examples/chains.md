@@ -16,7 +16,7 @@ Every segment is marked with the guarantee the optic behind it makes:
 | Operator | Meaning | Segments it matches |
 |---|---|---|
 | `.` | total — the part is always there; read and write cannot miss | derived lens fields, isos — e.g. `coerce<T>()`, `.`-marked user optics |
-| `?.` | partial — a read evaluates to `Either`: `Right(payload)` on a match, `Left(source)` carrying the original source on a miss | derived prism cases, `Array.at`, `Array.selectFirst`, `?.`-marked user optics |
+| `?.` | partial — a read evaluates to `Either`: `Right(payload)` on a match, `Left(source)` carrying the original source on a miss | derived case optics, `Array.at`, `Array.selectFirst`, `?.`-marked user optics |
 
 The mark is not decoration — it names the kind, and the compiler checks it.
 A partial write is unconditional: when the segment misses, the write returns

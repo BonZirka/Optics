@@ -48,6 +48,9 @@ let updated = @Lucida(serialized.serialization<Department>()
     .information.address.city <- "Melbourne")
 ```
 
+(a segment like `serialization<T>()` is hand-declared, not built in;
+[user optics](examples/user-optics.md) shows how)
+
 Focus `serialized.serialization<Department>()`, walk to `.information.address.city`,
 set it to `"Melbourne"`: the decode, the per-layer rebuild, and the re-encode
 are all the optic's job. And as you'll see at the end, optics take you from one
@@ -87,7 +90,9 @@ let name = @Lucida(o.customer.address.city.name)
 The focus itself is the path after the source — `customer.address.city.name` —
 and that is the place, not a value: the same focus applies to any value of that
 shape. `@Type` makes that place a value: it names the focus *without* pinning a
-source, and hands you the path itself as a first-class optic:
+source, and hands you the path itself as a first-class optic (the explicit
+`@Type` spelling of the anchor — the value-rooted form earlier in this
+section is the implicit one):
 
 ```cangjie
 let cityName = @Lucida(@Type(Order).customer.address.city.name)
@@ -163,7 +168,8 @@ let updated = @Lucida(sq?.Circle <- Nested(99))
 // updated is still Square(5) — the miss was an identity
 ```
 
-The chain is partial (`?.Circle` is a Prism), so a write when the source
+The chain is partial (`?.Circle` is a partial optic — the library kinds it
+an affine; same contract), so a write when the source
 doesn't match returns the source **unchanged** — no error, no crash, no
 branching to write. The "miss → identity" behavior is wired in by the kind.
 
