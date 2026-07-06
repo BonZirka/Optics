@@ -5,7 +5,7 @@ import lucida_macro.*
 /*
  * The complete composition/upcast table is generated at compile time by
  * @GenerateCompositions (libs/macro-optics/v2/src/generate_compositions.cj):
- *   - composeForward / composeBackward for all 24 ordered optic-kind pairs,
+ *   - composeForward / composeBackward for all 25 ordered optic-kind pairs,
  *   - opticsUpcast for all 15 unordered pairs (lattice: Setter < Affine <
  *     {Lens, Prism} < Iso, join(Lens, Prism) = Affine).
  *

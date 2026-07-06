@@ -6,7 +6,7 @@
 [package]
   cjc-version = "0.57.3"
   compile-option = "-O2 --debug-macro"
-  description = "nothing here"
+  description = "Law test suite and benchmarks for the lucida optics library"
   link-option = ""
   name = "optics_experiments"
   output-type = "executable"

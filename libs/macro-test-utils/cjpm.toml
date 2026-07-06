@@ -1,9 +1,9 @@
 [dependencies]
 
 [package]
-  cjc-version = "0.59.9"
+  cjc-version = "0.57.3"
   compile-option = ""
-  description = "nothing here"
+  description = "Macro authoring helpers for lucida development"
   link-option = ""
   name = "macro_test_utils"
   output-type = "dynamic"

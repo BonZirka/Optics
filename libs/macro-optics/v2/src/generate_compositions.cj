@@ -74,7 +74,7 @@ func isEitherKind(k: Int64): Bool {
     k == PRISM || k == AFFINE
 }
 
-// The 24 ordered pairs, in historical case order (case numbers 1..25 minus none).
+// The 25 ordered pairs (5 kinds x 5 kinds), in historical case order.
 func allPairs(): ArrayList<(Int64, Int64)> {
     let rows = ArrayList<(Int64, Int64)>()
     rows.add((ISO, ISO))          // 1

@@ -5,7 +5,7 @@ import std.collection.*
 
 enum OpticalExpr {
     /**
-     * Reffers to the cases:
+     * Refers to the cases:
      *  @Lucida(val.x.y)
      *  @Lucida(call().x.y)
      *
@@ -14,7 +14,7 @@ enum OpticalExpr {
      */
     | OpticsForward(Expr, Array<CompositionNode>)
     /**
-     * Reffers to the cases:
+     * Refers to the cases:
      *  @Lucida(val.x.y = 3)
      *  @Lucida(call().x.y = 3)
      *
@@ -23,14 +23,14 @@ enum OpticalExpr {
      */
     | OpticsBackward(Expr, Array<CompositionNode>, Expr)
     /**
-     * Reffers to the cases:
+     * Refers to the cases:
      *  @Lucida(@Type(String).x.y)
      *  @Lucida(@Optic(optics).x.y)
      *  @Lucida(@TypeOf(val).x.y)
      */
     | FirstClassOptics(Array<CompositionNode>)
     /**
-     * Reffers to the cases:
+     * Refers to the cases:
      *  @Lucida(@Type(String).x.y = 3)
      *  @Lucida(@Optic(optics).x.y = 3)
      *  @Lucida(@TypeOf(val).x.y = 3)
@@ -206,10 +206,10 @@ enum CompositionNode {
 private func getCompositionNode(input: Expr, total!: Bool = true): CompositionNode {
     match (input) {
         case ce: CallExpr =>
-            let re = ce.callFunc as RefExpr ?? throw DiagReportException("You've done something wrong", ce.toTokens())
+            let re = ce.callFunc as RefExpr ?? throw DiagReportException("${mainMacroName}: unsupported callee form in a chain segment", ce.toTokens())
             if (re.identifier.value == typeFakeCallexprId.value) {
                 Type(ce.arguments[0].expr as RefExpr ?? throw DiagReportException(
-                    "You've done something wrong",
+                    "${mainMacroName}: '@Type' expects a plain type name, e.g. @Type(GBox)",
                     ce.arguments[0].expr.toTokens()
                 ))
             } else if (re.identifier.value == typeOfFakeCallexprId.value) {
@@ -217,10 +217,10 @@ private func getCompositionNode(input: Expr, total!: Bool = true): CompositionNo
             } else if (re.identifier.value == opticFakeCallexprId.value) {
                 let re = RefExpr(quote($(ce.arguments[0].expr)))
                 Optic(re.identifier)
-            } else if (re.identifier.value == coercionFakeCallexprId.value) {
+            } else if (re.identifier.value == coercionFakeCallexprId.value && ce.arguments.size == 0) {
                 if (re.typeArguments.size != 1) { throw DiagReportException(
-                    "A number of generic parameters should be exactly one",
-                    re.typeArguments.toTokens()
+                    "${mainMacroName}: coerce expects exactly one type argument, e.g. coerce<Int64>()",
+                    re.toTokens()
                 )}
                 Coerce(re.typeArguments[0])
             } else {
@@ -229,16 +229,17 @@ private func getCompositionNode(input: Expr, total!: Bool = true): CompositionNo
         case re: RefExpr =>
             if (re.typeArguments.size != 0) {
                 throw DiagReportException(
-                    "Generics in Derived optics expression",
+                    "${mainMacroName}: type arguments on a bare field access are not supported",
                     re.toTokens(),
-                    hint: "Remove or redesign"
+                    hint: "Drop the type arguments, or call it as a method: field<T>()"
                 )
             }
             Derived(re.identifier, Lens)   // default kind; decomposeMemberAccessExpr overrides to Prism for ?.
         case _ => 
             throw DiagReportException(
-                "Some unexpected kind of token",
-                input.toTokens()
+                "${mainMacroName}: unsupported expression in a chain",
+                input.toTokens(),
+                hint: "Chains support field accesses, method calls, and the @Type/@TypeOf/@Optic anchors"
             )
     }
 }

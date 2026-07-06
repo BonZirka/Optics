@@ -5,8 +5,10 @@
 set -u
 cd "$(dirname "$0")/.."
 
-source "${CANGJIE_HOME:-$HOME/cangjie-sdk/cangjie}/envsetup.sh"
-export CANGJIE_STDX_PATH="${CANGJIE_STDX_PATH:-/home/huawei/cangjie-sdk/linux_x86_64_cjnative/dynamic/stdx}"
+: "${CANGJIE_HOME:?CANGJIE_HOME must point to the Cangjie toolchain directory (the one containing envsetup.sh)}"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
+source "$CANGJIE_HOME/envsetup.sh"
+export CANGJIE_STDX_PATH="${CANGJIE_STDX_PATH:-$(dirname "$CANGJIE_HOME")/linux_x86_64_cjnative/dynamic/stdx}"
 
 PASS=0
 FAIL=0
@@ -183,6 +185,17 @@ struct wbox2Lens<T> where T <: ToString {}
 func z7(): Unit {
     let w = WBox2<Int64>(1)
     let rd = @Lucida(w.wbox2Lens())
+    let _ = rd
+}
+EOF
+
+probe "coerce without type argument" "expects exactly one type argument" <<'EOF'
+package optics_experiments.test
+import lucida.*
+import lucida_macro.*
+func z(): Unit {
+    let mb = MeterBox(Meters(7))
+    let rd = @Lucida(mb.m.coerce())
     let _ = rd
 }
 EOF
