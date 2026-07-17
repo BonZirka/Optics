@@ -12,7 +12,7 @@ export CANGJIE_STDX_PATH="${CANGJIE_STDX_PATH:-$(dirname "$CANGJIE_HOME")/linux_
 
 PASS=0
 FAIL=0
-PROBE_FILE="src/test/zz_diag_tmp.cj"
+PROBE_FILE="src/tests/zz_diag_tmp.cj"
 
 probe() {
     local name="$1" expected="$2"
@@ -32,15 +32,15 @@ probe() {
 }
 
 probe "empty @Lucida()"            "expects at least one argument" <<'EOF'
-package optics_experiments.test
+package lucida.tests
 import lucida.*
-import lucida_macro.*
+import lucida.macrodsl.*
 func z(): Unit { let _ = @Lucida() }
 EOF
 
 probe "enum multi-payload case"    "associated values; only single-payload" <<'EOF'
-package optics_experiments.test
-import lucida_macro.*
+package lucida.tests
+import lucida.macrodsl.*
 @DeriveOptics
 public enum BadPair {
     | Two(Int64, Int64)
@@ -48,8 +48,8 @@ public enum BadPair {
 EOF
 
 probe "enum payloadless case"      "no associated value" <<'EOF'
-package optics_experiments.test
-import lucida_macro.*
+package lucida.tests
+import lucida.macrodsl.*
 @DeriveOptics
 public enum BadEmpty {
     | Emptyz
@@ -57,8 +57,8 @@ public enum BadEmpty {
 EOF
 
 probe "generic where-clause"       "generic constraints" <<'EOF'
-package optics_experiments.test
-import lucida_macro.*
+package lucida.tests
+import lucida.macrodsl.*
 @DeriveOptics
 public struct BadWhere<T> where T <: ToString {
     public BadWhere(public let v: T) { }
@@ -66,44 +66,44 @@ public struct BadWhere<T> where T <: ToString {
 EOF
 
 probe "unknown chain start"        "Unknown expression" <<'EOF'
-package optics_experiments.test
+package lucida.tests
 import lucida.*
-import lucida_macro.*
+import lucida.macrodsl.*
 func z(): Unit { let _ = @Lucida(3 + 4) }
 EOF
 
 probe "optic unknown field"       "unexpected token in fields" <<'EOF'
-package optics_experiments.test
-import lucida_macro.*
+package lucida.tests
+import lucida.macrodsl.*
 @LucidaOptic[kolor: red]
 struct BadOptic1 {}
 EOF
 
 probe "optic bad kind"            "unknown kind" <<'EOF'
-package optics_experiments.test
-import lucida_macro.*
+package lucida.tests
+import lucida.macrodsl.*
 @LucidaOptic[source: Int64, focus: Int64, kind: Setter]
 struct BadOptic2 {}
 EOF
 
 probe "optic non-empty carrier"   "carrier struct must be empty" <<'EOF'
-package optics_experiments.test
-import lucida_macro.*
+package lucida.tests
+import lucida.macrodsl.*
 @LucidaOptic[source: Int64, focus: Int64, kind: Iso, forward: { src }, backward: { focus }]
 struct BadOptic3 { public BadOptic3(public let v: Int64) { } }
 EOF
 
 probe "optic src in sourceless backward" "has no src slot" <<'EOF'
-package optics_experiments.test
-import lucida_macro.*
+package lucida.tests
+import lucida.macrodsl.*
 @LucidaOptic[source: Int64, focus: Int64, kind: Prism, forward: { Right(src) }, backward: { src }]
 struct BadOptic4 {}
 EOF
 
 probe "optic dot on partial"      "on a partial optic (Prism/Affine)" <<'EOF'
-package optics_experiments.test
+package lucida.tests
 import lucida.*
-import lucida_macro.*
+import lucida.macrodsl.*
 public struct DotBox {
     public DotBox(public let v: Int64) { }
 }
@@ -113,9 +113,9 @@ func z1(): Unit { let _ = @Lucida(DotBox(1).dotPartial()) }
 EOF
 
 probe "optic question-dot on total" "on a total optic (Lens/Iso)" <<'EOF'
-package optics_experiments.test
+package lucida.tests
 import lucida.*
-import lucida_macro.*
+import lucida.macrodsl.*
 public struct DotBox2 {
     public DotBox2(public let v: Int64) { }
 }
@@ -125,9 +125,9 @@ func z2(): Unit { let _ = @Lucida(DotBox2(1)?.qdotTotal()) }
 EOF
 
 probe "optic dot-write on prism"  "rebuild the source unconditionally on miss" <<'EOF'
-package optics_experiments.test
+package lucida.tests
 import lucida.*
-import lucida_macro.*
+import lucida.macrodsl.*
 public struct DotBox3 {
     public DotBox3(public let v: Int64) { }
 }
@@ -141,9 +141,9 @@ func z3(): Unit {
 EOF
 
 probe "optic question-dot on coerce" "on a total optic (coerce)" <<'EOF'
-package optics_experiments.test
+package lucida.tests
 import lucida.*
-import lucida_macro.*
+import lucida.macrodsl.*
 func z4(): Unit {
     let mb = MeterBox(Meters(7))
     let rd = @Lucida(mb.m?.coerce<Int64>())
@@ -152,9 +152,9 @@ func z4(): Unit {
 EOF
 
 probe "optic dot mid-chain on derived prism" "on a partial optic (Prism/Affine)" <<'EOF'
-package optics_experiments.test
+package lucida.tests
 import lucida.*
-import lucida_macro.*
+import lucida.macrodsl.*
 func z5(): Unit {
     let h = PayloadHolder(Rect(Box(42)))
     let rd = @Lucida(h.shape.Rect.w)
@@ -163,9 +163,9 @@ func z5(): Unit {
 EOF
 
 probe "optic question-dot on derived lens" "on a total optic (Lens/Iso)" <<'EOF'
-package optics_experiments.test
+package lucida.tests
 import lucida.*
-import lucida_macro.*
+import lucida.macrodsl.*
 func z6(): Unit {
     let mb = MeterBox(Meters(7))
     let rd = @Lucida(mb.m?.v)
@@ -174,9 +174,9 @@ func z6(): Unit {
 EOF
 
 probe "optic where clause" "generic constraints ('where' clauses) are not supported" <<'EOF'
-package optics_experiments.test
+package lucida.tests
 import lucida.*
-import lucida_macro.*
+import lucida.macrodsl.*
 public struct WBox2<T> {
     public WBox2(public let v: T) { }
 }
@@ -190,9 +190,9 @@ func z7(): Unit {
 EOF
 
 probe "coerce without type argument" "expects exactly one type argument" <<'EOF'
-package optics_experiments.test
+package lucida.tests
 import lucida.*
-import lucida_macro.*
+import lucida.macrodsl.*
 func z(): Unit {
     let mb = MeterBox(Meters(7))
     let rd = @Lucida(mb.m.coerce())

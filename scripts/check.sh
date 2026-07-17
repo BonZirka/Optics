@@ -1,5 +1,6 @@
 #!/bin/bash
-# Lucida verification gate: build + unit/law tests. Non-zero exit on any failure.
+# Lucida verification gate: library build + law tests + consumer build + diagnostics gate.
+# Non-zero exit on any failure.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -7,12 +8,13 @@ cd "$(dirname "$0")/.."
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
 source "$CANGJIE_HOME/envsetup.sh"
 export CANGJIE_STDX_PATH="${CANGJIE_STDX_PATH:-$(dirname "$CANGJIE_HOME")/linux_x86_64_cjnative/dynamic/stdx}"
-export LD_LIBRARY_PATH="$PWD/target/release/lucida:${LD_LIBRARY_PATH:-}"
 
-echo "== build =="
+echo "== library: build =="
 cjpm build -i
-echo "== test =="
+echo "== library: law tests =="
 cjpm test "$@"
+echo "== examples: build (consumer + benches) =="
+( cd examples && cjpm build -i )
 echo "== diagnostics (negative tests) =="
 ./scripts/check_diagnostics.sh
 echo "check.sh: OK"

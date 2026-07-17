@@ -1,21 +1,13 @@
-[dependencies]
-  lucida = { path = "./libs/optics/v2" }
-  lucida_macro = { path = "./libs/macro-optics/v2" }
-  macro_test_utils = { path = "./libs/macro-test-utils/" }
-
 [package]
   cjc-version = "0.57.3"
-  compile-option = "-O2 --debug-macro"
-  description = "Law test suite and benchmarks for the lucida optics library"
+  compile-option = "--debug-macro"
+  description = "lucida: optics core, composition table and stdlib"
   link-option = ""
-  name = "optics_experiments"
-  output-type = "executable"
+  name = "lucida"
+  output-type = "dynamic"
   override-compile-option = ""
-  src-dir = ""
+  src-dir = "src"
   target-dir = ""
   version = "1.0.0"
+  license = ["MIT"]
   package-configuration = {}
-
-[target.x86_64-unknown-linux-gnu]
-  [target.x86_64-unknown-linux-gnu.bin-dependencies]
-    path-option = ["${CANGJIE_STDX_PATH}"]
