@@ -480,6 +480,125 @@ class FusedPrismLaws {
     }
 }
 
+@DeriveOptics
+public enum Huge10 {
+    | H10(Int64)
+    | M10(Int64)
+}
+
+@DeriveOptics
+public enum Huge9 {
+    | H9(Huge10)
+    | M9(Int64)
+}
+
+@DeriveOptics
+public enum Huge8 {
+    | H8(Huge9)
+    | M8(Int64)
+}
+
+@DeriveOptics
+public enum Huge7 {
+    | H7(Huge8)
+    | M7(Int64)
+}
+
+@DeriveOptics
+public enum Huge6 {
+    | H6(Huge7)
+    | M6(Int64)
+}
+
+@DeriveOptics
+public enum Huge5 {
+    | H5(Huge6)
+    | M5(Int64)
+}
+
+@DeriveOptics
+public enum Huge4 {
+    | H4(Huge5)
+    | M4(Int64)
+}
+
+@DeriveOptics
+public enum Huge3 {
+    | H3(Huge4)
+    | M3(Int64)
+}
+
+@DeriveOptics
+public enum Huge2 {
+    | H2(Huge3)
+    | M2(Int64)
+}
+
+@DeriveOptics
+public enum Huge1 {
+    | H1(Huge2)
+    | M1(Int64)
+}
+
+func hugeDeep(): Huge1 {
+    Huge1.H1(Huge2.H2(Huge3.H3(Huge4.H4(Huge5.H5(Huge6.H6(Huge7.H7(Huge8.H8(Huge9.H9(Huge10.H10(42))))))))))
+}
+
+func hugeMiss(): Huge1 {
+    Huge1.H1(Huge2.H2(Huge3.H3(Huge4.H4(Huge5.H5(Huge6.H6(Huge7.H7(Huge8.H8(Huge9.H9(Huge10.M10(5))))))))))
+}
+
+// Ten Either-producing segments — deeper than the historical hand-unrolled
+// pyramid (8). Read chains at this depth used to silently fall back to
+// library composition.
+@Test
+class TenPrismChainLaws {
+    @TestCase
+    func tenPrismsForwardMatch(): Unit {
+        var ok = false
+        match (@Lucida(hugeDeep()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
+            case Right(v) => ok = (v == 42)
+            case _ => ()
+        }
+        @Assert(ok)
+    }
+
+    @TestCase
+    func tenPrismsForwardMissCarriesSource(): Unit {
+        var ok = false
+        match (@Lucida(hugeMiss()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
+            case Left(src) => match (src) {
+                case H1(_) => ok = true
+                case _ => ()
+            }
+            case _ => ()
+        }
+        @Assert(ok)
+    }
+
+    @TestCase
+    func tenPrismsBackwardRoundTrip(): Unit {
+        let updated = @Lucida(hugeDeep()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10 <- 9)
+        var ok = false
+        match (@Lucida(updated?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
+            case Right(v) => ok = (v == 9)
+            case _ => ()
+        }
+        @Assert(ok)
+    }
+
+    @TestCase
+    func tenPrismsBackwardMissIsIdentity(): Unit {
+        let updated = @Lucida(hugeMiss()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10 <- 9)
+        var ok = false
+        match (@Lucida(updated?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
+            case Left(_) => ok = true
+            case _ => ()
+        }
+        @Assert(ok)
+    }
+}
+
 @Test
 class FusedLensLaws {
     @TestCase

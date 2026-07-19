@@ -3,7 +3,7 @@
 
 [package]
   cjc-version = "0.57.3"
-  compile-option = "-O2 --debug-macro"
+  compile-option = "-O2 --debug-macro --experimental --lto=thin"
   description = "Runnable demo and benchmarks for the lucida optics library"
   link-option = ""
   name = "optics_experiments"

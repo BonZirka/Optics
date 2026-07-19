@@ -1,10 +1,10 @@
 [package]
   cjc-version = "0.57.3"
-  compile-option = "--debug-macro"
+  compile-option = "--debug-macro --experimental --lto=thin"
   description = "lucida: optics core, composition table and stdlib"
   link-option = ""
   name = "lucida"
-  output-type = "dynamic"
+  output-type = "static"
   override-compile-option = ""
   src-dir = "src"
   target-dir = ""

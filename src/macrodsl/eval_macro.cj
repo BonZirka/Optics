@@ -374,9 +374,9 @@ private func emitFusedForwardWalk(nodes: Array<CompositionNode>, source: Expr): 
         )
     } else {
         // Prism, affine, or non-lens chain
-        if (!isFusableChain(nodes) || countEitherSegments(nodes) > 8) {
-            // Non-fusable chains or more pinned slots than the helpers support
-            // — library composition
+        if (!isFusableChain(nodes) || countEitherSegments(nodes) > 16) {
+            // Non-fusable chains, or more pinned slots than the generated
+            // walkers support (see @GeneratePrismForward) — library composition
             return composeOptics(nodes)({ forward: Token, backward: Token =>
                 quote($forward($source))
             })

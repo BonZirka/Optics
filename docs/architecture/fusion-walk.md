@@ -230,12 +230,14 @@ library's pre-written body supplies all the nesting. The runs are built from
 the gated forwards, so a partial read is mark-checked at every segment,
 prisms included.
 
-The cap is real and the family is its reason: the walkers come in fixed
-arities, one function per count, each typing its own nesting, and the family
-stops at eight. A read with *exactly* eight either-producing segments still
-fuses (`pinPrismForward8`); more than eight falls back to composition — the
-macro counts the partial segments (`countEitherSegments` in
-`eval_macro.cj`) and compares against the largest helper. Reads only: the
+The family comes in fixed arities, one function per count, each typing its
+own nesting — but it is not hand-written: `@GeneratePrismForward(N)` (in
+`lucida.macrodsl`, applied in `magical.cj`) generates
+`pinPrismForward1..N`, and the macro counts the partial segments
+(`countEitherSegments` in `eval_macro.cj`) against N. A read with exactly N
+either-producing segments still fuses (`pinPrismForwardN`); more than N
+falls back to composition. Raising the cap is regenerating with a larger N,
+not unrolling more levels by hand. Writes only were never the problem: the
 backward walk is not capped, because it needs no fixed-arity family at all.
 Its partial segments are handled by inline guards — in the emission's own
 naming, schematic, for the first partial segment of a chain:
@@ -364,8 +366,8 @@ be an anchor that is not an `@Optic` splice, and every segment after it must
 be derived, user-defined, or a coercion (the emitters restate this check as
 `isFusableChain`). Shape selection then runs inside the
 emitters: an all-total read walks through `pinForward`; a read with partial
-segments walks through the pinned prism family if it has at most eight,
-otherwise composes; a write folds through `pinBackward` unless a
+segments walks through the pinned prism family if it has at most N
+(16 as generated today), otherwise composes; a write folds through `pinBackward` unless a
 non-fusable segment kind appears. Every failure lands on the same composed
 path — the same one `[unfuse]` forces — which is what makes the gate safe to
 fail.
@@ -386,10 +388,10 @@ The triggers, in the order the source checks them:
   `@Type`/`@TypeOf` parse fine but fail outright as errors in the walk's
   dispatch ([the DSL reference](../api/dsl.md#starting-a-chain) documents
   that failure) — they never reach the shape decision at all.
-- **More than eight partial segments in a read** — the pinned prism slots
-  run out at eight, and a ninth either-producing segment sends the read to
-  composition. Exactly eight still fuses. Writes are not capped: the
-  backward fold's inline guards nest arbitrarily.
+- **More than N partial segments in a read** — the pinned prism slots run
+  out at N (16 as generated today), and segment N+1 sends the read to
+  composition. Exactly N still fuses. Writes are not capped: the backward
+  fold's inline guards nest arbitrarily.
 - **Segments the walk cannot carry** — the same kind check, stated from the
   emitter's side (`isFusableChain`): only derived segments, user-declared
   optics used by name, and coercions have members the macro can address by

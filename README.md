@@ -41,6 +41,7 @@ mutated.
 
 - [Getting started](docs/getting-started.md) — a runnable program, five minutes.
 - [Introduction to optics](docs/introduction-to-optics.md) — what optics are and why.
+- [Benchmarks](docs/benchmarks.md) — recorded numbers for fused vs unfused chains, and how to reproduce them.
 - Examples — [lenses](docs/examples/lenses.md), [prisms](docs/examples/prisms.md), [chains](docs/examples/chains.md), [deriving](docs/examples/deriving.md), [user optics](docs/examples/user-optics.md).
 - API reference — [first-class optics](docs/api/first-class.md), [composition](docs/api/composition.md), [the `@Lucida` DSL](docs/api/dsl.md), [diagnostics](docs/api/diagnostics.md).
 - Architecture & research — [the macro system](docs/architecture/macro-system.md), [registry plumbing](docs/architecture/registry-plumbing.md), [the fusion walk](docs/architecture/fusion-walk.md), [design decisions](docs/architecture/design-decisions.md).
@@ -48,9 +49,13 @@ mutated.
 ## Repository layout
 
 ```
-libs/optics/              lucida        — optics core + composition table + stdlib
-libs/macro-optics/        lucida_macro  — compiler macros (@Lucida, @DeriveOptics, ...)
-libs/macro-test-utils/                  — macro authoring helpers
-src/                      optics_experiments — benches + the law test suite
-scripts/check.sh          verification gate (build + tests)
+src/                      lucida               — optics core + composition table + stdlib
+src/macrodsl/             lucida.macrodsl      — compiler macros (@Lucida, @DeriveOptics, ...)
+src/tests/                lucida.tests         — the law test suite
+examples/                 optics_experiments   — runnable demo + benchmarks
+scripts/check.sh          verification gate (build + law tests + examples + diagnostics)
+scripts/bench.sh          benchmark runner (results: docs/benchmarks.md)
 ```
+
+Imports: `import lucida.*` for the optics API, `import lucida.macrodsl.*`
+for the macros, `import lucida.stdlib.*` for the standard optic library.
