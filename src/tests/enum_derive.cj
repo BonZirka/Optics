@@ -16,6 +16,196 @@ public enum Shape {
     | Square(Int64)
 }
 
+@DeriveOptics
+public enum Slot {
+    | Empty
+    | Held(Int64)
+}
+
+@DeriveOptics
+public enum IntList {
+    | Nil
+    | Cons(Int64, IntList)
+}
+
+@DeriveOptics
+public enum Status {
+    | Pending
+    | Active(Int64)
+    | Failed(String, Int64)
+}
+
+@DeriveOptics
+public enum Envelope<T> {
+    | Vacant
+    | Sealed(T)
+}
+
+@Test
+class DerivedEnumShapeLaws {
+    // ===== payloadless cases derive Unit-focus prisms =====
+    @TestCase
+    func payloadlessCasePrism(): Unit {
+        // Right(()) when the source IS the case — a match check.
+        let e0 = Slot.Empty
+        var ok = false
+        match (@Lucida(e0?.Empty)) {
+            case Right(_) => ok = true
+            case _ => ()
+        }
+        @Assert(ok)
+
+        // A Held value misses: Left carries the original source.
+        let h0 = Slot.Held(3)
+        var missed = false
+        match (@Lucida(h0?.Empty)) {
+            case Left(src) => match (src) {
+                case Held(v) => missed = (v == 3)
+                case _ => ()
+            }
+            case _ => ()
+        }
+        @Assert(missed)
+    }
+
+    @TestCase
+    func payloadlessCaseUpdate(): Unit {
+        let m = Slot.Empty
+        let updated = @Lucida(m?.Empty <- ())
+        var stillEmpty = false
+        match (updated) {
+            case Empty => stillEmpty = true
+            case _ => ()
+        }
+        @Assert(stillEmpty)
+
+        // Set through a non-matching prism is identity (the §1.1 law).
+        let h1 = Slot.Held(3)
+        let untouched = @Lucida(h1?.Empty <- ())
+        var identityKept = false
+        match (untouched) {
+            case Held(v) => identityKept = (v == 3)
+            case _ => ()
+        }
+        @Assert(identityKept)
+    }
+
+    // ===== multi-payload cases derive tuple-focus prisms =====
+    @TestCase
+    func multiPayloadTupleFocus(): Unit {
+        let l = IntList.Cons(1, IntList.Nil)
+        var ok = false
+        match (@Lucida(l?.Cons)) {
+            case Right(pair) => match (pair) {
+                case (h, t) => match (t) {
+                    case Nil => ok = (h == 1)
+                    case _ => ()
+                }
+                case _ => ()
+            }
+            case _ => ()
+        }
+        @Assert(ok)
+
+        let n0 = IntList.Nil
+        var missed = false
+        match (@Lucida(n0?.Cons)) {
+            case Left(src) => match (src) {
+                case Nil => missed = true
+                case _ => ()
+            }
+            case _ => ()
+        }
+        @Assert(missed)
+    }
+
+    @TestCase
+    func multiPayloadTupleUpdate(): Unit {
+        let l = IntList.Cons(1, IntList.Nil)
+        let updated = @Lucida(l?.Cons <- (9, IntList.Cons(2, IntList.Nil)))
+        var rebuilt = false
+        match (updated) {
+            case Cons(h, t) => match (t) {
+                case Cons(h2, _) => rebuilt = (h == 9 && h2 == 2)
+                case _ => ()
+            }
+            case _ => ()
+        }
+        @Assert(rebuilt)
+
+        // mismatched source: identity
+        let n1 = IntList.Nil
+        let untouched = @Lucida(n1?.Cons <- (9, IntList.Nil))
+        var kept = false
+        match (untouched) {
+            case Nil => kept = true
+            case _ => ()
+        }
+        @Assert(kept)
+    }
+
+    // ===== all three payload shapes in one enum =====
+    // NOTE: the DSL reads `X.Failed(args)` as a user-optic method call, so
+    // constructor calls must be bound to locals before use as chain anchors.
+    @TestCase
+    func mixedShapesDeriveTogether(): Unit {
+        let a = Status.Active(2)
+        var activeOk = false
+        match (@Lucida(a?.Active)) {
+            case Right(v) => activeOk = (v == 2)
+            case _ => ()
+        }
+        @Assert(activeOk)
+
+        let f = Status.Failed("boom", 7)
+        var failedOk = false
+        match (@Lucida(f?.Failed)) {
+            case Right(pair) => match (pair) {
+                case (msg, code) => failedOk = (msg == "boom" && code == 7)
+                case _ => ()
+            }
+            case _ => ()
+        }
+        @Assert(failedOk)
+
+        let p = Status.Pending
+        var pendingOk = false
+        match (@Lucida(p?.Pending)) {
+            case Right(_) => pendingOk = true
+            case _ => ()
+        }
+        @Assert(pendingOk)
+
+        let updated = @Lucida(f?.Failed <- ("ok", 0))
+        var writeOk = false
+        match (updated) {
+            case Failed(msg, code) => writeOk = (msg == "ok" && code == 0)
+            case _ => ()
+        }
+        @Assert(writeOk)
+    }
+
+    // ===== generic enums with payloadless cases derive too =====
+    @TestCase
+    func genericEnumWithPayloadlessCase(): Unit {
+        let w = Envelope<Int64>.Sealed(3)
+        var ok = false
+        match (@Lucida(w?.Sealed)) {
+            case Right(v) => ok = (v == 3)
+            case _ => ()
+        }
+        @Assert(ok)
+
+        let e = Envelope<Int64>.Vacant
+        var emptyOk = false
+        match (@Lucida(e?.Vacant)) {
+            case Right(_) => emptyOk = true
+            case _ => ()
+        }
+        @Assert(emptyOk)
+    }
+}
+
 @Test
 class EnumPrismLaws {
     // ===== forward =====

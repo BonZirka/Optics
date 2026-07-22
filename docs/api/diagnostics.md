@@ -55,15 +55,10 @@ a silently skipped field or case.
 - **A `where` clause on the type** —
   `@DeriveOptics: generic constraints ('where' clauses) are not supported yet`
   (hint: `Remove the constraint or hand-write the optics`).
-- **A payloadless case** —
-  `@DeriveOptics: enum case 'X' has no associated value; only single-payload cases are supported`
-  (hint: `Give the case exactly one associated value, or hand-write its prism`).
-  `X` is the case's name.
-- **A multi-payload case** —
-  `@DeriveOptics: enum case 'X' has N associated values; only single-payload cases are supported`
-  (hint: `Bundle the values into one struct and derive optics for that struct`).
-  `X` is the case's name and `N` the payload count; the bundle's fields get
-  lenses of their own, so the chain continues into them.
+
+Every enum case shape derives: a single-payload case focuses the payload, a
+multi-payload case focuses the tuple of payloads, and a payloadless case
+focuses `Unit`.
 
 ## @LucidaOptic
 

@@ -28,8 +28,10 @@ mutated.
   there), `?.` a partial one (it may miss). Mark the wrong pair and it fails
   to compile — with a message that says what was illegal and which operator
   to use.
-- **`@DeriveOptics`.** One line on a type: a lens per constructor field, an
-  affine per single-payload case, an iso per one-field wrapper.
+- **`@DeriveOptics`.** One line on a type: a lens per constructor field, a
+  prism per enum case — the payload for single-payload cases, a tuple of
+  payloads for multi-payload cases, `Unit` for payloadless ones — and an iso
+  per one-field wrapper.
 - **`@LucidaOptic`.** Declare the optics a derive cannot: an array slot at an
   index, a hand-built segment, a generic carrier.
 - **Fused chains.** A chain compiles to direct nested calls — no optic values

@@ -158,10 +158,14 @@ plumbing ([registry plumbing](registry-plumbing.md)).
 
 ### Enums: affines per case
 
-Every single-payload case of a derived enum emits three members — a forward
-returning `Either<Enum, Payload>`, a backward rebuilding the case from a
-payload, and a `__<case>_optics` accessor — plus the same interface/extend
-pairing as a struct. The registries differ in one deliberate way: the case
+Every case of a derived enum emits three members — a forward returning
+`Either<Enum, Focus>`, a backward rebuilding the case from a focus, and a
+`__<case>_optics` accessor — plus the same interface/extend pairing as a
+struct. The focus depends on the case shape: a single-payload case focuses
+the payload itself, a multi-payload case focuses the *tuple* of payloads
+(`Cons(head, tail)` focuses `(Head, Tail)`), and a payloadless case focuses
+`Unit` — reading it doubles as a match check. The registries differ in one
+deliberate way: the case
 optics land on `RegistryAffines`, not `RegistryPrisms`, because a case read
 is affine-kind — partial forward, *sourceful* backward whose miss is an
 identity ([prisms](../examples/prisms.md) walks the contract). The emission
@@ -208,13 +212,12 @@ Second, the enum path always emits interfaces and always marks members
 `public`: enum cases have no access modifiers of their own, so there is no
 visibility to mirror.
 
-The strictness about case shape is a derive-time error, never a skipped case:
-a payloadless case and a multi-payload case each fail with their own message
-and hint ([diagnostics](../api/diagnostics.md) collects both). The reason is
-mechanical — the emitted match binds the payload by name, and a case with
-zero or several payloads has no single name to bind — and the hint names the
-repair: bundle the payloads into a struct and derive that struct, so the
-chain walks into the bundle's fields.
+Case shape is handled, not rejected: every constructor derives, whatever its
+arity. A single payload binds by name; several payloads bind positionally and
+travel as a tuple; zero payloads bind nothing and carry `Unit`. The
+mechanical constraint the old derive hit — a `match` arm needs names to bind
+— is met by binding positionally into a tuple, which also lets the chain
+continue through the tuple lens plumbing.
 
 ### Generics, and what is rejected
 

@@ -38,24 +38,6 @@ import lucida.macrodsl.*
 func z(): Unit { let _ = @Lucida() }
 EOF
 
-probe "enum multi-payload case"    "associated values; only single-payload" <<'EOF'
-package lucida.tests
-import lucida.macrodsl.*
-@DeriveOptics
-public enum BadPair {
-    | Two(Int64, Int64)
-}
-EOF
-
-probe "enum payloadless case"      "no associated value" <<'EOF'
-package lucida.tests
-import lucida.macrodsl.*
-@DeriveOptics
-public enum BadEmpty {
-    | Emptyz
-}
-EOF
-
 probe "generic where-clause"       "generic constraints" <<'EOF'
 package lucida.tests
 import lucida.macrodsl.*

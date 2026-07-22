@@ -468,6 +468,87 @@ private func casePayloadSegments(c: Constructor): ArrayList<ArrayList<Token>> {
     return segments
 }
 
+// One enum case's emission plan: the focus type plus the forward/backward
+// match arms (parametrized over the `source` / `payload` binder names used by
+// the impl functions).
+private struct EnumCaseOptic {
+    let caseId: Token
+    let focusType: Tokens
+    let fwdArms: Tokens
+    let bwdArms: Tokens
+
+    init(caseId: Token, focusType: Tokens, fwdArms: Tokens, bwdArms: Tokens) {
+        this.caseId = caseId
+        this.focusType = focusType
+        this.fwdArms = fwdArms
+        this.bwdArms = bwdArms
+    }
+}
+
+// Payloadless case: Unit-focus prism — Right(()) when the source is this
+// case, Left(source) otherwise; the backward rebuilds the case. A `?.Case`
+// read therefore doubles as a match check.
+//
+// Multi-payload case: prism whose focus is the tuple of payloads, so
+// `list?.Cons` focuses `(head, tail)`; the update value is a tuple literal.
+//
+// Single-payload case: the historical shape — focus is the payload itself.
+private func enumCaseOptic(c: Constructor, fullTypeId: Tokens): EnumCaseOptic {
+    let segs = casePayloadSegments(c)
+    let caseId = c.identifier
+    let isEmpty = segs.size == 0 || (segs.size == 1 && segs[0].size == 0)
+    if (isEmpty) {
+        let fwdArms = quote(
+            case $caseId => Right<$fullTypeId, Unit>(())
+            case _ => Left<$fullTypeId, Unit>(source)
+        )
+        let bwdArms = quote(
+            case $caseId => $caseId
+            case _ => source
+        )
+        return EnumCaseOptic(caseId, quote(Unit), fwdArms, bwdArms)
+    }
+    if (segs.size > 1) {
+        let payloadTypes = ArrayList<Tokens>()
+        for (seg in segs) {
+            let (t, _) = parseTypeFragment(tokensOf(seg))
+            payloadTypes.add(quote($t))
+        }
+        let focusTuple = quote(($(commaSeparated(payloadTypes))))
+        let binders = ArrayList<Token>()
+        for (i in 0..segs.size) {
+            binders.add(Token(IDENTIFIER, "__payload_${caseId.value}_${i}"))
+        }
+        let binderList = commaSeparated(binders)
+        let tupleLit = quote(($binderList))
+        let wildcards = ArrayList<Tokens>()
+        for (i in 0..segs.size) {
+            wildcards.add(quote(_))
+        }
+        let wildcardList = commaSeparated(wildcards)
+        let fwdArms = quote(
+            case $caseId($binderList) => Right<$fullTypeId, $focusTuple>($tupleLit)
+            case _ => Left<$fullTypeId, $focusTuple>(source)
+        )
+        let bwdArms = quote(
+            case $caseId($wildcardList) => match (payload) { case ($binderList) => $caseId($binderList) }
+            case _ => source
+        )
+        return EnumCaseOptic(caseId, focusTuple, fwdArms, bwdArms)
+    }
+    let (payloadType, _) = parseTypeFragment(tokensOf(segs[0]))
+    let binder = Token(IDENTIFIER, "__payload_${caseId.value}")
+    let fwdArms = quote(
+        case $caseId($binder) => Right<$fullTypeId, $payloadType>($binder)
+        case _ => Left<$fullTypeId, $payloadType>(source)
+    )
+    let bwdArms = quote(
+        case $caseId(_) => $caseId(payload)
+        case _ => source
+    )
+    return EnumCaseOptic(caseId, quote($payloadType), fwdArms, bwdArms)
+}
+
 private func deriveEnumOptics(e: EnumDecl): Tokens {
     rejectGenericConstraints(e.genericConstraint, e.identifier)
     let gen: ?Tokens = if (e.isGenericDecl) { Some(e.genericParam.parameters) } else { None }
@@ -475,79 +556,53 @@ private func deriveEnumOptics(e: EnumDecl): Tokens {
     let idTok = e.identifier
     let fullTypeId = if (let Some(t) <- gen) { quote($idTok<$t>) } else { quote($idTok) }
 
+    let cases = ArrayList<EnumCaseOptic>()
+    for (c in e.constructors) {
+        cases.add(enumCaseOptic(c, fullTypeId))
+    }
+
     let implDecls = ArrayList<Decl>()
     let accessorDecls = ArrayList<Decl>()
-
-    for (c in e.constructors) {
-        let segs = casePayloadSegments(c)
-        let isEmpty = segs.size == 0 || (segs.size == 1 && segs[0].size == 0)
-        if (isEmpty) {
-            throw DiagReportException(
-                "${deriveOpticsMacro}: enum case '${c.identifier.value}' has no associated value; only single-payload cases are supported",
-                c.identifier.toTokens(),
-                hint: "Give the case exactly one associated value, or hand-write its prism"
-            )
-        }
-        if (segs.size > 1) {
-            throw DiagReportException(
-                "${deriveOpticsMacro}: enum case '${c.identifier.value}' has ${segs.size} associated values; only single-payload cases are supported",
-                c.identifier.toTokens(),
-                hint: "Bundle the values into one struct and derive optics for that struct"
-            )
-        }
-        let (payloadType, _) = parseTypeFragment(tokensOf(segs[0]))
-        let caseId = c.identifier
-        let fwdId = Token(IDENTIFIER, "__${caseId.value}_impl_forward")
-        let bwdId = Token(IDENTIFIER, "__${caseId.value}_impl_backward")
-        let accId = Token(IDENTIFIER, "__${caseId.value}_optics")
-        let binder = Token(IDENTIFIER, "__payload_${caseId.value}")
+    let implSigDecls = ArrayList<Decl>()
+    let accessorSigDecls = ArrayList<Decl>()
+    for (desc in cases) {
+        let fwdId = Token(IDENTIFIER, "__${desc.caseId.value}_impl_forward")
+        let bwdId = Token(IDENTIFIER, "__${desc.caseId.value}_impl_backward")
+        let accId = Token(IDENTIFIER, "__${desc.caseId.value}_optics")
 
         implDecls.addContra(FuncDecl(quote(
             @Frozen
-            public func $fwdId(source: $fullTypeId): Either<$fullTypeId, $payloadType> {
+            public func $fwdId(source: $fullTypeId): Either<$fullTypeId, $(desc.focusType)> {
                 match (source) {
-                    case $caseId($binder) => Right<$fullTypeId, $payloadType>($binder)
-                    case _ => Left<$fullTypeId, $payloadType>(source)
+                    $(desc.fwdArms)
                 }
             }
         )))
         implDecls.addContra(FuncDecl(quote(
             @Frozen
-            public func $bwdId(source: $fullTypeId, payload: $payloadType): $fullTypeId {
+            public func $bwdId(source: $fullTypeId, payload: $(desc.focusType)): $fullTypeId {
                 match (source) {
-                    case $caseId(_) => $caseId(payload)
-                    case _ => source
+                    $(desc.bwdArms)
                 }
             }
         )))
         accessorDecls.addContra(FuncDecl(quote(
             @Frozen
-            public func $accId(_: $registryMainId<$fullTypeId>): $registryMainId<$payloadType> { $registryMainId() }
+            public func $accId(_: $registryMainId<$fullTypeId>): $registryMainId<$(desc.focusType)> { $registryMainId() }
         )))
-    }
 
-    // Interface signatures mirror the impls (bodies dropped).
-    let implSigDecls = ArrayList<Decl>()
-    let accessorSigDecls = ArrayList<Decl>()
-    for (c in e.constructors) {
-        let segs = casePayloadSegments(c)
-        let (payloadType, _) = parseTypeFragment(tokensOf(segs[0]))
-        let caseId = c.identifier
-        let fwdId = Token(IDENTIFIER, "__${caseId.value}_impl_forward")
-        let bwdId = Token(IDENTIFIER, "__${caseId.value}_impl_backward")
-        let accId = Token(IDENTIFIER, "__${caseId.value}_optics")
-
+        // Interface signatures mirror the impls (bodies dropped).
         implSigDecls.addContra(FuncDecl(quote(
             @Frozen
-            func $fwdId(source: $fullTypeId): Either<$fullTypeId, $payloadType>
+            func $fwdId(source: $fullTypeId): Either<$fullTypeId, $(desc.focusType)>
         )))
         implSigDecls.addContra(FuncDecl(quote(
             @Frozen
-            func $bwdId(source: $fullTypeId, payload: $payloadType): $fullTypeId
+            func $bwdId(source: $fullTypeId, payload: $(desc.focusType)): $fullTypeId
         )))
         accessorSigDecls.addContra(FuncDecl(quote(
             @Frozen
-            func $accId(_: $registryMainId<$fullTypeId>): $registryMainId<$payloadType>
+            func $accId(_: $registryMainId<$fullTypeId>): $registryMainId<$(desc.focusType)>
         )))
     }
 

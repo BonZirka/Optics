@@ -278,34 +278,29 @@ What the price buys is the only segment that works with zero declarations on
 the user side: derive a single-field wrapper and `coerce<Int64>()` composes it
 into any chain, in either direction, with no members of your own.
 
-## Enum boundary
+## Enum case shapes
 
-Derived enum optics cover single-payload cases only; a payloadless case and a
-multi-payload case are each rejected at derive time with their own message and
-hint ([diagnostics](../api/diagnostics.md) quotes both).
+Derived enum optics cover every case shape. The forward binds the payloads
+positionally and wraps them as one focus: the payload itself for a
+single-payload case, a tuple for a multi-payload case, `Unit` for a
+payloadless case — whose read doubles as a match check. The rebuild answers
+the mirrored question — unpack the focus, rebuild the case — and the model
+keeps its one-currency property: the accessor moves the chain's currency to
+`RegistryMagical<Focus>` whatever the focus is.
 
-The mechanical reason sits in the emission: the case forward is a `match` that
-binds the payload by name and wraps it in `Right` — a case with zero or
-several payloads has no single name to bind, and the forward's `Either<Enum,
-Payload>` has no single `Payload` to carry. But the deeper reason is the
-rebuild direction, which is the harder half of every optic. The model threads
-*one focus* through everything: the forward returns one `Either<S, A>`, the
-accessor moves the chain's currency to `RegistryMagical<A>`, and the rebuild
-answers "here is a focus, produce the whole". A case with N payloads and one
-focus cannot answer it — N−1 of the payloads are simply missing, and no
-mechanical rule can invent them. Bundling the payloads into a synthetic tuple
-would move the problem, not solve it: the tuple would ride the chain as the
-focus, and every diagnostic and every composed row would then speak in
-anonymous slots. The hint therefore hands the bundling to the user — bundle
-the payloads into one struct and derive that struct — because a user-named
-struct gives the bundle real fields with optics of their own, and the chain
-walks into them by name.
+The earlier design rejected zero- and multi-payload cases outright, on the
+argument that a tuple focus turns diagnostics and chains into anonymous
+slots. The cost was real but smaller than the cost of rejection:
+Option-shaped enums and mixed-arity status enums — most real-world enums —
+could not derive at all. The tuple focus won; where named access matters,
+the payloads ride in a user-named struct and the chain walks into its fields
+by name.
 
 One deliberate nuance: case optics land on `RegistryAffines`, not
 `RegistryPrisms`, because the affine contract is what a case can actually
 honor — partial forward, *sourceful* backward whose miss is an identity. That
-sourcefulness is the repair for the same rebuild problem: on a miss the source
-is kept because nothing could be rebuilt from the focus alone
+sourcefulness is the repair for the rebuild problem on the miss path: on a
+miss the source is kept because nothing could be rebuilt from the focus alone
 ([prisms](../examples/prisms.md) walks the contract).
 
 ## The `__`-prefix and hygiene

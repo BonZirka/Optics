@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-25 — enum derive covers every case shape
+
+- `@DeriveOptics` no longer rejects payloadless or multi-payload enum cases.
+  Every case derives a case optic: a single-payload case focuses the payload
+  itself, a multi-payload case focuses the **tuple of payloads** (the update
+  value is a tuple literal), and a payloadless case focuses `Unit` — reading
+  it doubles as a match check.
+- All case optics remain affine-kind (`?.`-marked, miss-is-identity).
+- The two derive-time errors for case shape are gone, along with their
+  diagnostics-gate probes.
+
 ## 2026-09-10 — call-site type arguments fixed for multi-parameter members
 
 - The `@Lucida` walk reconstructs segment calls with their explicit type
