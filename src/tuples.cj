@@ -2,38 +2,8 @@ package lucida
 
 import lucida.macrodsl.*
 
-@GenerateTupleExtendsLenses(3)
-
-
-extend < X0, X1 > RegistryMagical <(X0, X1) > {
-    @Frozen
-    public func ___0_optics(_: RegistryMagical<(X0, X1)>): RegistryMagical<X0> {
-        RegistryMagical()
-    }
-    @Frozen
-    public func ___1_optics(_: RegistryMagical<(X0, X1)>): RegistryMagical<X1> {
-        RegistryMagical()
-    }
-    @Frozen
-    public func __downcast(_: RegistryMagical<(X0, X1)>): RegistryLenses<(X0, X1)> {
-        RegistryLenses()
-    }
-}
-extend < X0, X1, X2 > RegistryMagical <(X0, X1, X2) > {
-    @Frozen
-    public func ___0_optics(_: RegistryMagical<(X0, X1, X2)>): RegistryMagical<X0> {
-        RegistryMagical()
-    }
-    @Frozen
-    public func ___1_optics(_: RegistryMagical<(X0, X1, X2)>): RegistryMagical<X1> {
-        RegistryMagical()
-    }
-    @Frozen
-    public func ___2_optics(_: RegistryMagical<(X0, X1, X2)>): RegistryMagical<X2> {
-        RegistryMagical()
-    }
-    @Frozen
-    public func __downcast(_: RegistryMagical<(X0, X1, X2)>): RegistryLenses<(X0, X1, X2)> {
-        RegistryLenses()
-    }
-}
+// Tuple-lens plumbing for arities 2..16: per arity, an extend of
+// RegistryLenses<(X...)> with the element impl forward/backward pair and an
+// extend of RegistryMagical<(X...)> with the element accessor + __downcast.
+// The DSL reaches elements as `._0` .. `._15`.
+@GenerateTupleExtendsLenses(16)

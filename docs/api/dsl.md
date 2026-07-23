@@ -70,6 +70,7 @@ two anchors start one; `@Optic(o)` begins **or continues** one;
 | Segment | Meaning |
 |---|---|
 | `field` | derived lens — a constructor field of a struct or class derived with `@DeriveOptics`; total, rides on `.` |
+| `_0` … `_15` | tuple element lens — an element of a tuple riding the chain (a tuple-typed field, a multi-payload case's focus, a user optic's tuple focus); total, rides on `.`. Arity 2-16 generated (raising the bound is one generator argument, but high-arity generic declarations get build-time expensive — [compiler notes](../compiler-issues.md)); an update value for the whole tuple is a tuple literal |
 | `CaseName` | derived case optic — a case of a derived enum; the focus is the payload for single-payload cases, a tuple of payloads for multi-payload cases, and `Unit` for payloadless ones; partial, rides on `?.` (the library kinds a case optic as an *affine* — same partial contract, same miss-is-identity) |
 | `name()` / `name(args)` | user-declared method optic, declared with `@LucidaOptic` and called by name — total kinds (`Lens`, `Iso`) under `.`, partial kinds (`Prism`, `Affine`) under `?.`; generic ones take type arguments |
 | `Array.at(i)` / `Array.selectFirst(pred)` | the library's own affines on `Array<T>` — the element at index `i`, the first element matching `pred`; partial, `?.` |

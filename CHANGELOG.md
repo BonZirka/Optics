@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-09-25 — tuple element lenses up to arity 16
+
+- `@GenerateTupleExtendsLenses` now generates, per arity 2..16, the
+  `RegistryLenses` element impls **and** the `RegistryMagical` accessors +
+  `__downcast` (previously the latter were hand-written for arities 2-3 only).
+  The DSL reaches elements as `._0` .. `._15`, total segments riding on `.`.
+- The generator is a memoized CPS walk: each arity's accumulated pair block
+  is evaluated exactly once (memoized per (level, arity)) and the per-arity
+  extends are joined in one flat pass. The original CPS formulation
+  re-spliced its grown buffer through nested `quote()` interpolations, which
+  cost 6.4 s at arity 16 and 117 s at arity 20 in macro evaluation alone;
+  the memoized form does the same output in 0.1 s. Details and the remaining
+  compiler-side costs are recorded in [compiler notes](compiler-issues.md).
+- 20+ law tests cover whole-tuple and element reads/writes, nested tuples,
+  chains through element structs, enum-case tuple focuses, first-class
+  lenses, and a user-declared optic with a tuple focus.
+
 ## 2026-09-25 — enum derive covers every case shape
 
 - `@DeriveOptics` no longer rejects payloadless or multi-payload enum cases.
