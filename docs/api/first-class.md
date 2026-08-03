@@ -270,6 +270,40 @@ write consumes it internally — a miss is an identity — so you never unpack
 `Left`/`Right` to perform an update ([prisms](../examples/prisms.md) walks
 the read, the write, and the miss-is-identity rule on both sides).
 
+## Laws
+
+The five kinds are trusted constructions: the library cannot check, at
+compile time, that the halves you pass behave — an optic whose `update`
+ignores its focus compiles fine. What a kind *promises* is its law set, and
+code may assume it for every optic it receives. Construct an optic that
+breaks them and the brokenness is yours; the composed chains and DSL walks
+only preserve lawfulness, they cannot manufacture it.
+
+| Kind | Laws (on matched inputs) |
+|---|---|
+| `Iso` | GetSet, SetGet, SetSet — both arrows are total inverses |
+| `Lens` | GetSet, SetGet, SetSet — view then update is identity; update installs the focus; updates commute |
+| `Prism` | GetSet, SetGet, SetSet — quantified over the match set: `build(a)` must itself match, and preview it back to `Right(a)` |
+| `Affine` | GetSet, SetGet, SetSet — quantified over the match set; a miss is an identity on both arrows |
+| `Setter` | SetSet — there is no view; only "setting twice = setting the final value once" |
+
+- **GetSet** — `set(s, view(s)) == s`: reading then writing back changes
+  nothing.
+- **SetGet** — `view(set(s, a)) == a`: what you write is what you read back.
+- **SetSet** — `set(set(s, a1), a2) == set(s, a2)`: only the last write
+  matters.
+
+Every composition row (all 25 ordered kind pairs) and every fused chain is
+tested against these laws in
+[`composition_property_laws.cj`](https://github.com/BonZirka/Optics/blob/dev/src/tests/composition_property_laws.cj)
+and
+[`composition_laws.cj`](https://github.com/BonZirka/Optics/blob/dev/src/tests/composition_laws.cj)
+— the regression suite composes with sign-flipping and miss-planting
+instances, the property suite asserts the laws themselves. The one deliberate
+departure from the classical texts: case optics and multi-payload prisms are
+*kinded as affines* (sourceful backward, miss-is-identity), so their law set
+is the affine's.
+
 ## Where to go next
 
 - [Composition](composition.md) — combining first-class optics, kind by
