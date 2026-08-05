@@ -154,11 +154,11 @@ class UpcastLaws {
         var matchOk = false
         var missOk = false
         match (fwd(4)) {
-            case Right(v) => matchOk = (v == 4)
+            case Some(v) => matchOk = (v == 4)
             case _ => ()
         }
         match (fwd(3)) {
-            case Left(src) => missOk = (src == 3)
+            case None => missOk = true
             case _ => ()
         }
         @Assert(matchOk)

@@ -16,7 +16,7 @@ Every segment is marked with the guarantee the optic behind it makes:
 | Operator | Meaning | Segments it matches |
 |---|---|---|
 | `.` | total — the part is always there; read and write cannot miss | derived lens fields, isos — e.g. `coerce<T>()`, `.`-marked user optics |
-| `?.` | partial — a read evaluates to `Either`: `Right(payload)` on a match, `Left(source)` carrying the original source on a miss | derived case optics, `Array.at`, `Array.selectFirst`, `?.`-marked user optics |
+| `?.` | partial — a read evaluates to `Option`: `Some(payload)` on a match, `None` on a miss | derived case optics, `Array.at`, `Array.selectFirst`, `?.`-marked user optics |
 
 The mark is not decoration — it names the kind, and the compiler checks it.
 A partial write is unconditional: when the segment misses, the write returns
@@ -59,24 +59,24 @@ let untouched = @Lucida(nums?.at(7) <- 99)
 No guard, no branch: write through the focus and let the kind decide. (The
 reverse mix — a field first, then the array inside it — works the same; see
 [getting started](../getting-started.md).) The read side says which way it
-went, in the same `Either` the prisms page introduced:
+went, in the same `Option` the prisms page introduced:
 
 ```cangjie
-// source-form read returns Either: Right(focus) / Left(original)
-var leftOk = false
-if (let Left(src) <- @Lucida(nums?.at(7))) {
-    leftOk = src.size == 3
+// source-form read returns Option: Some(focus) / None
+var noneOk = false
+if (let None <- @Lucida(nums?.at(7))) {
+    noneOk = true
 }
-@Assert(leftOk)
+@Assert(noneOk)
 var rightOk = false
-if (let Right(fv) <- @Lucida(nums?.at(0))) {
+if (let Some(fv) <- @Lucida(nums?.at(0))) {
     rightOk = fv == 10
 }
 @Assert(rightOk)
 ```
 
-`nums?.at(7)` misses, so the read is `Left(src)` — the original array, carried
-back whole. `nums?.at(0)` matches, so it is `Right(fv)` — the focused element,
+`nums?.at(7)` misses, so the read is `None` — nothing handed back; the
+original array is untouched. `nums?.at(0)` matches, so it is `Some(fv)` — the focused element,
 `10`.
 
 ## selectFirst
@@ -131,7 +131,7 @@ let unwrapped = @Lucida(m.coerce<Int64>())
 
 `coerce<Int64>()` unwraps the derivation: `Meters` and its `Int64` payload are
 the same information in different clothes, so the focus evaluates to `7` — a
-plain `Int64`, no wrapper. Total means no `Either` and no miss, hence `.`.
+plain `Int64`, no wrapper. Total means no `Option` and no miss, hence `.`.
 
 And the negative: because `coerce<T>()` is total, it never takes `?.` —
 `x?.coerce<T>()` does not compile. Every chain form `@Lucida` accepts is on

@@ -87,7 +87,7 @@ class FusedPrismLaws {
         var ok = false
         let fwd = @Lucida(h.shape?.Circle)
         match (fwd) {
-            case Right(r) => ok = (r == 7)
+            case Some(r) => ok = (r == 7)
             case _ => ()
         }
         @Assert(ok)
@@ -99,7 +99,7 @@ class FusedPrismLaws {
         var leftOk = false
         let fwd = @Lucida(h.shape?.Circle)
         match (fwd) {
-            case Left(_) => leftOk = true
+            case None => leftOk = true
             case _ => ()
         }
         @Assert(leftOk)
@@ -118,7 +118,7 @@ class FusedPrismLaws {
     }
 
     // ===== fused forward must match the library's composed semantics: =====
-    // ===== Either<S, B> with Left carrying the ORIGINAL chain source =====
+    // ===== partial chains: the read is Option<B>; a miss is None =====
 
     // Trailing prism miss: Left must carry the original source (ShapeHolder),
     // not the post-lens value (Shape2D).
@@ -128,39 +128,33 @@ class FusedPrismLaws {
         let miss = @Lucida(h.shape?.Circle)
         var ok = false
         match (miss) {
-            case Left(src) => match (src.shape) {
-                case Square(v) => ok = (v == 99)
-                case _ => ()
-            }
+            case None => ok = true
             case _ => ()
         }
         @Assert(ok)
     }
 
-    // Lens->prism->lens forward: full match yields Right(final focus).
+    // Lens->prism->lens forward: full match yields Some(final focus).
     @TestCase
     func mixedLensPrismLensForwardMatch(): Unit {
         let h = PayloadHolder(Rect(Box(42)))
         let fwd = @Lucida(h.shape?.Rect.w)
         var ok = false
         match (fwd) {
-            case Right(v) => ok = (v == 42)
+            case Some(v) => ok = (v == 42)
             case _ => ()
         }
         @Assert(ok)
     }
 
-    // Lens->prism->lens forward miss: Left carries the original source.
+    // Lens->prism->lens forward miss: None.
     @TestCase
     func mixedLensPrismLensForwardMissCarriesSource(): Unit {
         let h = PayloadHolder(Dot(1))
         let miss = @Lucida(h.shape?.Rect.w)
         var ok = false
         match (miss) {
-            case Left(src) => match (src.shape) {
-                case Dot(v) => ok = (v == 1)
-                case _ => ()
-            }
+            case None => ok = true
             case _ => ()
         }
         @Assert(ok)
@@ -173,7 +167,7 @@ class FusedPrismLaws {
         let fwd = @Lucida(w?.Wrap?.Rect.w)
         var ok = false
         match (fwd) {
-            case Right(v) => ok = (v == 7)
+            case Some(v) => ok = (v == 7)
             case _ => ()
         }
         @Assert(ok)
@@ -185,13 +179,7 @@ class FusedPrismLaws {
         let miss = @Lucida(w?.Wrap?.Rect.w)
         var ok = false
         match (miss) {
-            case Left(src) => match (src) {
-                case Wrap(inner) => match (inner) {
-                    case Dot(v) => ok = (v == 3)
-                    case _ => ()
-                }
-                case _ => ()
-            }
+            case None => ok = true
             case _ => ()
         }
         @Assert(ok)
@@ -205,7 +193,7 @@ class FusedPrismLaws {
         let fwd = @Lucida(shapes?.selectFirst({ p: Payload2D => match (p) { case Rect(_) => true case _ => false } })?.Rect.w)
         var ok = false
         match (fwd) {
-            case Right(v) => ok = (v == 7)
+            case Some(v) => ok = (v == 7)
             case _ => ()
         }
         @Assert(ok)
@@ -218,7 +206,7 @@ class FusedPrismLaws {
         let fwd = @Lucida(shapes?.at(1)?.Rect.w)
         var ok = false
         match (fwd) {
-            case Right(v) => ok = (v == 7)
+            case Some(v) => ok = (v == 7)
             case _ => ()
         }
         @Assert(ok)
@@ -298,7 +286,7 @@ class FusedPrismLaws {
         let fwd = @Lucida(s?.Circle.coerce<Int64>())
         var ok = false
         match (fwd) {
-            case Right(v) => ok = (v == 3)
+            case Some(v) => ok = (v == 3)
             case _ => ()
         }
         @Assert(ok)
@@ -310,10 +298,7 @@ class FusedPrismLaws {
         let miss = @Lucida(s?.Circle.coerce<Int64>())
         var ok = false
         match (miss) {
-            case Left(src) => match (src) {
-                case Square(v) => ok = (v == 2)
-                case _ => ()
-            }
+            case None => ok = true
             case _ => ()
         }
         @Assert(ok)
@@ -396,7 +381,7 @@ class FusedPrismLaws {
         let fwd = @Lucida(d?.V1?.V2?.V3?.V4)
         var ok = false
         match (fwd) {
-            case Right(v) => ok = (v == 42)
+            case Some(v) => ok = (v == 42)
             case _ => ()
         }
         @Assert(ok)
@@ -408,19 +393,7 @@ class FusedPrismLaws {
         let miss = @Lucida(d?.V1?.V2?.V3?.V4)
         var ok = false
         match (miss) {
-            case Left(src) => match (src) {
-                case V1(inner2) => match (inner2) {
-                    case V2(inner3) => match (inner3) {
-                        case V3(inner4) => match (inner4) {
-                            case N4(v) => ok = (v == 5)
-                            case _ => ()
-                        }
-                        case _ => ()
-                    }
-                    case _ => ()
-                }
-                case _ => ()
-            }
+            case None => ok = true
             case _ => ()
         }
         @Assert(ok)
@@ -548,7 +521,7 @@ func hugeMiss(): Huge1 {
     Huge1.H1(Huge2.H2(Huge3.H3(Huge4.H4(Huge5.H5(Huge6.H6(Huge7.H7(Huge8.H8(Huge9.H9(Huge10.M10(5))))))))))
 }
 
-// Ten Either-producing segments — deeper than the historical hand-unrolled
+// Ten Option-producing segments — deeper than the historical hand-unrolled
 // pyramid (8). Read chains at this depth used to silently fall back to
 // library composition.
 @Test
@@ -557,7 +530,7 @@ class TenPrismChainLaws {
     func tenPrismsForwardMatch(): Unit {
         var ok = false
         match (@Lucida(hugeDeep()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
-            case Right(v) => ok = (v == 42)
+            case Some(v) => ok = (v == 42)
             case _ => ()
         }
         @Assert(ok)
@@ -567,10 +540,7 @@ class TenPrismChainLaws {
     func tenPrismsForwardMissCarriesSource(): Unit {
         var ok = false
         match (@Lucida(hugeMiss()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
-            case Left(src) => match (src) {
-                case H1(_) => ok = true
-                case _ => ()
-            }
+            case None => ok = true
             case _ => ()
         }
         @Assert(ok)
@@ -581,7 +551,7 @@ class TenPrismChainLaws {
         let updated = @Lucida(hugeDeep()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10 <- 9)
         var ok = false
         match (@Lucida(updated?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
-            case Right(v) => ok = (v == 9)
+            case Some(v) => ok = (v == 9)
             case _ => ()
         }
         @Assert(ok)
@@ -592,7 +562,7 @@ class TenPrismChainLaws {
         let updated = @Lucida(hugeMiss()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10 <- 9)
         var ok = false
         match (@Lucida(updated?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
-            case Left(_) => ok = true
+            case None => ok = true
             case _ => ()
         }
         @Assert(ok)

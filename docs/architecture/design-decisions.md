@@ -142,7 +142,7 @@ Two small things survived every generation and are worth noticing, because
 they mark the continuity: the chain's currency is still called `Magical` —
 `RegistryMagical<T>` today, minted by `magic<T>()` exactly as in the first
 library, where `magic` dispatched on the interface types — and the miss type
-`Either`, born as the first model's `Optional.preview` result, is still what a
+`Option`, born as the first model's `Optional.preview` result, is still what a
 partial read returns ([first-class optics](../api/first-class.md)).
 
 ## No static assertions → diagnostic overloads
@@ -155,9 +155,9 @@ instead surface as a generic mismatch deep in the emission.
 
 An earlier revision of the user optics made this pressure concrete. They
 shipped with uniform affine shapes — every user optic reading as
-`(S) -> Either<S, A>` and rebuilding sourcefully — so that the token-level
+`(S) -> Option<A>` and rebuilding sourcefully — so that the token-level
 walk never needed to know a segment's kind. That worked, and it was wrong:
-total reads returned `Either` needlessly, and every user optic composed as the
+total reads returned `Option` needlessly, and every user optic composed as the
 weakest kind, making composition kind-blind — a trade the
 [changelog](../../CHANGELOG.md) records the removal of. The repair was
 kind-exact shapes, which moved the kind decision to the call site: the
@@ -267,7 +267,7 @@ message — a diagnostic-surface gap [open problems](#open-problems) records.
 
 **No partial mark.** `x?.coerce<T>()` is rejected at parse time, before any
 code is generated. Coercion is fixed-total: its forward cannot miss, so there
-is no `Either` to unwrap and the partial mark promises semantics that do not
+is no `Option` to unwrap and the partial mark promises semantics that do not
 exist. The rejection happens at parse time for a reason worth keeping in mind
 elsewhere: the segment's call is synthesized by the walk, and synthesized
 tokens carry no source positions, so a later resolution failure would point

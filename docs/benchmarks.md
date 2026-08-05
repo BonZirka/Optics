@@ -99,7 +99,7 @@ exists for.
   48.6 ns vs 53.3 ns hand rebuild at depth 10 — immutable updates cost 10
   allocations either way; native in-place mutation (2 ns) is only available
   when you do not need the original.
-- Chains with more than 16 Either-producing segments fall back to the unfused
+- Chains with more than 16 Option-producing segments fall back to the unfused
   (library composition) path — the pinned walkers are generated up to
   `pinPrismForward16` (see [the fusion walk](architecture/fusion-walk.md) for
   the family and how to raise the cap).

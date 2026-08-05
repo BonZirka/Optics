@@ -20,7 +20,7 @@ extend RegistryMagical<DataModel> {
 }
 
 extend RegistryPrisms<DataModel> {
-    public func __method_serialization_impl_forward<T>(_: RegistryMagical<DataModel>): (DataModel)-> Either<DataModel, T> where T <: Serializable<T> { { source: DataModel => Right(T.deserialize(source)) } }
+    public func __method_serialization_impl_forward<T>(_: RegistryMagical<DataModel>): (DataModel)-> Option<T> where T <: Serializable<T> { { source: DataModel => Some(T.deserialize(source)) } }
     public func __method_serialization_impl_backward<T>(_: RegistryMagical<DataModel>): (T) -> DataModel where T <: Serializable<T> { { focus: T => focus.serialize() } }
 }
 

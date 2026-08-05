@@ -141,7 +141,7 @@ Where each helper is used:
 The limits are the shape of the pin itself: the backward pin fixes the
 walk's arity at two (`src`, `fcs`), and the walk body must produce its
 result without further type annotations from the macro. Everything that
-needs more — Either construction, per-kind dispatch — is pushed into the
+needs more — Option construction, per-kind dispatch — is pushed into the
 library's pre-written walkers (below), whose signatures already carry the
 types.
 
@@ -149,14 +149,14 @@ types.
 
 A read through an all-total chain is a plain nested call. A read through a
 chain with partial segments cannot be: a miss anywhere must yield
-`Left(original source)`, and the result of the whole read is an `Either`.
-The macro's name for a segment whose forward returns an `Either` is
+`None`, and the result of the whole read is an `Option`.
+The macro's name for a segment whose forward returns an `Option` is
 *either-producing*, and the comment that defines it (`eval_macro.cj`) is
 precise about the two sources:
 
 ```text
-// Either-producing segments: derived prisms and partially-marked user optics
-// ('?.') return Either<T_in, A> and occupy the pinned prism slots; totally-marked
+// Option-producing segments: derived prisms and partially-marked user optics
+// ('?.') return Option<A> and occupy the pinned prism slots; totally-marked
 // ('.') user optics walk like derived lenses.
 ```
 
@@ -174,26 +174,26 @@ the shape the whole family repeats:
 @Frozen
 public func pinPrismForward1<S, T1, A1, B>(
     sourceThunk: () -> S,
-    fwd1: (T1) -> Either<T1, A1>,
+    fwd1: (T1) -> Option<A1>,
     run0: (S) -> T1,
     cont1: (A1) -> B
-): (S) -> Either<S, B> {
+): (S) -> Option<B> {
     { s: S =>
         match (fwd1(run0(s))) {
-            case Right(a1) => Right<S, B>(cont1(a1))
-            case Left(_) => Left<S, B>(s)
+            case Some(a1) => Some<B>(cont1(a1))
+            case None => None
         }
     }
 }
 ```
 
 The walkers are not curried pipelines — each takes its pieces as one flat
-argument list and returns a single lambda, `(S) -> Either<S, B>`. For `K`
+argument list and returns a single lambda, `(S) -> Option<B>`. For `K`
 either-producing segments, `pinPrismForwardK` takes:
 
 - the source thunk, pinning `S`;
 - one `fwdI` per partial segment — the segment's pre-bound forward (its
-  gated copy, [mark gates](#mark-gates)), typed `(TI) -> Either<TI, AI>`;
+  gated copy, [mark gates](#mark-gates)), typed `(TI) -> Option<AI>`;
 - one run lambda per total stretch *before* each partial segment — the
   first takes the source `s`, the rest take the previous partial's payload
   (the emission names those parameters `__eI`);
@@ -203,15 +203,15 @@ either-producing segments, `pinPrismForwardK` takes:
 So for a schematic chain `x?.a.b?.c` (two partial segments around one total
 segment `b`), the macro emits `pinPrismForward2` with an identity `run0`
 (nothing total before `a`), a `run1` applying `b`'s gated forward, and an
-identity `cont2` (nothing after `c`). Any `Left` short-circuits to
-`Left(original source)` — note the `s` in `Left<S, B>(s)` is the walker's
+identity `cont2` (nothing after `c`). Any `None` short-circuits to
+`None` — the walker's own
 own parameter, the original source, not an intermediate — and a full match
-threads each payload through the next run into `Right(final focus)`.
+input; the walk threads each payload through the next run into `Some(final focus)`.
 
 The family exists because of the same constraint the pin helpers solve, one
 level down. The macro cannot emit the nested `match` itself: the library's
-walkers spell the `Right`/`Left` constructors out with their type arguments
-(`Right<S, B>(...)`), and the macro — which never resolves a type — cannot
+walkers spell the `Some`/`None` constructors out with their type arguments
+(`Some<B>(...)`), and the macro — which never resolves a type — cannot
 name `S` or the payload types. The comment above the family (`magical.cj`)
 states the division this forces:
 
@@ -220,8 +220,8 @@ states the division this forces:
 // The macro emits only top-level sibling lambdas (segment runs); every lambda's
 // parameter and return type is pinned by the concrete pre-bound segment forward
 // arguments, never by another lambda's body. Semantics mirror the library's
-// composed forward: any prism miss short-circuits to Left(original source),
-// a full match yields Right(final focus).
+// composed forward: any prism miss short-circuits to None (source preserved),
+// a full match yields Some(final focus).
 ```
 
 The macro emits the *sibling* run lambdas — flat, one per total stretch —
@@ -234,7 +234,7 @@ The family comes in fixed arities, one function per count, each typing its
 own nesting — but it is not hand-written: `@GeneratePrismForward(N)` (in
 `lucida.macrodsl`, applied in `magical.cj`) generates
 `pinPrismForward1..N`, and the macro counts the partial segments
-(`countEitherSegments` in `eval_macro.cj`) against N. A read with exactly N
+(`countPartialSegments` in `eval_macro.cj`) against N. A read with exactly N
 either-producing segments still fuses (`pinPrismForwardN`); more than N
 falls back to composition. Raising the cap is regenerating with a larger N,
 not unrolling more levels by hand. Writes only were never the problem: the
@@ -243,11 +243,11 @@ Its partial segments are handled by inline guards — in the emission's own
 naming, schematic, for the first partial segment of a chain:
 
 ```cangjie
-if (let Right(__t0) <- __fwd0(src)) { /* the rest, nested */ } else { src }
+if (let Some(__t0) <- __fwd0(src)) { /* the rest, nested */ } else { src }
 ```
 
 — which only *destructure* (a pattern position needs no type arguments),
-while the forward walk must *construct* `Right`/`Left` (a constructor
+while the forward walk must *construct* `Some`/`None` (a constructor
 position cannot avoid them). The guards nest as deep as the chain does, a
 miss at any depth yields the original source, and every emitted type stays
 concrete (`emitFusedBackwardBody` in `eval_macro.cj`). The write keeps the
@@ -274,7 +274,7 @@ the section in miniature:
 // binding site — mid-chain or tail, derived, user, or stdlib. Total-marked
 // ('.') segments pass through Lenses/Isos; a Prisms/Affines registry means
 // the mark contradicts a partial kind. Partial-marked ('?.') segments pass
-// through Prisms/Affines (Either forward); a Lenses/Isos registry means the
+// through Prisms/Affines (Option forward); a Lenses/Isos registry means the
 // mark contradicts a total kind. Bodies are identities: the gates exist for
 // overload resolution, and inlining makes them free at runtime.
 ```
@@ -283,11 +283,11 @@ Four families, all in `magical.cj`:
 
 - `__fwdApplyTotal` — resolves for a `.`-mark against `RegistryLenses` or
   `RegistryIsos`; the `RegistryPrisms`/`RegistryAffines` overloads are the
-  strict-`@Deprecated` traps (a partial optic's forward returns `Either`, so
+  strict-`@Deprecated` traps (a partial optic's forward returns `Option`, so
   a total read is impossible).
 - `__fwdApplyPartial` — resolves for a `?.`-mark against `RegistryPrisms` or
   `RegistryAffines`; the `RegistryLenses`/`RegistryIsos` overloads are the
-  traps (a total optic's forward cannot miss, so there is no `Either` to
+  traps (a total optic's forward cannot miss, so there is no `Option` to
   unwrap).
 - `__bwdApply` — the arity eraser for `?.`-marked user segments. A partial
   user optic may be a Prism (sourceless backward) or an Affine (sourceful),
@@ -324,7 +324,7 @@ writes, and the asymmetry is the point:
   compute the values entering each segment — and check the mark on the
   backward side instead. Gating the forwards would reject a *legal* write: a
   `.`-write through an affine is fine (its backward is sourceful and keeps
-  the source on a miss), even though its forward returns `Either` and a
+  the source on a miss), even though its forward returns `Option` and a
   total forward gate would trap it. So the fold routes by segment kind:
   derived segments call their backward directly (always sourceful, miss
   guards baked into the derive's emission); coercions call theirs directly
@@ -339,7 +339,7 @@ fits both an Iso — a legal `.`-write — and a Prism — an illegal one. The
 function type alone cannot separate two opposite verdicts; only the registry
 argument can, and that is what `__bwdApplyTotal` passes as its first
 argument. On the forward gates the function shapes already separate the
-families (a total forward is never `Either`-returning), and the registry
+families (a total forward is never `Option`-returning), and the registry
 keeps the check tied to the segment's kind rather than its shape.
 
 The forward gates return the function they were handed — identity bodies —

@@ -48,15 +48,15 @@ func fnT(i: Tokens, o: Tokens): Tokens {
     quote(($i) -> $o)
 }
 
-func eitherT(a: Tokens, b: Tokens): Tokens {
-    quote(Either<$a, $b>)
+func optionT(t: Tokens): Tokens {
+    quote(Option<$t>)
 }
 
 /// Type of the forward member for `kind` reading iT -> oT.
 func fwdParamType(kind: Int64, iTk: Token, oTk: Token): Tokens {
     let iT = quote($iTk)
     let oT = quote($oTk)
-    if (isEitherKind(kind)) { return fnT(iT, eitherT(iT, oT)) }
+    if (isPartialKind(kind)) { return fnT(iT, optionT(oT)) }
     if (kind == SETTER) { return fnT(iT, iT) }
     return fnT(iT, oT)
 }
@@ -70,7 +70,7 @@ func bwdParamType(kind: Int64, iTk: Token, oTk: Token): Tokens {
     return quote(($iT, ($oT) -> $oT) -> $iT)                              // Setter
 }
 
-func isEitherKind(k: Int64): Bool {
+func isPartialKind(k: Int64): Bool {
     k == PRISM || k == AFFINE
 }
 
@@ -118,9 +118,9 @@ func emitForwardLambda(k1: Int64, k2: Int64): Tokens {
     let a1 = idTok("a1")
     let a2 = idTok("a2")
     let b1 = idTok("b1")
-    let rightSB = quote(Right<$S, $B>)
-    let leftSB = quote(Left<$S, $B>)
-    if (!isEitherKind(k1) && !isEitherKind(k2) && k2 != SETTER && k1 != SETTER) {
+    let someB = quote(Some<$B>)
+    let none = quote(Option<$B>.None)
+    if (!isPartialKind(k1) && !isPartialKind(k2) && k2 != SETTER && k1 != SETTER) {
         // total -> total
         return quote({ $src: $S => $a2($a1($src)) })
     }
@@ -134,7 +134,7 @@ func emitForwardLambda(k1: Int64, k2: Int64): Tokens {
         if (k1 == PRISM) {
             return quote(
                 { $src: $S =>
-                    if (let Right($prv) <- $a1($src)) {
+                    if (let Some($prv) <- $a1($src)) {
                         $b1($a2($prv))
                     } else {
                         $src
@@ -144,7 +144,7 @@ func emitForwardLambda(k1: Int64, k2: Int64): Tokens {
         // AFFINE
         return quote(
             { $src: $S =>
-                if (let Right($prv) <- $a1($src)) {
+                if (let Some($prv) <- $a1($src)) {
                     $b1($src, $a2($prv))
                 } else {
                     $src
@@ -155,33 +155,34 @@ func emitForwardLambda(k1: Int64, k2: Int64): Tokens {
         // setter on the left: forward is just the first setter's modifyId
         return quote($a1)
     }
-    if (!isEitherKind(k1) && isEitherKind(k2)) {
+    if (!isPartialKind(k1) && isPartialKind(k2)) {
         return quote(
             { $src: $S =>
-                if (let Right($rsv) <- $a2($a1($src))) {
-                    $rightSB($rsv)
-                } else {
-                    $leftSB($src)
+                match ($a2($a1($src))) {
+                    case Some($rsv) => Some<$B>($rsv)
+                    case None => Option<$B>.None
                 }
             })
     }
-    if (isEitherKind(k1) && !isEitherKind(k2)) {
+    if (isPartialKind(k1) && !isPartialKind(k2)) {
         return quote(
             { $src: $S =>
-                if (let Right($prv) <- $a1($src)) {
-                    $rightSB($a2($prv))
-                } else {
-                    $leftSB($src)
+                match ($a1($src)) {
+                    case Some($prv) => Some<$B>($a2($prv))
+                    case None => Option<$B>.None
                 }
             })
     }
-    // both either-shaped: chained guards
+    // both partial: nested guards
     return quote(
         { $src: $S =>
-            if (let Right($prv) <- $a1($src) && let Right($rsv) <- $a2($prv)) {
-                $rightSB($rsv)
-            } else {
-                $leftSB($src)
+            match ($a1($src)) {
+                case Some($prv) =>
+                    match ($a2($prv)) {
+                        case Some($rsv) => Some<$B>($rsv)
+                        case None => Option<$B>.None
+                    }
+                case None => Option<$B>.None
             }
         })
 }
@@ -216,7 +217,7 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
         if (k1 == PRISM) {
             return quote(
                 { $src: $S, $mod: ($B) -> $B =>
-                    if (let Right($v1) <- $a1($src)) {
+                    if (let Some($v1) <- $a1($src)) {
                         $b1($b2($v1, $mod))
                     } else {
                         $src
@@ -226,7 +227,7 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
         if (k1 == AFFINE) {
             return quote(
                 { $src: $S, $mod: ($B) -> $B =>
-                    if (let Right($v1) <- $a1($src)) {
+                    if (let Some($v1) <- $a1($src)) {
                         $b1($src, $b2($v1, $mod))
                     } else {
                         $src
@@ -260,7 +261,7 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
             return quote(
                 { $src: $S, $mod: ($B) -> $B =>
                     let comp: ($A) -> $A = { inner: $A =>
-                        if (let Right($v2) <- $a2(inner)) {
+                        if (let Some($v2) <- $a2(inner)) {
                             $b2($mod($v2))
                         } else {
                             inner
@@ -273,7 +274,7 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
         return quote(
             { $src: $S, $mod: ($B) -> $B =>
                 let comp: ($A) -> $A = { inner: $A =>
-                    if (let Right($v2) <- $a2(inner)) {
+                    if (let Some($v2) <- $a2(inner)) {
                         $b2(inner, $mod($v2))
                     } else {
                         inner
@@ -291,7 +292,7 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
     if (pairKey == PRISM * 10 + LENS) {
         return quote(
             { $src: $S, $fcs: $B =>
-                if (let Right($v1) <- $a1($src)) {
+                if (let Some($v1) <- $a1($src)) {
                     $b1($b2($v1, $fcs))
                 } else {
                     $src
@@ -301,7 +302,7 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
     if (pairKey == LENS * 10 + PRISM) {
         return quote(
             { $src: $S, $fcs: $B =>
-                if (let Right(_) <- $a2($a1($src))) {
+                if (let Some(_) <- $a2($a1($src))) {
                     $b1($src, $b2($fcs))
                 } else {
                     $src
@@ -312,7 +313,7 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
         return quote(
             { $src: $S, $fcs: $B =>
                 let t = $a1($src)
-                if (let Right(_) <- $a2(t)) {
+                if (let Some(_) <- $a2(t)) {
                     $b1($b2(t, $fcs))
                 } else {
                     $src
@@ -322,7 +323,7 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
     if (pairKey == AFFINE * 10 + ISO) {
         return quote(
             { $src: $S, $fcs: $B =>
-                if (let Right(_) <- $a1($src)) {
+                if (let Some(_) <- $a1($src)) {
                     $b1($src, $b2($fcs))
                 } else {
                     $src
@@ -333,7 +334,7 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
         return quote(
             { $src: $S, $fcs: $B =>
                 let t = $a1($src)
-                if (let Right(_) <- $a2(t)) {
+                if (let Some(_) <- $a2(t)) {
                     $b1($src, $b2(t, $fcs))
                 } else {
                     $src
@@ -343,7 +344,7 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
     if (pairKey == AFFINE * 10 + LENS) {
         return quote(
             { $src: $S, $fcs: $B =>
-                if (let Right($v1) <- $a1($src)) {
+                if (let Some($v1) <- $a1($src)) {
                     $b1($src, $b2($v1, $fcs))
                 } else {
                     $src
@@ -353,7 +354,7 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
     if (pairKey == AFFINE * 10 + AFFINE) {
         return quote(
             { $src: $S, $fcs: $B =>
-                if (let Right($v1) <- $a1($src) && let Right(_) <- $a2($v1)) {
+                if (let Some($v1) <- $a1($src) && let Some(_) <- $a2($v1)) {
                     $b1($src, $b2($v1, $fcs))
                 } else {
                     $src
@@ -363,7 +364,7 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
     if (pairKey == AFFINE * 10 + PRISM) {
         return quote(
             { $src: $S, $fcs: $B =>
-                if (let Right($v1) <- $a1($src) && let Right(_) <- $a2($v1)) {
+                if (let Some($v1) <- $a1($src) && let Some(_) <- $a2($v1)) {
                     $b1($src, $b2($fcs))
                 } else {
                     $src
@@ -373,7 +374,7 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
     if (pairKey == PRISM * 10 + AFFINE) {
         return quote(
             { $src: $S, $fcs: $B =>
-                if (let Right($v1) <- $a1($src) && let Right(_) <- $a2($v1)) {
+                if (let Some($v1) <- $a1($src) && let Some(_) <- $a2($v1)) {
                     $b1($b2($v1, $fcs))
                 } else {
                     $src

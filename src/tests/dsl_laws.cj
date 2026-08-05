@@ -98,7 +98,7 @@ class DslLaws {
         @Assert(ordersEqualLeafwise(twice, once))
     }
 
-    // ===== stdlib at(i): in-bounds update, out-of-bounds identity/Left =====
+    // ===== stdlib at(i): in-bounds update, out-of-bounds miss =====
     @TestCase
     func stdlibAtLaws(): Unit {
         let nums = [10, 20, 30]
@@ -114,14 +114,14 @@ class DslLaws {
         @Assert(untouched.size == 3)
         @Assert(untouched[0] == 10 && untouched[1] == 20 && untouched[2] == 30)
 
-        // source-form read returns Either: Right(focus) / Left(original)
+        // source-form read returns Option: Some(focus) / None
         var leftOk = false
-        if (let Left(src) <- @Lucida(nums?.at(7))) {
-            leftOk = src.size == 3
+        if (let None <- @Lucida(nums?.at(7))) {
+            leftOk = true
         }
         @Assert(leftOk)
         var rightOk = false
-        if (let Right(fv) <- @Lucida(nums?.at(0))) {
+        if (let Some(fv) <- @Lucida(nums?.at(0))) {
             rightOk = fv == 10
         }
         @Assert(rightOk)

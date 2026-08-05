@@ -1,10 +1,5 @@
 package lucida
 
-public enum Either<L, R> {
-    | Left(L)
-    | Right(R)
-}
-
 public struct Iso<S, A> {
     public Iso(
         public let to: (S) -> A,
@@ -21,14 +16,14 @@ public struct Lens<S, A> {
 
 public struct Prism<S, A> {
     public Prism(
-        public let preview: (S) -> Either<S, A>,
+        public let preview: (S) -> Option<A>,
         public let build: (A) -> S 
     ) {}
 }
 
 public struct Affine<S, A> {
     public Affine(
-        public let preview: (S) -> Either<S, A>,
+        public let preview: (S) -> Option<A>,
         public let update: (S, A) -> S 
     ) {}
 }
@@ -55,11 +50,11 @@ public struct __FirstClassGetters {
     @Frozen
     public static func backward<S, A>(x: Lens<S, A>): (S, A) -> S { x.update } 
     @Frozen
-    public static func forward<S, A>(x: Prism<S, A>): (S) -> Either<S, A> { x.preview } 
+    public static func forward<S, A>(x: Prism<S, A>): (S) -> Option<A> { x.preview } 
     @Frozen
     public static func backward<S, A>(x: Prism<S, A>): (A) -> S { x.build } 
     @Frozen
-    public static func forward<S, A>(x: Affine<S, A>): (S) -> Either<S, A> { x.preview } 
+    public static func forward<S, A>(x: Affine<S, A>): (S) -> Option<A> { x.preview } 
     @Frozen
     public static func backward<S, A>(x: Affine<S, A>): (S, A) -> S { x.update } 
     @Frozen
@@ -80,12 +75,12 @@ public struct __FirstClassConstruction {
     }
 
     @Frozen
-    public static func perform<S, A>(forward: (S) -> Either<S, A>, backward: (A) -> S): Prism<S, A> {
+    public static func perform<S, A>(forward: (S) -> Option<A>, backward: (A) -> S): Prism<S, A> {
         Prism(forward, backward)
     }
 
     @Frozen
-    public static func perform<S, A>(forward: (S) -> Either<S, A>, backward: (S, A) -> S): Affine<S, A> {
+    public static func perform<S, A>(forward: (S) -> Option<A>, backward: (S, A) -> S): Affine<S, A> {
         Affine(forward, backward)
     }
 

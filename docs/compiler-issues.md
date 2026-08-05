@@ -69,3 +69,50 @@ Tuples index as `t[i]` in source, but a member-access AST node for `.0`
 does not exist and the `@Lucida` macro receives index expressions as opaque
 `Unknown expression`. Not a defect — the DSL's `._i` spelling sidesteps it —
 but any DSL authoring tuples should know the grammar constraints up front.
+
+## 6. Expected-type propagation for bare enum constructors is lost through macro emission in nested lambdas
+
+Minimal context: a macro emits, into a generic member, a lambda nested inside
+another lambda whose branches end in a bare no-payload enum constructor:
+
+```cangjie
+// emitted by @GenerateCompositions (generate_compositions.cj) into
+// __OpticsCompositions.composeForward:
+static public func composeForward<S, A, B>(...): ((S) -> A, (A) -> Option<B>, ...) -> (S) -> Option<B> {
+    { f1b, f2b, b2 =>
+        { x: S =>
+            match (f2b(f1b(x))) {
+                case Some(v) => Some<B>(v)
+                case None => None        // <- error: generic type should be
+            }                            //    used with type argument
+        }
+    }
+}
+```
+
+Measured matrix (same compiler, same shape):
+
+| context | bare `None` infers? |
+|---|---|
+| hand-written: match arm, if/else branch, `return`, single or nested lambda, direct body | yes (all 12 probe shapes) |
+| macro-emitted: single-level lambda, `match` arm | yes (`pinPrismForwardK` bodies) |
+| macro-emitted: nested lambda — `match` arm, if/else expression, `return` statement | **no** — `generic type should be used with type argument` |
+| macro-emitted: type-applied (`Some<B>(v)`) or qualified (`Option<B>.None`) | yes |
+
+Notes:
+
+- Hand-written and macro-emitted tokens are otherwise identical — the failure
+  is specific to code arriving through quote expansion.
+- The boundary looks like expected-type propagation stopping one lambda deep
+  when the code comes from a macro; single-level lambda bodies still receive
+  the member's return type.
+- Also fails for `return None` (the return statement does not pick up the
+  enclosing lambda's result type through emission), which rules out
+  statement-form workarounds.
+- Workaround shipped in this repo: qualify the constructor
+  (`Option<B>.None`) or type-apply payload constructors (`Some<B>(v)`) in
+  every macro-emitted branch expression. The pyramid walkers keep bare
+  constructors (single-level lambda).
+
+First observed on cjc 1.2.0-alpha.20260710020028, still reproduces on
+1.3.0-alpha.20260925001050.

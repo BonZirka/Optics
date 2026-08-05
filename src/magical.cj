@@ -19,11 +19,11 @@ public struct RegistryLenses<T>    {
 public struct RegistryPrisms<T>    {
     @Frozen
     public init() { }
-} // (a) -> Either a b, (b) -> a
+} // (a) -> Option b, (b) -> a
 public struct RegistryAffines<T>   {
     @Frozen
     public init() { }
-} // (a) -> Either a b, (a, b) -> a
+} // (a) -> Option b, (a, b) -> a
 public struct RegistrySetters<T>   {
     @Frozen
     public init() { }
@@ -159,7 +159,7 @@ public func __bwdApplyTotal<T, S, A>(_: RegistryPrisms<T>, backward: (A) -> S, s
 // binding site — mid-chain or tail, derived, user, or stdlib. Total-marked
 // ('.') segments pass through Lenses/Isos; a Prisms/Affines registry means
 // the mark contradicts a partial kind. Partial-marked ('?.') segments pass
-// through Prisms/Affines (Either forward); a Lenses/Isos registry means the
+// through Prisms/Affines (Option forward); a Lenses/Isos registry means the
 // mark contradicts a total kind. Bodies are identities: the gates exist for
 // overload resolution, and inlining makes them free at runtime.
 public func __fwdApplyTotal<T, S, A>(_: RegistryLenses<T>, forward: (S) -> A): (S) -> A {
@@ -170,30 +170,30 @@ public func __fwdApplyTotal<T, S, A>(_: RegistryIsos<T>, forward: (S) -> A): (S)
     forward
 }
 
-@Deprecated[message: "@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Either, so a total read is impossible. Use '?.' and match Right/Left.", strict: true]
-public func __fwdApplyTotal<T, S, A>(_: RegistryPrisms<T>, forward: (S) -> Either<S, A>): (S) -> Either<S, A> {
+@Deprecated[message: "@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Option, so a total read is impossible. Use '?.' and match Some/None.", strict: true]
+public func __fwdApplyTotal<T, S, A>(_: RegistryPrisms<T>, forward: (S) -> Option<A>): (S) -> Option<A> {
     forward
 }
 
-@Deprecated[message: "@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Either, so a total read is impossible. Use '?.' and match Right/Left.", strict: true]
-public func __fwdApplyTotal<T, S, A>(_: RegistryAffines<T>, forward: (S) -> Either<S, A>): (S) -> Either<S, A> {
+@Deprecated[message: "@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Option, so a total read is impossible. Use '?.' and match Some/None.", strict: true]
+public func __fwdApplyTotal<T, S, A>(_: RegistryAffines<T>, forward: (S) -> Option<A>): (S) -> Option<A> {
     forward
 }
 
-public func __fwdApplyPartial<T, S, A>(_: RegistryPrisms<T>, forward: (S) -> Either<S, A>): (S) -> Either<S, A> {
+public func __fwdApplyPartial<T, S, A>(_: RegistryPrisms<T>, forward: (S) -> Option<A>): (S) -> Option<A> {
     forward
 }
 
-public func __fwdApplyPartial<T, S, A>(_: RegistryAffines<T>, forward: (S) -> Either<S, A>): (S) -> Either<S, A> {
+public func __fwdApplyPartial<T, S, A>(_: RegistryAffines<T>, forward: (S) -> Option<A>): (S) -> Option<A> {
     forward
 }
 
-@Deprecated[message: "@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Either to unwrap. Use '.' for a plain read.", strict: true]
+@Deprecated[message: "@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.", strict: true]
 public func __fwdApplyPartial<T, S, A>(_: RegistryLenses<T>, forward: (S) -> A): (S) -> A {
     forward
 }
 
-@Deprecated[message: "@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Either to unwrap. Use '.' for a plain read.", strict: true]
+@Deprecated[message: "@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.", strict: true]
 public func __fwdApplyPartial<T, S, A>(_: RegistryIsos<T>, forward: (S) -> A): (S) -> A {
     forward
 }

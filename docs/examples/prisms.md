@@ -3,11 +3,11 @@
 A lens is a total focus: the part is *always* there, so a read cannot miss.
 A prism is the other bargain — a partial focus on a part that may not be
 there. Ask a `Square` for its `Circle` payload and there is nothing to hand
-back, so the prism answers in a type that can say so: `Either` — the
-library's two-case type, `Either<L, R>` is `Left(L)` or `Right(R)` (see
-[first-class optics](../api/first-class.md)) — with `Right(payload)` on a
-match and `Left(source)` on a miss. The operator changes with it: `?.` marks
-a partial segment where `.` marks a total one.
+back, so the prism answers in a type that can say so: the standard
+`Option<T>` everyone knows — `Some(payload)` on a match, `None` on a miss
+(see [first-class optics](../api/first-class.md)). A miss carries nothing:
+the source is the very value you passed in and it is untouched. The operator
+changes with it: `?.` marks a partial segment where `.` marks a total one.
 
 All the code below runs against one derived enum from the test suite,
 `Shape` — a `Circle(Nested)` or a `Square(Int64)` — where `Nested` is a
@@ -23,16 +23,16 @@ public enum Shape {
 }
 ```
 
-One derive, one prism per case: `@DeriveOptics` emits a prism for every
-single-payload case of the enum. `Circle` gets a prism focusing its `Nested`
+One derive, one prism per case: `@DeriveOptics` emits a prism for every case
+of the enum, whatever its shape. `Circle` gets a prism focusing its `Nested`
 payload, `Square` one focusing its `Int64` — and the payload type derives the
 same way, which is what lets a chain keep going into `Nested`'s field `n`.
 (The library kinds a case optic as an *affine* — same partial `?.` contract,
 same miss-is-identity; [deriving](deriving.md) uses that name.)
 
-A case with more than one payload cannot be rebuilt from its part alone, so
-multi-payload cases are rejected at derive time. The full rules are in
-[deriving](deriving.md).
+A multi-payload case — `Cons(head, tail)`, say — derives a prism whose focus
+is the tuple of payloads, and a payloadless case focuses `Unit`, turning a
+read into a match check. The full rules are in [deriving](deriving.md).
 
 ## Reading with ?.
 
@@ -42,41 +42,37 @@ read `Circle` out of both:
 ```cangjie
 let c = Shape.Circle(Nested(3))
 let s = Shape.Square(2)
-@Assert(isRightCircle(@Lucida(c?.Circle), 3))
-@Assert(isLeftSquare(@Lucida(s?.Circle), 2))
+@Assert(isSomeCircle(@Lucida(c?.Circle), 3))
+@Assert(isNoneSquare(@Lucida(s?.Circle)))
 ```
 
-`@Lucida(c?.Circle)` is a partial read: it evaluates to `Either<Shape,
-Nested>`. `c` is a `Circle`, so the answer is `Right(payload)` — the
-`Nested(3)` inside `c`. `s` is a `Square`, so the read misses and the answer
-is `Left(source)` — the original `s`, carried back unchanged. The miss is a
-value, not an error.
+`@Lucida(c?.Circle)` is a partial read: it evaluates to `Option<Nested>`.
+`c` is a `Circle`, so the answer is `Some(payload)` — the `Nested(3)` inside
+`c`. `s` is a `Square`, so the read misses and the answer is `None` — no
+object comes back at all; the original `s` is still right where you left it,
+untouched. The miss is a value, not an error.
 
 The two helpers spell out both sides:
 
 ```cangjie
-func isRightCircle(e: Either<Shape, Nested>, expectedN: Int64): Bool {
-    if (let Right(p) <- e) {
+func isSomeCircle(e: Option<Nested>, expectedN: Int64): Bool {
+    if (let Some(p) <- e) {
         return p.n == expectedN
     }
     return false
 }
 
-// Mismatched-case forward returns Left carrying the ORIGINAL source.
-func isLeftSquare(e: Either<Shape, Nested>, originalSquareValue: Int64): Bool {
-    if (let Left(src) <- e) {
-        match (src) {
-            case Square(v) => return v == originalSquareValue
-            case _ => return false
-        }
+// Mismatched-case forward is a miss: None, no object handed back.
+func isNoneSquare(e: Option<Int64>): Bool {
+    match (e) {
+        case None => return true
+        case _ => return false
     }
-    return false
 }
 ```
 
-The same read works the other way around: `s?.Square` comes back `Right(2)`,
-and `c?.Square` — asking a circle for a square's payload — comes back
-`Left(c)`.
+The same read works the other way around: `s?.Square` comes back `Some(2)`,
+and `c?.Square` — asking a circle for a square's payload — comes back `None`.
 
 ## Writing — and what a miss does
 

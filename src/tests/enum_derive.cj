@@ -46,23 +46,20 @@ class DerivedEnumShapeLaws {
     // ===== payloadless cases derive Unit-focus prisms =====
     @TestCase
     func payloadlessCasePrism(): Unit {
-        // Right(()) when the source IS the case — a match check.
+        // Some(()) when the source IS the case — a match check.
         let e0 = Slot.Empty
         var ok = false
         match (@Lucida(e0?.Empty)) {
-            case Right(_) => ok = true
+            case Some(_) => ok = true
             case _ => ()
         }
         @Assert(ok)
 
-        // A Held value misses: Left carries the original source.
+        // A Held value misses: None — nothing handed back.
         let h0 = Slot.Held(3)
         var missed = false
         match (@Lucida(h0?.Empty)) {
-            case Left(src) => match (src) {
-                case Held(v) => missed = (v == 3)
-                case _ => ()
-            }
+            case None => missed = true
             case _ => ()
         }
         @Assert(missed)
@@ -96,7 +93,7 @@ class DerivedEnumShapeLaws {
         let l = IntList.Cons(1, IntList.Nil)
         var ok = false
         match (@Lucida(l?.Cons)) {
-            case Right(pair) => match (pair) {
+            case Some(pair) => match (pair) {
                 case (h, t) => match (t) {
                     case Nil => ok = (h == 1)
                     case _ => ()
@@ -110,10 +107,7 @@ class DerivedEnumShapeLaws {
         let n0 = IntList.Nil
         var missed = false
         match (@Lucida(n0?.Cons)) {
-            case Left(src) => match (src) {
-                case Nil => missed = true
-                case _ => ()
-            }
+            case None => missed = true
             case _ => ()
         }
         @Assert(missed)
@@ -152,7 +146,7 @@ class DerivedEnumShapeLaws {
         let a = Status.Active(2)
         var activeOk = false
         match (@Lucida(a?.Active)) {
-            case Right(v) => activeOk = (v == 2)
+            case Some(v) => activeOk = (v == 2)
             case _ => ()
         }
         @Assert(activeOk)
@@ -160,7 +154,7 @@ class DerivedEnumShapeLaws {
         let f = Status.Failed("boom", 7)
         var failedOk = false
         match (@Lucida(f?.Failed)) {
-            case Right(pair) => match (pair) {
+            case Some(pair) => match (pair) {
                 case (msg, code) => failedOk = (msg == "boom" && code == 7)
                 case _ => ()
             }
@@ -171,7 +165,7 @@ class DerivedEnumShapeLaws {
         let p = Status.Pending
         var pendingOk = false
         match (@Lucida(p?.Pending)) {
-            case Right(_) => pendingOk = true
+            case Some(_) => pendingOk = true
             case _ => ()
         }
         @Assert(pendingOk)
@@ -191,7 +185,7 @@ class DerivedEnumShapeLaws {
         let w = Envelope<Int64>.Sealed(3)
         var ok = false
         match (@Lucida(w?.Sealed)) {
-            case Right(v) => ok = (v == 3)
+            case Some(v) => ok = (v == 3)
             case _ => ()
         }
         @Assert(ok)
@@ -199,7 +193,7 @@ class DerivedEnumShapeLaws {
         let e = Envelope<Int64>.Vacant
         var emptyOk = false
         match (@Lucida(e?.Vacant)) {
-            case Right(_) => emptyOk = true
+            case Some(_) => emptyOk = true
             case _ => ()
         }
         @Assert(emptyOk)
@@ -210,15 +204,15 @@ class DerivedEnumShapeLaws {
 class EnumPrismLaws {
     // ===== forward =====
     // With a source present, @Lucida(src?.Case) evaluates the prism directly:
-    // matching case -> Right(payload), mismatched -> Left(source).
+    // matching case -> Some(payload), mismatched -> None.
     @TestCase
     func forwardMatchAndMismatch(): Unit {
         let c = Shape.Circle(Nested(3))
         let s = Shape.Square(2)
-        @Assert(isRightCircle(@Lucida(c?.Circle), 3))
-        @Assert(isLeftSquare(@Lucida(s?.Circle), 2))
-        @Assert(isRightSquare(@Lucida(s?.Square), 2))
-        @Assert(isLeftCircle(@Lucida(c?.Square)))
+        @Assert(isSomeCircle(@Lucida(c?.Circle), 3))
+        @Assert(isNoneSquare(@Lucida(s?.Circle)))
+        @Assert(isSomeSquare(@Lucida(s?.Square), 2))
+        @Assert(isNoneCircle(@Lucida(c?.Square)))
     }
 
     // ===== backward rebuilds the case with the new payload =====
@@ -279,7 +273,7 @@ class EnumPrismLaws {
         let fwdBack = @Lucida(c?.Circle)
         var agree = false
         match (fwdBack) {
-            case Right(p) =>
+            case Some(p) =>
                 let back = @Lucida(@TypeOf(c)?.Circle)
                 match (back.update(c, p)) {
                     case Circle(inner) => agree = inner.n == 3
@@ -291,37 +285,31 @@ class EnumPrismLaws {
     }
 }
 
-func isRightCircle(e: Either<Shape, Nested>, expectedN: Int64): Bool {
-    if (let Right(p) <- e) {
+func isSomeCircle(e: Option<Nested>, expectedN: Int64): Bool {
+    if (let Some(p) <- e) {
         return p.n == expectedN
     }
     return false
 }
 
-func isRightSquare(e: Either<Shape, Int64>, expectedV: Int64): Bool {
-    if (let Right(v) <- e) {
+func isSomeSquare(e: Option<Int64>, expectedV: Int64): Bool {
+    if (let Some(v) <- e) {
         return v == expectedV
     }
     return false
 }
 
-// Mismatched-case forward returns Left carrying the ORIGINAL source.
-func isLeftSquare(e: Either<Shape, Nested>, originalSquareValue: Int64): Bool {
-    if (let Left(src) <- e) {
-        match (src) {
-            case Square(v) => return v == originalSquareValue
-            case _ => return false
-        }
+// Mismatched-case forward is a miss: None, no object handed back.
+func isNoneCircle(e: Option<Int64>): Bool {
+    match (e) {
+        case None => return true
+        case _ => return false
     }
-    return false
 }
 
-func isLeftCircle(e: Either<Shape, Int64>): Bool {
-    if (let Left(src) <- e) {
-        match (src) {
-            case Circle(_) => return true
-            case _ => return false
-        }
+func isNoneSquare(e: Option<Nested>): Bool {
+    match (e) {
+        case None => return true
+        case _ => return false
     }
-    return false
 }

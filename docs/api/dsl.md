@@ -25,7 +25,7 @@ accepts. The kinds behind the segments are the five structs of
   read `@Lucida(o.name)`. If a write didn't take, check for the arrow. An
   empty call fails with `@Lucida expects at least one argument`.
 - A read evaluates to the focus. If any segment is partial (`?.`), the read
-  evaluates to `Either` — `Right(payload)` on a match, `Left(source)`
+  evaluates to `Option` — `Some(payload)` on a match, `None`
   carrying the original source on a miss.
 - A write evaluates to a new whole with `newValue` at the focus; the source
   comes out untouched. A partial write is unconditional: when a segment
@@ -105,7 +105,7 @@ guarantee the optic behind it makes:
 | Operator | Meaning | Segments it matches |
 |---|---|---|
 | `.` | total — the part is always there; read and write cannot miss | derived fields, `coerce<T>()`, `.`-marked user optics |
-| `?.` | partial — a read evaluates to `Either`: `Right(payload)` on a match, `Left(source)` on a miss | derived case optics, `Array.at`, `Array.selectFirst`, `?.`-marked user optics |
+| `?.` | partial — a read evaluates to `Option`: `Some(payload)` on a match, `None` on a miss | derived case optics, `Array.at`, `Array.selectFirst`, `?.`-marked user optics |
 
 A spliced `@Optic(o)` carries no mark of its own — the spliced optic's kind
 decides the read: a spliced lens reads total, a spliced prism or affine
@@ -118,15 +118,15 @@ compile.
 
 - `.` on a partial optic — a total read of an optic whose read can miss:
 
-  `@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Either, so a total read is impossible. Use '?.' and match Right/Left.`
+  `@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Option, so a total read is impossible. Use '?.' and match Some/None.`
 
 - `?.` on a total optic — a partial read of an optic that cannot miss:
 
-  `@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Either to unwrap. Use '.' for a plain read.`
+  `@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.`
 
 - `?.` on `coerce<T>()` is rejected at parse time, with the same reasoning:
 
-  `@Lucida: '?.' on a total optic (coerce) — its forward cannot miss, so there is no Either to unwrap. Use '.' for a plain read.`
+  `@Lucida: '?.' on a total optic (coerce) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.`
 
 Writes obey the same marks with one deliberate asymmetry. A partial write is
 unconditional — the miss is an identity — so a `.`-write through an

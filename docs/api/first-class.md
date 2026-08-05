@@ -55,27 +55,27 @@ public struct Lens<S, A> {
 ```cangjie
 public struct Prism<S, A> {
     public Prism(
-        public let preview: (S) -> Either<S, A>,
+        public let preview: (S) -> Option<A>,
         public let build: (A) -> S
     ) {}
 }
 ```
 
-`Prism` — a partial focus on an enum case: `preview` answers in `Either` —
-`Right(payload)` on a match, `Left(source)` on a miss — and `build` rewraps
+`Prism` — a partial focus on an enum case: `preview` answers in `Option` —
+`Some(payload)` on a match, `None` on a miss — and `build` rewraps
 a payload into a fresh whole.
 
 ```cangjie
 public struct Affine<S, A> {
     public Affine(
-        public let preview: (S) -> Either<S, A>,
+        public let preview: (S) -> Option<A>,
         public let update: (S, A) -> S
     ) {}
 }
 ```
 
 `Affine` — partial like a prism, with the lens's rebuild: `preview` answers
-in `Either`, and `update` needs the source too — the part alone no longer
+in `Option`, and `update` needs the source too — the part alone no longer
 determines the whole.
 
 ```cangjie
@@ -118,12 +118,12 @@ public struct __FirstClassConstruction {
     }
 
     @Frozen
-    public static func perform<S, A>(forward: (S) -> Either<S, A>, backward: (A) -> S): Prism<S, A> {
+    public static func perform<S, A>(forward: (S) -> Option<A>, backward: (A) -> S): Prism<S, A> {
         Prism(forward, backward)
     }
 
     @Frozen
-    public static func perform<S, A>(forward: (S) -> Either<S, A>, backward: (S, A) -> S): Affine<S, A> {
+    public static func perform<S, A>(forward: (S) -> Option<A>, backward: (S, A) -> S): Affine<S, A> {
         Affine(forward, backward)
     }
 
@@ -176,7 +176,7 @@ func lensId(): Lens<Int64, Int64> {
 
 func prismEven(): Prism<Int64, Int64> {
     Prism<Int64, Int64>(
-        { s: Int64 => if (s % 2 == 0) { Right<Int64, Int64>(s) } else { Left<Int64, Int64>(s) } },
+        { s: Int64 => if (s % 2 == 0) { Some(s) } else { None } },
         { _: Int64 => 8 }
     )
 }
@@ -212,11 +212,11 @@ public struct __FirstClassGetters {
     @Frozen
     public static func backward<S, A>(x: Lens<S, A>): (S, A) -> S { x.update }
     @Frozen
-    public static func forward<S, A>(x: Prism<S, A>): (S) -> Either<S, A> { x.preview }
+    public static func forward<S, A>(x: Prism<S, A>): (S) -> Option<A> { x.preview }
     @Frozen
     public static func backward<S, A>(x: Prism<S, A>): (A) -> S { x.build }
     @Frozen
-    public static func forward<S, A>(x: Affine<S, A>): (S) -> Either<S, A> { x.preview }
+    public static func forward<S, A>(x: Affine<S, A>): (S) -> Option<A> { x.preview }
     @Frozen
     public static func backward<S, A>(x: Affine<S, A>): (S, A) -> S { x.update }
     @Frozen
@@ -251,24 +251,24 @@ let o = Setter<Int64, Int64>({ s: Int64, f: (Int64) -> Int64 => f(s) })
 This forward/backward pair is what the generated composition machinery is
 built on — [composition](composition.md) covers it kind by kind.
 
-## Either
+## Option
 
-Every partial read answers in one type:
+Every partial read answers in one type — the standard `Option<T>` everyone
+already knows:
 
 ```cangjie
-public enum Either<L, R> {
-    | Left(L)
-    | Right(R)
-}
+enum Option<T> { | Some(T) | None }
 ```
 
-`Right(a)` — the focus, on a match. `Left(s)` — the miss, carrying the
-source back unchanged; the miss is a value, not an error. The prism and
-affine forwards return it (`prismEven` above builds both cases by hand).
-At the call site a partial read hands you the `Either` to match; a partial
-write consumes it internally — a miss is an identity — so you never unpack
-`Left`/`Right` to perform an update ([prisms](../examples/prisms.md) walks
-the read, the write, and the miss-is-identity rule on both sides).
+`Some(a)` — the focus, on a match. `None` — the optic did not focus, and
+that is all it tells you: no value is handed back, because the source is
+the very value you passed in and it is untouched (updates build new values;
+originals are never mutated). The prism and affine forwards return it
+(`prismEven` above builds both cases by hand). At the call site a partial
+read hands you the `Option` to match; a partial write consumes the miss
+internally — a miss is an identity — so you never unpack `Some`/`None` to
+perform an update ([prisms](../examples/prisms.md) walks the read, the
+write, and the miss-is-identity rule on both sides).
 
 ## Laws
 
@@ -283,7 +283,7 @@ only preserve lawfulness, they cannot manufacture it.
 |---|---|
 | `Iso` | GetSet, SetGet, SetSet — both arrows are total inverses |
 | `Lens` | GetSet, SetGet, SetSet — view then update is identity; update installs the focus; updates commute |
-| `Prism` | GetSet, SetGet, SetSet — quantified over the match set: `build(a)` must itself match, and preview it back to `Right(a)` |
+| `Prism` | GetSet, SetGet, SetSet — quantified over the match set: `build(a)` must itself match, and preview it back to `Some(a)` |
 | `Affine` | GetSet, SetGet, SetSet — quantified over the match set; a miss is an identity on both arrows |
 | `Setter` | SetSet — there is no view; only "setting twice = setting the final value once" |
 
@@ -314,4 +314,4 @@ is the affine's.
   declaring a first-class optic for your own types.
 - [Introduction to optics](../introduction-to-optics.md) — the five kinds
   as ideas: read arrows, rebuild arrows, and why a miss is an identity.
-- [Prisms](../examples/prisms.md) — `Either` in action at the call site.
+- [Prisms](../examples/prisms.md) — `Option` in action at the call site.

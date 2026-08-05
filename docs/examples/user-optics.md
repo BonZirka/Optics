@@ -41,8 +41,8 @@ The kind decides each body's shape:
 |---|---|---|
 | `Lens` | the focus, plain — total | `src`, then `focus` |
 | `Iso` | the focus, plain — total | `focus` alone |
-| `Prism` | `Either<S, A>` — `Right(payload)` on a match, `Left(source)` on a miss | `focus` alone |
-| `Affine` | `Either<S, A>` — partial, like a prism | `src`, then `focus` |
+| `Prism` | `Option<A>` — `Some(payload)` on a match, `None` on a miss | `focus` alone |
+| `Affine` | `Option<A>` — partial, like a prism | `src`, then `focus` |
 
 The backward column is the introduction's rebuild arrow: a `Prism` or `Iso`
 rebuilds the whole from the part alone, so its backward has no `src` slot,
@@ -101,29 +101,29 @@ public enum UMaybe {
     source: UMaybe
     focus: Int64
     kind: Prism
-    forward: { match (src) { case UJust(v) => Right(v) case _ => Left(src) } }
+    forward: { match (src) { case UJust(v) => Some(v) case _ => None } }
     backward: { UJust(focus) }
 ]
 struct uJust {}
 ```
 
 `uJust` focuses the payload of the `UJust` case. The forward is the prism
-bargain from the [prisms](prisms.md) page: on a match, `Right` with the
-payload; on a miss, `Left` carrying the whole source. The backward rebuilds
+bargain from the [prisms](prisms.md) page: on a match, `Some` with the
+payload; on a miss, `None`. The backward rebuilds
 from the part alone — a fresh `UJust` around the new payload. `?.` marks the
-calls, and a read is an `Either`:
+calls, and a read is an `Option`:
 
 ```cangjie
 let m = UMaybe.UJust(7)
 var ok = false
 match (@Lucida(m?.uJust())) {
-    case Right(r) => ok = (r == 7)
+    case Some(r) => ok = (r == 7)
     case _ => ()
 }
 @Assert(ok)
 ```
 
-From the other case, `Left` carries the original source — the `UNothing`
+From the other case, `None` — and the `UNothing`
 itself, not a stand-in:
 
 ```cangjie
@@ -131,11 +131,8 @@ let m = UMaybe.UNothing
 let fwd = @Lucida(m?.uJust())
 var ok = false
 match (fwd) {
-    case Left(l) =>
-        match (l) {
-            case UNothing => ok = true
-            case _ => ()
-        }
+    case None =>
+        ok = true
     case _ => ()
 }
 @Assert(ok)
@@ -153,7 +150,7 @@ write returns the source unchanged — the miss is an identity.
     focus: T
     kind: Affine
     args: (n: Int64)
-    forward: { if (let Some(f) <- src.get(n)) { Right(f) } else { Left(src) } }
+    forward: { if (let Some(f) <- src.get(n)) { Some(f) } else { None } }
     backward: { let a = src.clone(); a[n] = focus; a }
 ]
 struct at2<T> {}
@@ -162,8 +159,8 @@ struct at2<T> {}
 `at2` is the hand-written cousin of the library's `at`
 ([chains](chains.md)): the element at index `n`, if there is one. The
 `args:` line declares `n`, the call site passes it (`xs?.at2(1)`), and it is
-in scope in both bodies. The forward is the affine's `Either` — `Right(f)`
-with the element, `Left(src)` with the whole array when the index is out of
+in scope in both bodies. The forward is the affine's `Option` — `Some(f)`
+with the element, `None` when the index is out of
 range. The backward is why affine differs from prism: "the element at index
 `n`" does not determine the array, so the rebuild takes `src` too — clone
 it, poke the new focus in at `n`, and hand back the clone. A new value —
@@ -207,8 +204,8 @@ it exactly as it holds a derived one: `.` on the total kinds (`Lens`, `Iso`),
 `?.` on the partial ones (`Prism`, `Affine`) — every call on this page
 follows that. A mismatch fails to compile:
 
-- `.` on a user `Prism` or `Affine` — `@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Either, so a total read is impossible. Use '?.' and match Right/Left.`
-- `?.` on a user `Lens` or `Iso` — `@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Either to unwrap. Use '.' for a plain read.`
+- `.` on a user `Prism` or `Affine` — `@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Option, so a total read is impossible. Use '?.' and match Some/None.`
+- `?.` on a user `Lens` or `Iso` — `@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.`
 
 Every diagnostic `@Lucida` can produce is collected in
 [diagnostics](../api/diagnostics.md).

@@ -141,7 +141,7 @@ let unwrapped = @Lucida(m.coerce<Int64>())
 @Assert(unwrapped == 7)
 ```
 
-Total means no `Either` and no miss, hence `.` — and `T` must be the field
+Total means no `Option` and no miss, hence `.` — and `T` must be the field
 type: the coerce resolves against exactly the pair the derive produced.
 (`GBox<T>` above is a one-field type too, so it gets an iso as well — the
 lens for `v` first, the iso alongside.)

@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-09-25 — breaking: `Either<S, A>` replaced by `Option<A>`
+
+Partial reads now answer in the standard `Option<T>` everyone knows —
+`Some(focus)` on a match, `None` on a miss — instead of a custom
+`Either<Source, Focus>` whose `Left` handed the source back.
+
+- **Why**: a `Left(source)` read like "here is a copy of the object you
+  passed in" invites exactly the wrong question (same object or a copy?).
+  The source is the value the caller passed in and it is untouched — the
+  miss carries nothing, so the question never arises. It also turned out the
+  carried source was pure redundancy: every internal consumer already had it
+  in scope, and `@LucidaOptic` forwards get simpler (`None` instead of
+  `Left(src)`).
+- **Migration**: `Right(x)` → `Some(x)`; `Left(src)` → `None` (use your own
+  source variable — it is unchanged); `Either<S, A>` → `Option<A>`.
+- `Either` is removed from `lucida`; matches on partial reads use
+  `case Some(...)` / `case None`.
+
 ## 2026-09-25 — tuple element lenses up to arity 16
 
 - `@GenerateTupleExtendsLenses` now generates, per arity 2..16, the

@@ -252,7 +252,7 @@ private func decomposeMemberAccessExpr(maccess: Expr): (?Expr, Array<Composition
                     // getCompositionNode) because ce2 is synthesized and its tokens
                     // carry no positions for diagReport.
                     if (funcName.value == coercionFakeCallexprId.value && !segTotal) { throw DiagReportException(
-                        "${mainMacroName}: '?.' on a total optic (coerce) — its forward cannot miss, so there is no Either to unwrap. Use '.' for a plain read.",
+                        "${mainMacroName}: '?.' on a total optic (coerce) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.",
                         ce.toTokens()
                     )}
                     nodes.add(getCompositionNode(ce2, total: segTotal))

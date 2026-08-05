@@ -121,7 +121,7 @@ The composed functions keep the halves' shapes, partitioned by the pair:
   source — and the rebuild is `(S, (B) -> B) -> S`, the focus slot widened to
   a modifier function.
 - **A prism or affine anywhere (no setter)**: the composed read is partial,
-  `(S) -> Either<S, B>` — a miss anywhere short-circuits to `Left(source)` —
+  `(S) -> Option<B>` — a miss anywhere short-circuits to `None` —
   and the rebuild takes source and focus, `(S, B) -> S`.
 
 The four Iso/Prism rows (1, 3, 8, 9) are the exception in the rebuild slot:
@@ -142,7 +142,7 @@ The suite pins the shapes on hand-built instances — all `Int64 -> Int64`:
 //   affPos:    matches n > 0; update replaces focus
 func prismEven(): Prism<Int64, Int64> {
     Prism<Int64, Int64>(
-        { s: Int64 => if (s % 2 == 0) { Right<Int64, Int64>(s) } else { Left<Int64, Int64>(s) } },
+        { s: Int64 => if (s % 2 == 0) { Some(s) } else { None } },
         { _: Int64 => 8 }
     )
 }
@@ -151,7 +151,7 @@ func affPos(): Affine<Int64, Int64> {
     // Lawful affine: update preserves source when the optic does not focus.
     // (Matches the guarding convention of the library's own stdlib impls.)
     Affine<Int64, Int64>(
-        { s: Int64 => if (s > 0) { Right<Int64, Int64>(s) } else { Left<Int64, Int64>(s) } },
+        { s: Int64 => if (s > 0) { Some(s) } else { None } },
         { s: Int64, v: Int64 => if (s > 0) { v } else { s } }
     )
 }
@@ -178,14 +178,14 @@ let bwd = __OpticsCompositions.composeBackward(
     magicFirstClassDowncast(o1), magicFirstClassDowncast(o2))(
     __FirstClassGetters.forward(o1), __FirstClassGetters.forward(o2),
     __FirstClassGetters.backward(o1), __FirstClassGetters.backward(o2))
-// -4 maps through iso to +4 (even -> Right(4)); -3 maps to +3 (odd -> Left(-3))
-@Assert(isRightWith(fwd(-4), 4))
-@Assert(isLeftWith(fwd(-3), -3))
+// -4 maps through iso to +4 (even -> Some(4)); -3 maps to +3 (odd -> None)
+@Assert(isSomeWith(fwd(-4), 4))
+@Assert(isNone(fwd(-3)))
 // backward: i1from(p2build(5)=8) = -8 (total)
 @Assert(bwd(5) == -8)
 ```
 
-(`isRightWith`/`isLeftWith` are the suite's `Either` matchers.)
+(`isSomeWith`/`isNone` are the suite's `Option` matchers.)
 
 And a miss never writes — the composed rebuild returns the source unchanged,
 a new value with nothing changed:

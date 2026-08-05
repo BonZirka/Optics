@@ -12,7 +12,7 @@ is irreducibly public. What makes it safe to ignore is a namespace contract.
   by lucida**. They are not API: they may change in any minor release, and
   user code must not define or call them.
 - Everything else under `lucida` and `lucida.stdlib` — the five optic
-  structs, `Either`, `magic`, the stdlib optics — is public API and follows
+  structs, `Option`, `magic`, the stdlib optics — is public API and follows
   semantic versioning.
 - If a generated name ever collides with one of yours, the compiler will
   tell you: rename your member. (There is no gensym in the macro API;

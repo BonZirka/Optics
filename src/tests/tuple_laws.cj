@@ -157,20 +157,20 @@ class TupleElementLaws {
 class TupleEnumChainLaws {
     // Status.Failed focuses (String, Int64) — the case work composes with the
     // tuple element lenses. Chains containing `?.` are partial: their read is
-    // an Either.
+    // an Option.
     @TestCase
     func enumCaseTupleElementRead(): Unit {
         let f = Status.Failed("boom", 7)
         var msgOk = false
         match (@Lucida(f?.Failed._0)) {
-            case Right(v) => msgOk = (v == "boom")
+            case Some(v) => msgOk = (v == "boom")
             case _ => ()
         }
         @Assert(msgOk)
 
         var codeOk = false
         match (@Lucida(f?.Failed._1)) {
-            case Right(v) => codeOk = (v == 7)
+            case Some(v) => codeOk = (v == 7)
             case _ => ()
         }
         @Assert(codeOk)
@@ -214,14 +214,14 @@ class TupleEnumChainLaws {
         let l = IntList.Cons(1, IntList.Cons(2, IntList.Nil))
         var headOk = false
         match (@Lucida(l?.Cons._0)) {
-            case Right(v) => headOk = (v == 1)
+            case Some(v) => headOk = (v == 1)
             case _ => ()
         }
         @Assert(headOk)
 
         var secondOk = false
         match (@Lucida(l?.Cons._1?.Cons._0)) {
-            case Right(v) => secondOk = (v == 2)
+            case Some(v) => secondOk = (v == 2)
             case _ => ()
         }
         @Assert(secondOk)

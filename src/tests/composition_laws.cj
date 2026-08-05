@@ -9,7 +9,7 @@ import lucida.*
 //   affPos:    matches n > 0; update replaces focus
 func prismEven(): Prism<Int64, Int64> {
     Prism<Int64, Int64>(
-        { s: Int64 => if (s % 2 == 0) { Right<Int64, Int64>(s) } else { Left<Int64, Int64>(s) } },
+        { s: Int64 => if (s % 2 == 0) { Some(s) } else { None } },
         { _: Int64 => 8 }
     )
 }
@@ -18,7 +18,7 @@ func affPos(): Affine<Int64, Int64> {
     // Lawful affine: update preserves source when the optic does not focus.
     // (Matches the guarding convention of the library's own stdlib impls.)
     Affine<Int64, Int64>(
-        { s: Int64 => if (s > 0) { Right<Int64, Int64>(s) } else { Left<Int64, Int64>(s) } },
+        { s: Int64 => if (s > 0) { Some(s) } else { None } },
         { s: Int64, v: Int64 => if (s > 0) { v } else { s } }
     )
 }
@@ -43,14 +43,16 @@ func inc(n: Int64): Int64 {
     n + 1
 }
 
-func isRightWith(e: Either<Int64, Int64>, expected: Int64): Bool {
-    if (let Right(v) <- e) { return v == expected }
+func isSomeWith(e: Option<Int64>, expected: Int64): Bool {
+    if (let Some(v) <- e) { return v == expected }
     return false
 }
 
-func isLeftWith(e: Either<Int64, Int64>, expected: Int64): Bool {
-    if (let Left(v) <- e) { return v == expected }
-    return false
+func isNone(e: Option<Int64>): Bool {
+    match (e) {
+        case None => return true
+        case _ => return false
+    }
 }
 
 @Test
@@ -142,8 +144,8 @@ class CompositionLaws {
             magicFirstClassDowncast(o1), magicFirstClassDowncast(o2))(
             __FirstClassGetters.forward(o1), __FirstClassGetters.forward(o2),
             __FirstClassGetters.backward(o1), __FirstClassGetters.backward(o2))
-        @Assert(isRightWith(fwd(4), 4))
-        @Assert(isLeftWith(fwd(3), 3))
+        @Assert(isSomeWith(fwd(4), 4))
+        @Assert(isNone(fwd(3)))
         @Assert(bwd(5) == 8)
     }
 
@@ -160,8 +162,8 @@ class CompositionLaws {
             magicFirstClassDowncast(o1), magicFirstClassDowncast(o2))(
             __FirstClassGetters.forward(o1), __FirstClassGetters.forward(o2),
             __FirstClassGetters.backward(o1), __FirstClassGetters.backward(o2))
-        @Assert(isRightWith(fwd(4), 4))
-        @Assert(isLeftWith(fwd(-1), -1))
+        @Assert(isSomeWith(fwd(4), 4))
+        @Assert(isNone(fwd(-1)))
         @Assert(bwd(4, 9) == 9)
         @Assert(bwd(-1, 9) == -1)
     }
@@ -230,9 +232,9 @@ class CompositionLaws {
             magicFirstClassDowncast(o1), magicFirstClassDowncast(o2))(
             __FirstClassGetters.forward(o1), __FirstClassGetters.forward(o2),
             __FirstClassGetters.backward(o1), __FirstClassGetters.backward(o2))
-        // -4 maps through iso to +4 (even -> Right(4)); -3 maps to +3 (odd -> Left(-3))
-        @Assert(isRightWith(fwd(-4), 4))
-        @Assert(isLeftWith(fwd(-3), -3))
+        // -4 maps through iso to +4 (even -> Some(4)); -3 maps to +3 (odd -> None)
+        @Assert(isSomeWith(fwd(-4), 4))
+        @Assert(isNone(fwd(-3)))
         // backward: i1from(p2build(5)=8) = -8 (total)
         @Assert(bwd(5) == -8)
     }
@@ -250,8 +252,8 @@ class CompositionLaws {
             magicFirstClassDowncast(o1), magicFirstClassDowncast(o2))(
             __FirstClassGetters.forward(o1), __FirstClassGetters.forward(o2),
             __FirstClassGetters.backward(o1), __FirstClassGetters.backward(o2))
-        @Assert(isRightWith(fwd(4), -4))
-        @Assert(isLeftWith(fwd(3), 3))
+        @Assert(isSomeWith(fwd(4), -4))
+        @Assert(isNone(fwd(3)))
         // backward: p1build(i2from(5)=-5) = 8 (total)
         @Assert(bwd(5) == 8)
     }
@@ -269,8 +271,8 @@ class CompositionLaws {
             magicFirstClassDowncast(o1), magicFirstClassDowncast(o2))(
             __FirstClassGetters.forward(o1), __FirstClassGetters.forward(o2),
             __FirstClassGetters.backward(o1), __FirstClassGetters.backward(o2))
-        @Assert(isRightWith(fwd(4), 4))
-        @Assert(isLeftWith(fwd(3), 3))
+        @Assert(isSomeWith(fwd(4), 4))
+        @Assert(isNone(fwd(3)))
         @Assert(bwd(4, 9) == 8)
         @Assert(bwd(3, 9) == 3)
     }
@@ -288,9 +290,9 @@ class CompositionLaws {
             magicFirstClassDowncast(o1), magicFirstClassDowncast(o2))(
             __FirstClassGetters.forward(o1), __FirstClassGetters.forward(o2),
             __FirstClassGetters.backward(o1), __FirstClassGetters.backward(o2))
-        // focuses when -src > 0, i.e. src < 0; the Right carries the iso-mapped value
-        @Assert(isRightWith(fwd(-4), 4))
-        @Assert(isLeftWith(fwd(4), 4))
+        // focuses when -src > 0, i.e. src < 0; the Some carries the iso-mapped value
+        @Assert(isSomeWith(fwd(-4), 4))
+        @Assert(isNone(fwd(4)))
         @Assert(bwd(-4, 9) == -9)
         @Assert(bwd(4, 9) == 4)
     }
@@ -308,8 +310,8 @@ class CompositionLaws {
             magicFirstClassDowncast(o1), magicFirstClassDowncast(o2))(
             __FirstClassGetters.forward(o1), __FirstClassGetters.forward(o2),
             __FirstClassGetters.backward(o1), __FirstClassGetters.backward(o2))
-        @Assert(isRightWith(fwd(4), -4))
-        @Assert(isLeftWith(fwd(-1), -1))
+        @Assert(isSomeWith(fwd(4), -4))
+        @Assert(isNone(fwd(-1)))
         // backward replaces with i2from(focus) = -focus
         @Assert(bwd(4, 9) == -9)
         @Assert(bwd(-1, 9) == -1)
@@ -365,8 +367,8 @@ class CompositionLaws {
             magicFirstClassDowncast(o1), magicFirstClassDowncast(o2))(
             __FirstClassGetters.forward(o1), __FirstClassGetters.forward(o2),
             __FirstClassGetters.backward(o1), __FirstClassGetters.backward(o2))
-        @Assert(isRightWith(fwd(4), 4))
-        @Assert(isLeftWith(fwd(-1), -1))
+        @Assert(isSomeWith(fwd(4), 4))
+        @Assert(isNone(fwd(-1)))
         @Assert(bwd(4, 9) == 9)
         @Assert(bwd(-1, 9) == -1)
     }
@@ -385,9 +387,9 @@ class CompositionLaws {
             __FirstClassGetters.forward(o1), __FirstClassGetters.forward(o2),
             __FirstClassGetters.backward(o1), __FirstClassGetters.backward(o2))
         // 4: even and > 0; 3: odd rejects first stage; -2: even but affine rejects second stage
-        @Assert(isRightWith(fwd(4), 4))
-        @Assert(isLeftWith(fwd(3), 3))
-        @Assert(isLeftWith(fwd(-2), -2))
+        @Assert(isSomeWith(fwd(4), 4))
+        @Assert(isNone(fwd(3)))
+        @Assert(isNone(fwd(-2)))
         @Assert(bwd(4, 9) == 8)
         @Assert(bwd(3, 9) == 3)
         @Assert(bwd(-2, 9) == -2)
@@ -406,8 +408,8 @@ class CompositionLaws {
             magicFirstClassDowncast(o1), magicFirstClassDowncast(o2))(
             __FirstClassGetters.forward(o1), __FirstClassGetters.forward(o2),
             __FirstClassGetters.backward(o1), __FirstClassGetters.backward(o2))
-        @Assert(isRightWith(fwd(4), 4))
-        @Assert(isLeftWith(fwd(-1), -1))
+        @Assert(isSomeWith(fwd(4), 4))
+        @Assert(isNone(fwd(-1)))
         @Assert(bwd(4, 9) == 9)
         @Assert(bwd(-1, 9) == -1)
     }

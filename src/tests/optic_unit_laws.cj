@@ -26,8 +26,8 @@ class OpticUnitLaws {
     @TestCase
     func prismNonMatchIdentity(): Unit {
         let o = prismEven()
-        @Assert(isLeftWith(o.preview(3), 3))
-        @Assert(isRightWith(o.preview(4), 4))
+        @Assert(isNone(o.preview(3)))
+        @Assert(isSomeWith(o.preview(4), 4))
         @Assert(o.build(5) == 8)
     }
 
@@ -35,10 +35,10 @@ class OpticUnitLaws {
     func affineNonMatchIdentityAndMatchUpdates(): Unit {
         let o = affPos()
         // non-match: backward = identity
-        @Assert(isLeftWith(o.preview(-1), -1))
+        @Assert(isNone(o.preview(-1)))
         @Assert(o.update(-1, 99) == -1)
         // match: update applies
-        @Assert(isRightWith(o.preview(4), 4))
+        @Assert(isSomeWith(o.preview(4), 4))
         @Assert(o.update(4, 99) == 99)
     }
 
@@ -54,10 +54,10 @@ class OpticUnitLaws {
     @TestCase
     func zeroBoundaryEdges(): Unit {
         // 0 is even -> prism focuses on zero
-        @Assert(isRightWith(prismEven().preview(0), 0))
+        @Assert(isSomeWith(prismEven().preview(0), 0))
         @Assert(prismEven().build(5) == 8)
         // 0 is not > 0 -> affine does not focus, update preserves
-        @Assert(isLeftWith(affPos().preview(0), 0))
+        @Assert(isNone(affPos().preview(0)))
         @Assert(affPos().update(0, 99) == 0)
         // composition: affine(non-match at 0) o prism keeps identity even though
         // the PRISM side would have matched

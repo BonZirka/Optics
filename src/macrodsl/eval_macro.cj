@@ -178,10 +178,10 @@ private func isFusableChain(nodes: Array<CompositionNode>): Bool {
     return true
 }
 
-// Either-producing segments: derived prisms and partially-marked user optics
-// ('?.') return Either<T_in, A> and occupy the pinned prism slots; totally-marked
+// Partial (Option-producing) segments: derived prisms and partially-marked
+// user optics ('?.') return Option<A> and occupy the pinned prism slots; totally-marked
 // ('.') user optics walk like derived lenses.
-private func isEitherProducing(node: CompositionNode): Bool {
+private func isPartialProducing(node: CompositionNode): Bool {
     match (node) {
         case Derived(_, Prism) => true
         case UserDefined(_, _, _, total) => !total
@@ -265,11 +265,11 @@ private func emitLensRunLambda(fwdIds: ArrayList<Token>, from: Int64, upto: Int6
 /// top-level sibling lambdas (lens runs between prisms) whose parameter and
 /// return types are pinned by the pre-bound segment forward ids, so Cangjie
 /// can infer them. Mirrors the library's composed semantics: any prism miss
-/// short-circuits to Left(original source), a full match yields Right(focus).
+/// short-circuits to None (source preserved), a full match yields Some(focus).
 private func emitPinnedPrismForward(nodes: Array<CompositionNode>, fwdIds: ArrayList<Token>, source: Expr): Tokens {
     let prismIdx = ArrayList<Int64>()
     for (i in 0..fwdIds.size) {
-        if (isEitherProducing(nodes[i + 1])) {
+        if (isPartialProducing(nodes[i + 1])) {
             prismIdx.add(i)
         }
     }
@@ -349,7 +349,7 @@ private func buildBackwardWalk(
 }
 
 private func emitFusedForwardWalk(nodes: Array<CompositionNode>, source: Expr): Tokens {
-    if (countEitherSegments(nodes) == 0) {
+    if (countPartialSegments(nodes) == 0) {
         // All-plain chain (pure lens, or lens/iso mixes): direct nested calls.
         // The READ walk runs through gated copies of the segment forwards so
         // the operator mark is checked against each segment's kind registry
@@ -374,7 +374,7 @@ private func emitFusedForwardWalk(nodes: Array<CompositionNode>, source: Expr): 
         )
     } else {
         // Prism, affine, or non-lens chain
-        if (!isFusableChain(nodes) || countEitherSegments(nodes) > 16) {
+        if (!isFusableChain(nodes) || countPartialSegments(nodes) > 16) {
             // Non-fusable chains, or more pinned slots than the generated
             // walkers support (see @GeneratePrismForward) — library composition
             return composeOptics(nodes)({ forward: Token, backward: Token =>
@@ -405,7 +405,7 @@ private func emitFwdGateBindings(nodes: Array<CompositionNode>, fwdIds: ArrayLis
         let idx: Int64 = Int64(i - 1)
         let opticsId = Token(IDENTIFIER, "__optics${idx}")
         let fwdId = fwdIds[idx]
-        let gate = if (isEitherProducing(nodes[i])) { fwdApplyPartialCallexprId } else { fwdApplyTotalCallexprId }
+        let gate = if (isPartialProducing(nodes[i])) { fwdApplyPartialCallexprId } else { fwdApplyTotalCallexprId }
         let gid = Token(IDENTIFIER, "__gfwd${idx}")
         bindings = quote(
             $bindings
@@ -416,10 +416,10 @@ private func emitFwdGateBindings(nodes: Array<CompositionNode>, fwdIds: ArrayLis
     return (bindings, gatedIds)
 }
 
-private func countEitherSegments(nodes: Array<CompositionNode>): Int64 {
+private func countPartialSegments(nodes: Array<CompositionNode>): Int64 {
     var count: Int64 = 0
     for (i in 1..nodes.size) {
-        if (isEitherProducing(nodes[i])) {
+        if (isPartialProducing(nodes[i])) {
             count = count + 1
         }
     }
@@ -475,9 +475,9 @@ private func emitFusedBackwardBody(
     var prev = enterTok
     var i = from
     while (i < n) {
-        // Either-producing segments (prisms and affines) need their forward
+        // Partial segments (prisms and affines) need their forward
         // unwrapped in the backward walk too — a miss keeps the source as-is.
-        if (isEitherProducing(nodes[i + 1])) { break }
+        if (isPartialProducing(nodes[i + 1])) { break }
         let tId = Token(IDENTIFIER, "__t${Int64(i)}")
         let binding = quote(let $tId = $(fwdIds[i])($prev))
         stmts = quote(
@@ -502,7 +502,7 @@ private func emitFusedBackwardBody(
     let inner = emitFusedBackwardBody(nodes, fwdIds, bwdIds, src, fcs, i + 1, tId, intermediates)
     return quote(
         $stmts
-        if (let Right($tId) <- $(fwdIds[i])($prev)) {
+        if (let Some($tId) <- $(fwdIds[i])($prev)) {
             $inner
         } else {
             $src

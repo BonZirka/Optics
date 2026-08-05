@@ -30,14 +30,14 @@ func isoId(): Iso<Int64, Int64> {
 
 func prismLawful(): Prism<Int64, Int64> {
     Prism<Int64, Int64>(
-        { s: Int64 => if (s % 2 == 0) { Right<Int64, Int64>(s) } else { Left<Int64, Int64>(s) } },
+        { s: Int64 => if (s % 2 == 0) { Some(s) } else { None } },
         { a: Int64 => a }
     )
 }
 
-// Total forward lifted into the Either form the law helpers consume.
-func liftFwd(f: (Int64) -> Int64): (Int64) -> Either<Int64, Int64> {
-    { s: Int64 => Right<Int64, Int64>(f(s)) }
+// Total forward lifted into the Option form the law helpers consume.
+func liftFwd(f: (Int64) -> Int64): (Int64) -> Option<Int64> {
+    { s: Int64 => Some<Int64>(f(s)) }
 }
 
 // A prism-rebuild backward (A) -> S unified into the (S, A) -> S form.
@@ -50,16 +50,16 @@ func unifySetterSet(b: (Int64, (Int64) -> Int64) -> Int64): (Int64, Int64) -> In
     { s: Int64, a: Int64 => b(s, { x: Int64 => a }) }
 }
 
-func lawGetSet(fwd: (Int64) -> Either<Int64, Int64>, set: (Int64, Int64) -> Int64, s: Int64): Bool {
+func lawGetSet(fwd: (Int64) -> Option<Int64>, set: (Int64, Int64) -> Int64, s: Int64): Bool {
     match (fwd(s)) {
-        case Right(v) => return set(s, v) == s
+        case Some(v) => return set(s, v) == s
         case _ => return false
     }
 }
 
-func lawSetGet(fwd: (Int64) -> Either<Int64, Int64>, set: (Int64, Int64) -> Int64, s: Int64, a: Int64): Bool {
+func lawSetGet(fwd: (Int64) -> Option<Int64>, set: (Int64, Int64) -> Int64, s: Int64, a: Int64): Bool {
     match (fwd(set(s, a))) {
-        case Right(v) => return v == a
+        case Some(v) => return v == a
         case _ => return false
     }
 }
@@ -69,7 +69,7 @@ func lawSetSet(set: (Int64, Int64) -> Int64, s: Int64): Bool {
 }
 
 // Full triple for rows with a view; SetSet only for setter rows.
-func viewLawsHold(fwd: (Int64) -> Either<Int64, Int64>, set: (Int64, Int64) -> Int64): Bool {
+func viewLawsHold(fwd: (Int64) -> Option<Int64>, set: (Int64, Int64) -> Int64): Bool {
     lawGetSet(fwd, set, 4) && lawSetGet(fwd, set, 4, 6) && lawSetSet(set, 4)
 }
 

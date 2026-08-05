@@ -159,7 +159,7 @@ plumbing ([registry plumbing](registry-plumbing.md)).
 ### Enums: affines per case
 
 Every case of a derived enum emits three members — a forward returning
-`Either<Enum, Focus>`, a backward rebuilding the case from a focus, and a
+`Option<Focus>`, a backward rebuilding the case from a focus, and a
 `__<case>_optics` accessor — plus the same interface/extend pairing as a
 struct. The focus depends on the case shape: a single-payload case focuses
 the payload itself, a multi-payload case focuses the *tuple* of payloads
@@ -175,7 +175,7 @@ these three interfaces and three extends:
 ```cangjie
 sealed interface __<Enum>_prisms_impl {
     @Frozen
-    func __<Case>_impl_forward(source: <Enum>): Either<<Enum>, <Payload>>
+    func __<Case>_impl_forward(source: <Enum>): Option<<Payload>>
     @Frozen
     func __<Case>_impl_backward(source: <Enum>, payload: <Payload>): <Enum>
 }
@@ -192,10 +192,10 @@ sealed interface __<Enum>_downcast {
 
 extend RegistryAffines<<Enum>> <: __<Enum>_prisms_impl {
     @Frozen
-    public func __<Case>_impl_forward(source: <Enum>): Either<<Enum>, <Payload>> {
+    public func __<Case>_impl_forward(source: <Enum>): Option<<Payload>> {
         match (source) {
-            case <Case>(__payload_<Case>) => Right<<Enum>, <Payload>>(__payload_<Case>)
-            case _ => Left<<Enum>, <Payload>>(source)
+            case <Case>(__payload_<Case>) => Some<<Payload>>(__payload_<Case>)
+            case _ => None
         }
     }
     // ...
@@ -300,11 +300,11 @@ reason the operator marks work the way they do:
 |---|---|---|---|
 | `Lens` | `(S) -> F` | `(S, F) -> S` | `src`, `focus` |
 | `Iso` | `(S) -> F` | `(F) -> S` | `focus` alone |
-| `Prism` | `(S) -> Either<S, F>` | `(F) -> S` | `focus` alone |
-| `Affine` | `(S) -> Either<S, F>` | `(S, F) -> S` | `src`, `focus` |
+| `Prism` | `(S) -> Option<F>` | `(F) -> S` | `focus` alone |
+| `Affine` | `(S) -> Option<F>` | `(S, F) -> S` | `src`, `focus` |
 
 A `.`-marked chain segment requires a total forward `(S) -> F`; a `?.`-marked
-one requires `Either`. Because the *type* of the emitted forward already
+one requires `Option`. Because the *type* of the emitted forward already
 encodes totality, a wrong mark fails to resolve — the compiler enforces the
 call-site mark against the kind without the macro doing anything extra at the
 call site (the strict-deprecated overloads that turn the failure into a
@@ -378,7 +378,7 @@ kinds. Two parse-time decisions happen here:
   for you" is this step.
 - **`coerce<T>()` is fixed-total.** A `?.` in front of a coercion is rejected
   at parse time — a total optic's forward cannot miss, so there is no
-  `Either` to unwrap — with the reasoning in the message itself.
+  `Option` to unwrap — with the reasoning in the message itself.
 
 The nodes are collected root-last and reversed, so the walk reads them in
 chain order. The node type is the macro's whole intermediate language:

@@ -21,9 +21,9 @@ kind behind the segment fails to compile with one of these:
 
 | Error | Cause | Fix |
 |---|---|---|
-| `@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Either, so a total read is impossible. Use '?.' and match Right/Left.` | A `.`-marked read resolved to a Prism or Affine — a partial optic whose forward returns `Either`. | Mark the segment `?.` and match the result: `Right(payload)` on a match, `Left(source)` on a miss. |
-| `@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Either to unwrap. Use '.' for a plain read.` | A `?.`-marked read resolved to a Lens or Iso — a total optic whose forward cannot miss. | Mark the segment `.`; the read is the focus, plain. |
-| `@Lucida: '?.' on a total optic (coerce) — its forward cannot miss, so there is no Either to unwrap. Use '.' for a plain read.` | `?.` marked a `coerce<T>()` segment — coercion is fixed-total, so there is no partial read to unwrap. This one is rejected at parse time, before any code is generated. | Mark the segment `.`. |
+| `@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Option, so a total read is impossible. Use '?.' and match Some/None.` | A `.`-marked read resolved to a Prism or Affine — a partial optic whose forward returns `Option`. | Mark the segment `?.` and match the result: `Some(payload)` on a match, `None` on a miss. |
+| `@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.` | A `?.`-marked read resolved to a Lens or Iso — a total optic whose forward cannot miss. | Mark the segment `.`; the read is the focus, plain. |
+| `@Lucida: '?.' on a total optic (coerce) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.` | `?.` marked a `coerce<T>()` segment — coercion is fixed-total, so there is no partial read to unwrap. This one is rejected at parse time, before any code is generated. | Mark the segment `.`. |
 | `@Lucida: '.'-write through a prism — '.'-writes assert a match and would rebuild the source unconditionally on miss. Use '?.' to preserve the source on miss.` | A `.`-marked write through a `Prism`-kind segment: its backward rebuilds the source from the focus alone, so on a miss the write would rebuild anyway. | Mark the write `?.`; on a miss the source comes back unchanged — the miss is an identity. |
 
 A `.`-write through an affine-kind segment stays legal: its backward
@@ -163,7 +163,7 @@ context it fires in, is in
 
 > **Gotcha:** These messages are compile-time only. Runtime behavior has
 > no error paths: a partial write's miss is an identity; a partial read's
-> miss is a `Left` — misses are values, not errors.
+> miss is a `None` — misses are values, not errors.
 
 ## Where to go next
 

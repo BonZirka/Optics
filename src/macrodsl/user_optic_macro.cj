@@ -202,7 +202,7 @@ private func emitUserOptic(
     // factory convention: take the registry + args, return the function value.
     let fwdType = match (kindTok.value) {
         case "Lens" | "Iso" => quote(($source) -> $focus)
-        case _ => quote(($source) -> Either<$source, $focus>)
+        case _ => quote(($source) -> Option<$focus>)
     }
     let bwdType = match (kindTok.value) {
         case "Lens" | "Affine" => quote(($source, $focus) -> $source)

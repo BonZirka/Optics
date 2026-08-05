@@ -17,7 +17,7 @@ public struct GPair<T, U> {
     focus: T
     kind: Affine
     args: (n: Int64)
-    forward: { if (let Some(f) <- src.get(n)) { Right(f) } else { Left(src) } }
+    forward: { if (let Some(f) <- src.get(n)) { Some(f) } else { None } }
     backward: { let a = src.clone(); a[n] = focus; a }
 ]
 struct at2<T> {}
@@ -57,7 +57,7 @@ public enum UMaybe {
     source: UMaybe
     focus: Int64
     kind: Prism
-    forward: { match (src) { case UJust(v) => Right(v) case _ => Left(src) } }
+    forward: { match (src) { case UJust(v) => Some(v) case _ => None } }
     backward: { UJust(focus) }
 ]
 struct uJust {}
@@ -68,7 +68,7 @@ struct guBoxLens<T> {}
 @LucidaOptic[source: GBox<T>, focus: T, kind: Lens, forward: { src.v }, backward: { GBox(focus) }]
 struct guBoxLensStr<T> {}
 
-@LucidaOptic[source: GBox<T>, focus: T, kind: Affine, forward: { Right(src.v) }, backward: { GBox(focus) }]
+@LucidaOptic[source: GBox<T>, focus: T, kind: Affine, forward: { Some(src.v) }, backward: { GBox(focus) }]
 struct guBoxAffine<T> {}
 
 @LucidaOptic[source: GBox<T>, focus: Int64, kind: Lens, forward: { 1 }, backward: { src }]
@@ -122,7 +122,7 @@ class UserAffineOpticLaws {
         let xs = [1, 2, 3]
         var ok = false
         match (@Lucida(xs?.at2(1))) {
-            case Right(r) => ok = (r == 2)
+            case Some(r) => ok = (r == 2)
             case _ => ()
         }
         @Assert(ok)
@@ -133,7 +133,7 @@ class UserAffineOpticLaws {
         let xs = [1, 2, 3]
         var ok = false
         match (@Lucida(xs?.at2(10))) {
-            case Left(l) => ok = (l == xs)
+            case None => ok = true
             case _ => ()
         }
         @Assert(ok)
@@ -186,7 +186,7 @@ class UserLensIsoPrismLaws {
         let m = UMaybe.UJust(7)
         var ok = false
         match (@Lucida(m?.uJust())) {
-            case Right(r) => ok = (r == 7)
+            case Some(r) => ok = (r == 7)
             case _ => ()
         }
         @Assert(ok)
@@ -198,11 +198,7 @@ class UserLensIsoPrismLaws {
         let fwd = @Lucida(m?.uJust())
         var ok = false
         match (fwd) {
-            case Left(l) =>
-                match (l) {
-                    case UNothing => ok = true
-                    case _ => ()
-                }
+            case None => ok = true
             case _ => ()
         }
         @Assert(ok)
@@ -253,7 +249,7 @@ class UserMixedChainLaws {
         let bs = [UBox(1), UBox(2)]
         var ok = false
         match (@Lucida(bs?.at2(0).uBoxLens())) {
-            case Right(r) => ok = (r == 1)
+            case Some(r) => ok = (r == 1)
             case _ => ()
         }
         @Assert(ok)
@@ -271,7 +267,7 @@ class UserMixedChainLaws {
         let ms = [UMaybe.UJust(1), UMaybe.UNothing]
         var ok = false
         match (@Lucida(ms?.at2(0)?.uJust())) {
-            case Right(r) => ok = (r == 1)
+            case Some(r) => ok = (r == 1)
             case _ => ()
         }
         @Assert(ok)
@@ -282,9 +278,16 @@ class UserMixedChainLaws {
         let ms = [UMaybe.UJust(1), UMaybe.UNothing]
         var ok = false
         match (@Lucida(ms?.at2(1)?.uJust())) {
-            case Left(l) => ok = sameMaybe(l, ms)
+            case None => ok = true
             case _ => ()
         }
+        // the original array is untouched
+        var originalKept = false
+        match (ms[1]) {
+            case UNothing => originalKept = true
+            case _ => ()
+        }
+        @Assert(originalKept)
         @Assert(ok)
     }
 
@@ -340,7 +343,7 @@ class GenericUserOpticLaws {
         @Assert(updated.v == "y")
     }
 
-    // Generic affine: '?.' read yields Right(value); [unfuse] write composes
+    // Generic affine: '?.' read yields Some(value); [unfuse] write composes
     // the parametric registry off the fusion walk (mark-agnostic, like
     // salary_bump).
     @TestCase
@@ -349,7 +352,7 @@ class GenericUserOpticLaws {
         let rd = @Lucida(gb?.guBoxAffine())
         var ok = false
         match (rd) {
-            case Right(v) => ok = (v == 5)
+            case Some(v) => ok = (v == 5)
             case _ => ()
         }
         @Assert(ok)

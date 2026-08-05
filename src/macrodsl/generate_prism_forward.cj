@@ -4,7 +4,7 @@ import std.ast.*
 import std.collection.*
 
 /// Generates `pinPrismForward1..N`, the fused forward walkers for chains with
-/// 1..N Either-producing segments. Each generated function has the same
+/// 1..N partial (Option-producing) segments. Each generated function has the same
 /// signature and body shape as the historical hand-written `pinPrismForwardK`:
 /// a named generic function is what lets call-site inference pin S/Ti/Ai/B —
 /// the macro cannot inline the match pyramid because lambda parameter types
@@ -34,11 +34,11 @@ private func generatePrismForwards(max: UInt64): Tokens {
 // One `pinPrismForwardK` declaration:
 //   public func pinPrismForwardK<S, T1..Tk, A1..Ak, B>(
 //       sourceThunk: () -> S,
-//       fwdI: (Ti) -> Either<Ti, Ai>,   // I = 1..k
+//       fwdI: (Ti) -> Option<Ai>,        // I = 1..k
 //       run0: (S) -> T1,
 //       runI: (Ai) -> T(i+1),           // I = 1..k-1
 //       contK: (Ak) -> B
-//   ): (S) -> Either<S, B>
+//   ): (S) -> Option<B>
 //   { s: S => match (fwd1(run0(s))) { case Right(a1) => ... Right<S, B>(contK(aK)) ... } }
 private func prismForwardDecl(k: UInt64): Tokens {
     let s = idTok("S")
@@ -61,7 +61,7 @@ private func prismForwardDecl(k: UInt64): Tokens {
         let ti = idTok("T${i}")
         let ai = idTok("A${i}")
         let fwdI = idTok("fwd${i}")
-        params.add(quote($fwdI: ($ti) -> Either<$ti, $ai>))
+        params.add(quote($fwdI: ($ti) -> Option<$ai>))
     }
     let t1 = idTok("T1")
     let run0 = idTok("run0")
@@ -82,7 +82,7 @@ private func prismForwardDecl(k: UInt64): Tokens {
         @Frozen
         public func $fnId<$(commaSeparated(typeParams))>(
             $(commaSeparated(params))
-        ): ($s) -> Either<$s, $b> {
+        ): ($s) -> Option<$b> {
             { s: $s =>
                 $body
             }
@@ -95,7 +95,7 @@ private func prismForwardDecl(k: UInt64): Tokens {
 private func buildPrismPyramid(k: UInt64, s: Token, b: Token): Tokens {
     let contK = idTok("cont${k}")
     let aK = idTok("a${k}")
-    var inner = quote(Right<$s, $b>($contK($aK)))
+    var inner = quote(Some<$b>($contK($aK)))
     var i = k
     while (i >= 1) {
         let ai = idTok("a${i}")
@@ -110,8 +110,8 @@ private func buildPrismPyramid(k: UInt64, s: Token, b: Token): Tokens {
         }
         inner = quote(
             match ($probe) {
-                case Right($ai) => $inner
-                case Left(_) => Left<$s, $b>(s)
+                case Some($ai) => $inner
+                case None => None
             }
         )
         i = i - 1

@@ -485,8 +485,8 @@ private struct EnumCaseOptic {
     }
 }
 
-// Payloadless case: Unit-focus prism — Right(()) when the source is this
-// case, Left(source) otherwise; the backward rebuilds the case. A `?.Case`
+// Payloadless case: Unit-focus prism — Some(()) when the source is this
+// case, None otherwise; the backward rebuilds the case. A `?.Case`
 // read therefore doubles as a match check.
 //
 // Multi-payload case: prism whose focus is the tuple of payloads, so
@@ -499,8 +499,8 @@ private func enumCaseOptic(c: Constructor, fullTypeId: Tokens): EnumCaseOptic {
     let isEmpty = segs.size == 0 || (segs.size == 1 && segs[0].size == 0)
     if (isEmpty) {
         let fwdArms = quote(
-            case $caseId => Right<$fullTypeId, Unit>(())
-            case _ => Left<$fullTypeId, Unit>(source)
+            case $caseId => Some(())
+            case _ => None
         )
         let bwdArms = quote(
             case $caseId => $caseId
@@ -527,8 +527,8 @@ private func enumCaseOptic(c: Constructor, fullTypeId: Tokens): EnumCaseOptic {
         }
         let wildcardList = commaSeparated(wildcards)
         let fwdArms = quote(
-            case $caseId($binderList) => Right<$fullTypeId, $focusTuple>($tupleLit)
-            case _ => Left<$fullTypeId, $focusTuple>(source)
+            case $caseId($binderList) => Some<$focusTuple>($tupleLit)
+            case _ => None
         )
         let bwdArms = quote(
             case $caseId($wildcardList) => match (payload) { case ($binderList) => $caseId($binderList) }
@@ -539,8 +539,8 @@ private func enumCaseOptic(c: Constructor, fullTypeId: Tokens): EnumCaseOptic {
     let (payloadType, _) = parseTypeFragment(tokensOf(segs[0]))
     let binder = Token(IDENTIFIER, "__payload_${caseId.value}")
     let fwdArms = quote(
-        case $caseId($binder) => Right<$fullTypeId, $payloadType>($binder)
-        case _ => Left<$fullTypeId, $payloadType>(source)
+        case $caseId($binder) => Some<$payloadType>($binder)
+        case _ => None
     )
     let bwdArms = quote(
         case $caseId(_) => $caseId(payload)
@@ -572,7 +572,7 @@ private func deriveEnumOptics(e: EnumDecl): Tokens {
 
         implDecls.addContra(FuncDecl(quote(
             @Frozen
-            public func $fwdId(source: $fullTypeId): Either<$fullTypeId, $(desc.focusType)> {
+            public func $fwdId(source: $fullTypeId): Option<$(desc.focusType)> {
                 match (source) {
                     $(desc.fwdArms)
                 }
@@ -594,7 +594,7 @@ private func deriveEnumOptics(e: EnumDecl): Tokens {
         // Interface signatures mirror the impls (bodies dropped).
         implSigDecls.addContra(FuncDecl(quote(
             @Frozen
-            func $fwdId(source: $fullTypeId): Either<$fullTypeId, $(desc.focusType)>
+            func $fwdId(source: $fullTypeId): Option<$(desc.focusType)>
         )))
         implSigDecls.addContra(FuncDecl(quote(
             @Frozen

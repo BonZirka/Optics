@@ -6,13 +6,13 @@ import std.collection.*
 sealed interface __Stdlib_optics_impl<T> {
     // Array<T>.at(n)
     @Frozen
-    func __method_at_impl_forward(_: RegistryMagical<Array<T>>, n: Int64): (Array<T>) -> Either<Array<T>, T>
+    func __method_at_impl_forward(_: RegistryMagical<Array<T>>, n: Int64): (Array<T>) -> Option<T>
     @Frozen
     func __method_at_impl_backward(_: RegistryMagical<Array<T>>, n: Int64): (Array<T>, T) -> Array<T>
 
     // Array<T>.selectFirst((T) -> Bool)
     @Frozen
-    func __method_selectFirst_impl_forward(_: RegistryMagical<Array<T>>, cond: (T) -> Bool): (Array<T>) -> Either<Array<T>, T>
+    func __method_selectFirst_impl_forward(_: RegistryMagical<Array<T>>, cond: (T) -> Bool): (Array<T>) -> Option<T>
     @Frozen
     func __method_selectFirst_impl_backward(_: RegistryMagical<Array<T>>, cond: (T) -> Bool): (Array<T>, T) -> Array<T>
 }
@@ -53,12 +53,12 @@ extend <T> RegistryMagical<Array<T>> <: __Stdlib_suboptics_accessors<T> {
 }
 extend <T> RegistryAffines<Array<T>> <: __Stdlib_optics_impl<T> {
     @Frozen
-    public func __method_at_impl_forward(_: RegistryMagical<Array<T>>, n: Int64): (Array<T>) -> Either<Array<T>, T> {
+    public func __method_at_impl_forward(_: RegistryMagical<Array<T>>, n: Int64): (Array<T>) -> Option<T> {
         { source: Array<T> => 
             if (let Some(focus) <- source.get(n)) {
-                Right(focus)
+                Some(focus)
             } else {
-                Left(source)
+                None
             }
         }
     }
@@ -77,14 +77,14 @@ extend <T> RegistryAffines<Array<T>> <: __Stdlib_optics_impl<T> {
         }
     }
     @Frozen
-    public func __method_selectFirst_impl_forward(_: RegistryMagical<Array<T>>, cond: (T) -> Bool): (Array<T>) -> Either<Array<T>, T> {
+    public func __method_selectFirst_impl_forward(_: RegistryMagical<Array<T>>, cond: (T) -> Bool): (Array<T>) -> Option<T> {
         { source: Array<T> => 
             for (x in source) {
                 if (cond(x)) {
-                    return Right(x)
+                    return Some(x)
                 }
             }
-            Left(source)
+            None
         }
     }
     @Frozen

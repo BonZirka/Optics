@@ -44,8 +44,8 @@ public func __downcast_method_coerce<T, G>(_: RegistryMagical<T>, _: RegistryMag
 
 public struct RegistryIsos<T>      {} // (a) -> b, (b) -> a
 public struct RegistryLenses<T>    {} // (a) -> b, (a, b) -> a
-public struct RegistryPrisms<T>    {} // (a) -> Either a b, (b) -> a
-public struct RegistryAffines<T>   {} // (a) -> Either a b, (a, b) -> a
+public struct RegistryPrisms<T>    {} // (a) -> Option b, (b) -> a
+public struct RegistryAffines<T>   {} // (a) -> Option b, (a, b) -> a
 public struct RegistrySetters<T>   {} // (a) -> a, (a, (b) -> b) -> a
 ```
 
@@ -75,7 +75,7 @@ the macro cannot know a segment's kind when it emits the call — it emits the
 same `currMagical.__downcast(currMagical)` for every derived segment and
 lets the receiver's type answer. The kind registries exist because so many
 decisions key on the kind once it *is* known: which impl members may resolve
-(a lens forward has no `Either` to unwrap; a prism's does), which row of the
+(a lens forward has no `Option` to unwrap; a prism's does), which row of the
 [composition table](../api/composition.md#the-composition-table) answers a
 compose call, which join `opticsUpcast` computes, and — on the fused path —
 whether an operator mark is legal at all. A single registry per type would
