@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-09-25 — breaking: macro names shortened
+
+- `@Lucida(...)` → `@f(...)`
+- `@LucidaOptic[...]` → `@Optic[...]`
+- `@Optic(o)` → `@use(o)` (run this replacement first — `@Optic` is reused
+  for the declaration macro)
+- `@Type(T)` → `@ty(T)` (`type` is a Cangjie keyword)
+- `@TypeOf(expr)` → `@typeof(expr)`
+- `@DeriveOptics` unchanged
+
+Migration is mechanical — replace old names in this order: `@LucidaOptic` →
+`@optic`, `@TypeOf` → `@typeof`, `@Type` → `@ty`, `@Optic` → `@use`,
+`@Lucida` → `@f`. All 193 law tests and the 15 diagnostics probes pass under
+the new names.
+
 ## 2026-09-25 — breaking: `Either<S, A>` replaced by `Option<A>`
 
 Partial reads now answer in the standard `Option<T>` everyone knows —

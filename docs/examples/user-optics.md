@@ -5,7 +5,7 @@ Every optic so far was minted by a derive: [deriving](deriving.md) sat
 per single-payload case, an iso per one-field wrapper. That covers what a
 declaration already exposes. When the part you want is none of those — an
 array slot at an index, a type you cannot or would rather not derive — you
-declare the optic yourself. `@LucidaOptic` declares a first-class optic for
+declare the optic yourself. `@Optic` declares a first-class optic for
 your own types: you name it, pick the kind, write its two halves. From then
 on it is a chain segment like any derived one, marked `.` or `?.` like any
 other ([chains](chains.md)).
@@ -33,7 +33,7 @@ of the lambdas the declaration compiles to:
 - `focus` names the new focus — the last slot of a `backward`, and the only
   one for the kinds that rebuild from the part alone.
 - `args:` names join them, in scope in both bodies. An arg cannot be called
-  `src`, `_src` or `focus` — those slots are fixed (`@LucidaOptic: arg name 'src' is reserved`).
+  `src`, `_src` or `focus` — those slots are fixed (`@Optic: arg name 'src' is reserved`).
 
 The kind decides each body's shape:
 
@@ -46,7 +46,7 @@ The kind decides each body's shape:
 
 The backward column is the introduction's rebuild arrow: a `Prism` or `Iso`
 rebuilds the whole from the part alone, so its backward has no `src` slot,
-and a body that mentions one is rejected — `@LucidaOptic: backward of kind 'Prism' has no src slot` (hint: `Lens/Affine backwards receive src; Prism/Iso rebuild from focus`).
+and a body that mentions one is rejected — `@Optic: backward of kind 'Prism' has no src slot` (hint: `Lens/Affine backwards receive src; Prism/Iso rebuild from focus`).
 The generated members are public whatever the carrier's own visibility — the
 carrier only names the optic.
 
@@ -62,7 +62,7 @@ public struct UBox {
     public UBox(public let v: Int64) { }
 }
 
-@LucidaOptic[
+@Optic[
     source: UBox
     focus: Int64
     kind: Lens
@@ -80,13 +80,13 @@ struct would rebuild its other fields from `src`). `.` marks the calls:
 
 ```cangjie
 let b = UBox(3)
-@Assert(@Lucida(b.uBoxLens()) == 3)
+@Assert(@f(b.uBoxLens()) == 3)
 ```
 
 The write returns a new box with the focus replaced — nothing mutates:
 
 ```cangjie
-@Assert(@Lucida(b.uBoxLens() <- 5).v == 5)
+@Assert(@f(b.uBoxLens() <- 5).v == 5)
 ```
 
 ### A prism
@@ -97,7 +97,7 @@ public enum UMaybe {
     | UNothing
 }
 
-@LucidaOptic[
+@Optic[
     source: UMaybe
     focus: Int64
     kind: Prism
@@ -116,7 +116,7 @@ calls, and a read is an `Option`:
 ```cangjie
 let m = UMaybe.UJust(7)
 var ok = false
-match (@Lucida(m?.uJust())) {
+match (@f(m?.uJust())) {
     case Some(r) => ok = (r == 7)
     case _ => ()
 }
@@ -128,7 +128,7 @@ itself, not a stand-in:
 
 ```cangjie
 let m = UMaybe.UNothing
-let fwd = @Lucida(m?.uJust())
+let fwd = @f(m?.uJust())
 var ok = false
 match (fwd) {
     case None =>
@@ -145,7 +145,7 @@ write returns the source unchanged — the miss is an identity.
 ### An affine
 
 ```cangjie
-@LucidaOptic[
+@Optic[
     source: Array<T>
     focus: T
     kind: Affine
@@ -168,7 +168,7 @@ nothing mutates.
 
 ```cangjie
 let xs = [1, 2, 3]
-let updated = @Lucida(xs?.at2(1) <- 9)
+let updated = @f(xs?.at2(1) <- 9)
 @Assert(updated[1] == 9)
 @Assert(updated[0] == 1 && updated[2] == 3)
 ```
@@ -178,7 +178,7 @@ whole:
 
 ```cangjie
 let xs = [1, 2, 3]
-let updated = @Lucida(xs?.at2(10) <- 9)
+let updated = @f(xs?.at2(10) <- 9)
 @Assert(updated == xs)
 ```
 
@@ -189,7 +189,7 @@ user affine under `?.` and a user lens under `.`:
 
 ```cangjie
 let bs = [UBox(1), UBox(2)]
-let updated = @Lucida(bs?.at2(0).uBoxLens() <- 7)
+let updated = @f(bs?.at2(0).uBoxLens() <- 7)
 @Assert(updated[0].v == 7 && updated[1].v == 2)
 ```
 
@@ -204,10 +204,10 @@ it exactly as it holds a derived one: `.` on the total kinds (`Lens`, `Iso`),
 `?.` on the partial ones (`Prism`, `Affine`) — every call on this page
 follows that. A mismatch fails to compile:
 
-- `.` on a user `Prism` or `Affine` — `@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Option, so a total read is impossible. Use '?.' and match Some/None.`
-- `?.` on a user `Lens` or `Iso` — `@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.`
+- `.` on a user `Prism` or `Affine` — `@f: '.' on a partial optic (Prism/Affine) — its forward returns Option, so a total read is impossible. Use '?.' and match Some/None.`
+- `?.` on a user `Lens` or `Iso` — `@f: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.`
 
-Every diagnostic `@Lucida` can produce is collected in
+Every diagnostic `@f` can produce is collected in
 [diagnostics](../api/diagnostics.md).
 
 ## Generics
@@ -216,7 +216,7 @@ The type parameters live on the carrier — that generic list is the only
 source of them:
 
 ```cangjie
-@LucidaOptic[source: GBox<T>, focus: T, kind: Lens, forward: { src.v }, backward: { GBox(focus) }]
+@Optic[source: GBox<T>, focus: T, kind: Lens, forward: { src.v }, backward: { GBox(focus) }]
 struct guBoxLens<T> {}
 ```
 
@@ -226,8 +226,8 @@ infers the parameter from the receiver:
 
 ```cangjie
 let gb = GBox<Int64>(5)
-@Assert(@Lucida(gb.guBoxLens()) == 5)
-let updated = @Lucida(gb.guBoxLens() <- 9)
+@Assert(@f(gb.guBoxLens()) == 5)
+let updated = @f(gb.guBoxLens() <- 9)
 @Assert(updated.v == 9)
 ```
 
@@ -241,20 +241,20 @@ public struct GPair<T, U> {
 ```
 
 ```cangjie
-@LucidaOptic[source: GPair<T, U>, focus: T, kind: Lens, forward: { src.first }, backward: { GPair(focus, src.second) }]
+@Optic[source: GPair<T, U>, focus: T, kind: Lens, forward: { src.first }, backward: { GPair(focus, src.second) }]
 struct gpairFirst<T, U> {}
 ```
 
 ```cangjie
 let gp = GPair<Int64, String>(1, "a")
-@Assert(@Lucida(gp.gpairFirst()) == 1)
-let updated = @Lucida(gp.gpairFirst() <- 2)
+@Assert(@f(gp.gpairFirst()) == 1)
+let updated = @f(gp.gpairFirst() <- 2)
 @Assert(updated.first == 2)
 @Assert(updated.second == "a")
 ```
 
 A constraint on the carrier is rejected —
-`@LucidaOptic: generic constraints ('where' clauses) are not supported`
+`@Optic: generic constraints ('where' clauses) are not supported`
 (hint: `Remove the constraint or hand-write the optics`) — the same rule the
 derive follows.
 
@@ -262,7 +262,7 @@ derive follows.
 
 > **Gotcha:** The carrier struct is empty — it only carries the name and
 > type parameters. Any member is rejected
-> (`@LucidaOptic: carrier struct must be empty`). `src`/`focus` are reserved
+> (`@Optic: carrier struct must be empty`). `src`/`focus` are reserved
 > for the generated lambda slots.
 
 ## Where to go next
@@ -276,4 +276,4 @@ derive follows.
   user-declared, in one chain.
 - [First-class optics](../api/first-class.md) — the values a sourceless
   chain mints, and the accessors they answer to.
-- [The DSL reference](../api/dsl.md) — every `@Lucida` form on one page.
+- [The DSL reference](../api/dsl.md) — every `@f` form on one page.

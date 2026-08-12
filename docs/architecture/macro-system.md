@@ -1,9 +1,9 @@
 # The macro system
 
-Everything the `@Lucida` DSL does — the chains of the [DSL reference](../api/dsl.md),
+Everything the `@f` DSL does — the chains of the [DSL reference](../api/dsl.md),
 the segments [deriving](../examples/deriving.md) and
 [user-declared optics](../examples/user-optics.md) introduce — exists because
-three macros emit code for it: `@DeriveOptics`, `@LucidaOptic` and `@Lucida`.
+three macros emit code for it: `@DeriveOptics`, `@Optic` and `@f`.
 They are procedure macros: functions from tokens to tokens that run at compile
 time. Cangjie hands the macro the token stream of what it annotates; the macro
 parses it into its own small syntax trees, decides what the code should be,
@@ -17,15 +17,15 @@ The three split the work the way the user-facing tiers do:
 - `@DeriveOptics` inspects a type declaration and emits the optics its fields
   and cases expose. Its output is a fixed scheme of `__`-prefixed members on
   the registry types ([deriving](../examples/deriving.md) shows the surface).
-- `@LucidaOptic` takes a declaration whose body is a spec — source, focus,
+- `@Optic` takes a declaration whose body is a spec — source, focus,
   kind, two bodies — and emits the members that turn the carrier's name into
   a chain segment.
-- `@Lucida` takes a chain expression and emits the walk that evaluates it:
+- `@f` takes a chain expression and emits the walk that evaluates it:
   either a fused straight-line pass or a library composition, segment by
   segment.
 
-Around them sit two smaller pieces of the same package: `@Type`, `@TypeOf`
-and `@Optic`, which are only valid inside `@Lucida` and exist so the outer
+Around them sit two smaller pieces of the same package: `@ty`, `@typeof`
+and `@use`, which are only valid inside `@f` and exist so the outer
 macro can recognize anchors in the token stream; and `@GenerateCompositions`,
 which fills the `__OpticsCompositions` table the composed path walks
 ([composition](../api/composition.md) documents it). This page covers the
@@ -235,19 +235,19 @@ from the declaration that caused it. The rejection moves the failure to the
 declaration, with the escape hatch in the hint: hand-write the optics.
 
 Every emitted member — interface signatures and implementations alike —
-carries `@Frozen`. The macro's own generated call sites (in `@Lucida`
+carries `@Frozen`. The macro's own generated call sites (in `@f`
 expansions across other modules) address these members by exact name and
 shape; `@Frozen` is the language's seal that the member cannot be redefined
 or patched after compilation, so the generated code and the emitted surface
 cannot drift apart.
 
-## @LucidaOptic
+## @Optic
 
 A user-declared optic is spelled as a bracket of fields hung on an empty
 carrier struct:
 
 ```cangjie
-@LucidaOptic[source: UBox, focus: Int64, kind: Lens, forward: { src.v }, backward: { UBox(focus) }]
+@Optic[source: UBox, focus: Int64, kind: Lens, forward: { src.v }, backward: { UBox(focus) }]
 struct uBoxLens {}
 ```
 
@@ -340,7 +340,7 @@ extend header would render `<T U>` — not Cangjie. The workaround is to
 comma-join the identifiers explicitly (defensively skipping any comma or
 newline tokens that do slip through); single-parameter carriers are
 unaffected either way. The same API quirk appears on the parsing side of
-`@Lucida` — type arguments reconstructed from a parsed call splice with
+`@f` — type arguments reconstructed from a parsed call splice with
 `&`-separated supertype-list semantics (`&`-lists are Cangjie's
 supertype-constraint spelling, so a reconstructed argument list renders
 `T & U` where `T, U` is needed), so the macro re-joins them with
@@ -348,7 +348,7 @@ commas too. The general lesson the two workarounds share: token-level APIs
 return parameter lists without their separators, and every re-emission must
 re-join them.
 
-## @Lucida
+## @f
 
 The evaluation macro (`eval_macro.cj`, with the chain grammar in
 `parsing.cj`) is the walk. Its entry point `parseOpticalExpression` parses
@@ -359,7 +359,7 @@ list once and produces the result.
 ### Parsing
 
 The entry point distinguishes read from write by scanning the token stream
-for `<-`: `@Lucida(o.x <- v)` splits at the arrow into a chain and a value.
+for `<-`: `@f(o.x <- v)` splits at the arrow into a chain and a value.
 Both halves then go through the same trick: the tokens are wrapped in a
 synthesized `dummy(...)` call and handed to the expression parser, so the
 macro gets real Cangjie expression trees — `MemberAccess`, `OptionalExpr`,
@@ -374,7 +374,7 @@ kinds. Two parse-time decisions happen here:
 - **The anchor is implicit.** A value-rooted chain like `o.customer.name`
   has no macro call at its head, so the tail of the decomposition (which is
   the chain's *root*) is wrapped in a `TypeOf` node over the leading
-  expression. The user-facing rule "the macro inserts the `@TypeOf` anchor
+  expression. The user-facing rule "the macro inserts the `@typeof` anchor
   for you" is this step.
 - **`coerce<T>()` is fixed-total.** A `?.` in front of a coercion is rejected
   at parse time — a total optic's forward cannot miss, so there is no
@@ -386,9 +386,9 @@ chain order. The node type is the macro's whole intermediate language:
 ```cangjie
 enum CompositionNode {
     | Derived(Token, OpticKind)        // kind set by parser: . -> Lens, ?. -> Prism
-    | Type(RefExpr)                    // start anchor @Type(T)
-    | TypeOf(Tokens)                   // start anchor @TypeOf(x) or auto-derived from leading identifier
-    | Optic(Token)                     // start anchor @Optic(o); forces fallback
+    | Type(RefExpr)                    // start anchor @ty(T)
+    | TypeOf(Tokens)                   // start anchor @typeof(x) or auto-derived from leading identifier
+    | Optic(Token)                     // start anchor @use(o); forces fallback
     | Coerce(TypeNode)                 // kind = Iso
     | UserDefined(Token, ArrayList<TypeNode>, ArrayList<Argument>, Bool)
     // Bool = total: operator-derived call-site expectation.
@@ -422,11 +422,11 @@ continuation's payload is the same five-slot tuple throughout the walk:
 
 Each node kind has an `unwrap*` helper that emits its bindings and calls the
 continuation. A start anchor emits `magic<T>()` (or `magic({ => expr })` for
-`@TypeOf`); a derived segment downcasts, binds its two halves, and moves the
+`@typeof`); a derived segment downcasts, binds its two halves, and moves the
 currency through its accessor; a `Coerce` node mints the target registry and
 resolves the iso members; a user-defined segment resolves its
 `__method_*` members, passing the call arguments through. A spliced
-`@Optic(o)` is the one node the composed path cannot fold — a first-class
+`@use(o)` is the one node the composed path cannot fold — a first-class
 value already carries its composed halves, so the walk binds them directly
 and forces the chain off fusion (below).
 
@@ -438,7 +438,7 @@ optic or the baked `Setter`. The whole expansion is wrapped in an
 immediately-invoked lambda, so the per-segment `let` bindings never leak
 into the user's scope.
 
-For `@Lucida(o.customer.name)` the composed path comes out as:
+For `@f(o.customer.name)` the composed path comes out as:
 
 ```cangjie
 { =>
@@ -475,7 +475,7 @@ sequence, with the shape chosen by the chain's partial segments
 ([the fusion walk](fusion-walk.md) documents the emission). Fusion is a
 code-shape decision, not a semantic one, and the gate is small:
 
-- the chain must not splice an `@Optic` value anywhere — a first-class value
+- the chain must not splice an `@use` value anywhere — a first-class value
   already carries composed closures, so there is nothing to inline;
 - every segment after the anchor must be derived, user-defined, or a
   coercion — the node kinds whose members the macro can address by name;
@@ -538,7 +538,7 @@ shadowing window there is empty.
 Two more names are reserved by parsing rather than emission. `coerce` is a
 fixed chain segment — any `coerce<T>()` call in a chain becomes a coercion
 node, so a user method optic named `coerce` cannot be called in a chain. And
-`@LucidaOptic` reserves `src`, `focus` and `_src` as arg names, because they
+`@Optic` reserves `src`, `focus` and `_src` as arg names, because they
 are the slots of the generated lambdas.
 
 The single sustainable answer is the one already in force: keep generated

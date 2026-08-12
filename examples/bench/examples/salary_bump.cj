@@ -183,7 +183,7 @@ var test2: Option<DataModel> = None
 // 
 //     @Bench
 //     func opticsBaseline(): Unit {
-//         let test = @Lucida(department
+//         let test = @f(department
 //             .employees
 //             .selectFirst({e => e.name == "Mark"})
 //             .salary
@@ -219,7 +219,7 @@ class BenchBumpSerialized {
 
     @Bench
     func opticsBaseline(): Unit {
-        test2 = @Lucida[unfuse](serialized.serialization<Department>()
+        test2 = @f[unfuse](serialized.serialization<Department>()
             .information.address.city <- "Melbourne")
     }
 

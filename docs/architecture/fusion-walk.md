@@ -1,6 +1,6 @@
 # The fused walk
 
-When `@Lucida` evaluates a chain — a read like `o.customer.name` or a write
+When `@f` evaluates a chain — a read like `o.customer.name` or a write
 like `o.customer.name <- "Denver"` — the default emission is the *fused
 walk*: the macro binds each segment's forward and backward halves once as
 locals, then emits one straight-line pass over them. The big idea is that a
@@ -362,7 +362,7 @@ can bind.
 
 The gate itself is small (`eval_macro.cj`): a read or write fuses when
 `[unfuse]` is absent and the chain passes `isFusible` — the first node must
-be an anchor that is not an `@Optic` splice, and every segment after it must
+be an anchor that is not an `@use` splice, and every segment after it must
 be derived, user-defined, or a coercion (the emitters restate this check as
 `isFusableChain`). Shape selection then runs inside the
 emitters: an all-total read walks through `pinForward`; a read with partial
@@ -378,14 +378,14 @@ The triggers, in the order the source checks them:
   composed path. It changes the code shape, not the results
   ([composition](../api/composition.md#when-to-unfuse) shows the unfused read
   and write expansions, and covers when to reach for it deliberately).
-- **An `@Optic` splice anywhere in the chain** — at the head (`isFusible`
+- **An `@use` splice anywhere in the chain** — at the head (`isFusible`
   rejects an `Optic` first node) or mid-chain (the segment-kind check
   rejects it past the anchor). A first-class value already carries its
   composed halves — there are no chain segments to bind, so there is nothing
   to fuse; the walk binds the value's halves directly and composes from there ([registry plumbing](registry-plumbing.md) shows the splice
   emission). Of the kinds a viable chain can carry, this is the only one the
   "derived, user-defined, or coercion" check ever rejects: mid-chain
-  `@Type`/`@TypeOf` parse fine but fail outright as errors in the walk's
+  `@ty`/`@typeof` parse fine but fail outright as errors in the walk's
   dispatch ([the DSL reference](../api/dsl.md#starting-a-chain) documents
   that failure) — they never reach the shape decision at all.
 - **More than N partial segments in a read** — the pinned prism slots run
@@ -398,7 +398,7 @@ The triggers, in the order the source checks them:
   name, and only they bind. Anything else composes.
 
 One form never reaches the gate at all: a sourceless chain — rooted at
-`@Type`, `@TypeOf` or `@Optic` with no value to apply to — mints a
+`@ty`, `@typeof` or `@use` with no value to apply to — mints a
 first-class optic or a `Setter` instead of evaluating a focus. The fused
 walkers exist to apply a chain to a source and produce a result; a
 sourceless chain stops short of applying, and its composed halves go to

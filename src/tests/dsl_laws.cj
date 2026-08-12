@@ -61,16 +61,16 @@ class DslLaws {
     @TestCase
     func deepChainForward(): Unit {
         let o = sampleOrder()
-        @Assert(@Lucida(o.customer.address.city.name) == "Atlanta")
-        @Assert(@Lucida(o.customer.address.city.zip) == 30301)
-        @Assert(@Lucida(o.id) == 1)
+        @Assert(@f(o.customer.address.city.name) == "Atlanta")
+        @Assert(@f(o.customer.address.city.zip) == 30301)
+        @Assert(@f(o.id) == 1)
     }
 
     // ===== deep chain: write returns updated copy; original untouched =====
     @TestCase
     func deepChainBackwardIsImmutable(): Unit {
         let o = sampleOrder()
-        let updated = @Lucida(o.customer.address.city.name <- "Denver")
+        let updated = @f(o.customer.address.city.name <- "Denver")
         @Assert(updated.customer.address.city.name == "Denver")
         // original immutable
         @Assert(o.customer.address.city.name == "Atlanta")
@@ -84,8 +84,8 @@ class DslLaws {
     @TestCase
     func deepChainRoundTrip(): Unit {
         let o = sampleOrder()
-        let current = @Lucida(o.customer.address.city.zip)
-        let rewritten = @Lucida(o.customer.address.city.zip <- current)
+        let current = @f(o.customer.address.city.zip)
+        let rewritten = @f(o.customer.address.city.zip <- current)
         @Assert(ordersEqualLeafwise(rewritten, o))
     }
 
@@ -93,8 +93,8 @@ class DslLaws {
     @TestCase
     func doubleSetIdempotent(): Unit {
         let o = sampleOrder()
-        let once = @Lucida(o.id <- 42)
-        let twice = @Lucida(once.id <- 42)
+        let once = @f(o.id <- 42)
+        let twice = @f(once.id <- 42)
         @Assert(ordersEqualLeafwise(twice, once))
     }
 
@@ -102,7 +102,7 @@ class DslLaws {
     @TestCase
     func stdlibAtLaws(): Unit {
         let nums = [10, 20, 30]
-        let bumped = @Lucida(nums?.at(1) <- 99)
+        let bumped = @f(nums?.at(1) <- 99)
         @Assert(bumped[0] == 10)
         @Assert(bumped[1] == 99)
         @Assert(bumped[2] == 30)
@@ -110,18 +110,18 @@ class DslLaws {
         // immutability: the caller's array must be untouched (CoW aliasing bug class)
         @Assert(nums[1] == 20)
 
-        let untouched = @Lucida(nums?.at(7) <- 99)
+        let untouched = @f(nums?.at(7) <- 99)
         @Assert(untouched.size == 3)
         @Assert(untouched[0] == 10 && untouched[1] == 20 && untouched[2] == 30)
 
         // source-form read returns Option: Some(focus) / None
         var leftOk = false
-        if (let None <- @Lucida(nums?.at(7))) {
+        if (let None <- @f(nums?.at(7))) {
             leftOk = true
         }
         @Assert(leftOk)
         var rightOk = false
-        if (let Some(fv) <- @Lucida(nums?.at(0))) {
+        if (let Some(fv) <- @f(nums?.at(0))) {
             rightOk = fv == 10
         }
         @Assert(rightOk)
@@ -136,12 +136,12 @@ class DslLaws {
         staff.add(Employee2("other", 300))
         let arr = staff.toArray()
 
-        let raised = @Lucida(arr?.selectFirst({ e: Employee2 => e.name == "dup" }).salary <- 999)
+        let raised = @f(arr?.selectFirst({ e: Employee2 => e.name == "dup" }).salary <- 999)
         @Assert(raised[0].salary == 999)
         @Assert(raised[1].salary == 200)
         @Assert(raised[2].salary == 300)
 
-        let miss = @Lucida(arr?.selectFirst({ e: Employee2 => e.name == "nobody" }).salary <- 999)
+        let miss = @f(arr?.selectFirst({ e: Employee2 => e.name == "nobody" }).salary <- 999)
         @Assert(miss.size == 3)
         @Assert(miss[0].salary == 100)
         @Assert(miss[1].salary == 200)
@@ -154,15 +154,15 @@ class DslLaws {
     @TestCase
     func coerceUnwrapsPayload(): Unit {
         let m = Meters(7)
-        let unwrapped = @Lucida(m.coerce<Int64>())
+        let unwrapped = @f(m.coerce<Int64>())
         @Assert(unwrapped == 7)
     }
 
-    // ===== @TypeOf setter form constructs a reusable Setter optic =====
+    // ===== @typeof setter form constructs a reusable Setter optic =====
     @TestCase
     func typeOfSetterForm(): Unit {
         let c = City("Atlanta", 30301)
-        let setter = @Lucida(@TypeOf(c).zip <- 99999)
+        let setter = @f(@typeof(c).zip <- 99999)
         let rewritten = setter.modify(c, { _: Int64 => 99999 })
         @Assert(rewritten.zip == 99999)
         // source immutable
@@ -173,11 +173,11 @@ class DslLaws {
     @TestCase
     func aggregateAndEnumMixSanity(): Unit {
         let holder = Order(3, Customer("x", Address(City("y", 1))))
-        let renamed = @Lucida(holder.customer.name <- "y")
+        let renamed = @f(holder.customer.name <- "y")
         @Assert(renamed.customer.name == "y")
 
         let sq = Shape.Square(5)
-        let kept = @Lucida(sq?.Circle.n <- 77)
+        let kept = @f(sq?.Circle.n <- 77)
         var keptSquare = false
         match (kept) {
             case Square(v) => keptSquare = v == 5

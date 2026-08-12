@@ -1,6 +1,6 @@
 # First-class optics
 
-Every optic in this library is a plain value. Behind the `@Lucida` chain
+Every optic in this library is a plain value. Behind the `@f` chain
 syntax is a model of five structs — `Iso`, `Lens`, `Prism`, `Affine`,
 `Setter` — each carrying its halves (the read arrow and the rebuild arrow)
 as public members. First-class means exactly that: a focus you can hold in a
@@ -8,10 +8,10 @@ as public members. First-class means exactly that: a focus you can hold in a
 fits — without the DSL naming it for you.
 
 The two layers meet in both directions. A chain stays syntax:
-`@Lucida(o.customer.name <- "Ada")` names a focus and uses it in one
+`@f(o.customer.name <- "Ada")` names a focus and uses it in one
 expression. The sourceless forms hand the same focus over as a value —
-`@Lucida(@TypeOf(c).zip)` mints a lens you keep — and a value you hold
-re-enters any chain as a segment: `@Lucida(@Optic(myLens).field)` ([the DSL
+`@f(@typeof(c).zip)` mints a lens you keep — and a value you hold
+re-enters any chain as a segment: `@f(@use(myLens).field)` ([the DSL
 reference](dsl.md)). This page is the reference for the
 values themselves: the five types, their construction, and the uniform
 accessors every kind answers to.
@@ -139,15 +139,15 @@ ignores it — a setter *is* its map.
 
 This is the entry point the DSL lowers to: each sourceless chain form
 materializes the two halves and hands them to `perform` — the read form
-`@Lucida(@TypeOf(c).zip)` mints a lens, the partial form
-`@Lucida(@TypeOf(circleVal)?.Circle)` mints an affine, and the write form
-`@Lucida(@TypeOf(c).zip <- 99999)` mints a setter. The suite pins the
+`@f(@typeof(c).zip)` mints a lens, the partial form
+`@f(@typeof(circleVal)?.Circle)` mints an affine, and the write form
+`@f(@typeof(c).zip <- 99999)` mints a setter. The suite pins the
 affine case:
 
 ```cangjie
 let circleVal = Shape.Circle(Nested(1))
-// Sourceless @TypeOf form constructs the first-class affine itself.
-let aff = @Lucida(@TypeOf(circleVal)?.Circle)
+// Sourceless @typeof form constructs the first-class affine itself.
+let aff = @f(@typeof(circleVal)?.Circle)
 let rebuilt = aff.update(circleVal, Nested(9))
 var rebuiltOk = false
 match (rebuilt) {
@@ -308,9 +308,9 @@ is the affine's.
 
 - [Composition](composition.md) — combining first-class optics, kind by
   kind, on the forward/backward pair above.
-- [The DSL reference](dsl.md) — every `@Lucida` form, including the
-  sourceless `@Type`/`@TypeOf` forms that mint these values.
-- [User-declared optics](../examples/user-optics.md) — `@LucidaOptic`:
+- [The DSL reference](dsl.md) — every `@f` form, including the
+  sourceless `@ty`/`@typeof` forms that mint these values.
+- [User-declared optics](../examples/user-optics.md) — `@Optic`:
   declaring a first-class optic for your own types.
 - [Introduction to optics](../introduction-to-optics.md) — the five kinds
   as ideas: read arrows, rebuild arrows, and why a miss is an identity.

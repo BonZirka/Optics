@@ -148,7 +148,7 @@ public func __bwdApplyTotal<T, S, A>(_: RegistryIsos<T>, backward: (A) -> S, src
     backward(focus)
 }
 
-@Deprecated[message: "@Lucida: '.'-write through a prism — '.'-writes assert a match and would rebuild the source unconditionally on miss. Use '?.' to preserve the source on miss.", strict: true]
+@Deprecated[message: "@f: '.'-write through a prism — '.'-writes assert a match and would rebuild the source unconditionally on miss. Use '?.' to preserve the source on miss.", strict: true]
 public func __bwdApplyTotal<T, S, A>(_: RegistryPrisms<T>, backward: (A) -> S, src: S, focus: A): S {
     backward(focus)
 }
@@ -170,12 +170,12 @@ public func __fwdApplyTotal<T, S, A>(_: RegistryIsos<T>, forward: (S) -> A): (S)
     forward
 }
 
-@Deprecated[message: "@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Option, so a total read is impossible. Use '?.' and match Some/None.", strict: true]
+@Deprecated[message: "@f: '.' on a partial optic (Prism/Affine) — its forward returns Option, so a total read is impossible. Use '?.' and match Some/None.", strict: true]
 public func __fwdApplyTotal<T, S, A>(_: RegistryPrisms<T>, forward: (S) -> Option<A>): (S) -> Option<A> {
     forward
 }
 
-@Deprecated[message: "@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Option, so a total read is impossible. Use '?.' and match Some/None.", strict: true]
+@Deprecated[message: "@f: '.' on a partial optic (Prism/Affine) — its forward returns Option, so a total read is impossible. Use '?.' and match Some/None.", strict: true]
 public func __fwdApplyTotal<T, S, A>(_: RegistryAffines<T>, forward: (S) -> Option<A>): (S) -> Option<A> {
     forward
 }
@@ -188,12 +188,12 @@ public func __fwdApplyPartial<T, S, A>(_: RegistryAffines<T>, forward: (S) -> Op
     forward
 }
 
-@Deprecated[message: "@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.", strict: true]
+@Deprecated[message: "@f: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.", strict: true]
 public func __fwdApplyPartial<T, S, A>(_: RegistryLenses<T>, forward: (S) -> A): (S) -> A {
     forward
 }
 
-@Deprecated[message: "@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.", strict: true]
+@Deprecated[message: "@f: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.", strict: true]
 public func __fwdApplyPartial<T, S, A>(_: RegistryIsos<T>, forward: (S) -> A): (S) -> A {
     forward
 }

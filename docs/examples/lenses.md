@@ -23,18 +23,18 @@ and `.` is the only operator you will need.
 Four levels down sits the customer's city name. One expression reads it:
 
 ```cangjie
-@Assert(@Lucida(o.customer.address.city.name) == "Atlanta")
+@Assert(@f(o.customer.address.city.name) == "Atlanta")
 ```
 
-`@Lucida(...)` evaluates the focus: it walks the chain and evaluates to the
+`@f(...)` evaluates the focus: it walks the chain and evaluates to the
 value at the end — `"Atlanta"` here. Every segment is a field that is always
 there, so the read cannot miss: no `if`, no default, nothing to check.
 
 Any other leaf of the same order reads the same way:
 
 ```cangjie
-@Assert(@Lucida(o.customer.address.city.zip) == 30301)
-@Assert(@Lucida(o.id) == 1)
+@Assert(@f(o.customer.address.city.zip) == 30301)
+@Assert(@f(o.id) == 1)
 ```
 
 ## Writing
@@ -42,12 +42,12 @@ Any other leaf of the same order reads the same way:
 The write form replaces the focus and returns the new whole:
 
 ```cangjie
-let updated = @Lucida(o.customer.address.city.name <- "Denver")
+let updated = @f(o.customer.address.city.name <- "Denver")
 @Assert(updated.customer.address.city.name == "Denver")
 @Assert(o.customer.address.city.name == "Atlanta")
 ```
 
-`@Lucida(<chain> <- <newValue>)` builds a *new* `Order` in which exactly one
+`@f(<chain> <- <newValue>)` builds a *new* `Order` in which exactly one
 leaf differs — everything else is carried over for you: `updated.id` is still
 `1`, `updated.customer.name` is still `"Ada"`, the zip is still `30301`. The
 last assertion is the one to internalize: `updated` says `"Denver"`, the
@@ -58,7 +58,7 @@ in the same suite:
 
 ```cangjie
 let holder = Order(3, Customer("x", Address(City("y", 1))))
-let renamed = @Lucida(holder.customer.name <- "y")
+let renamed = @f(holder.customer.name <- "y")
 @Assert(renamed.customer.name == "y")
 ```
 
@@ -69,10 +69,10 @@ several optics you glue together yourself. The way to see it is a round trip:
 read the focus, write back what you read, and check that nothing changed.
 
 ```cangjie
-let current = @Lucida(o.customer.address.city.zip)
-let rewritten = @Lucida(o.customer.address.city.zip <- current)
-let once = @Lucida(o.id <- 42)
-let twice = @Lucida(once.id <- 42)
+let current = @f(o.customer.address.city.zip)
+let rewritten = @f(o.customer.address.city.zip <- current)
+let once = @f(o.id <- 42)
+let twice = @f(once.id <- 42)
 ```
 
 The suite compares results leaf by leaf (`ordersEqualLeafwise`): `rewritten`
@@ -84,12 +84,12 @@ chain you write with agree — one optic.
 ## Gotchas
 
 > **Gotcha:** Lens writes always rebuild — even over `class` (reference)
-> types, `@Lucida` returns a new object. Nothing mutates. If you need mutable
+> types, `@f` returns a new object. Nothing mutates. If you need mutable
 > update, optics for this DSL are not the tool.
 
 ## Where to go next
 
 - [Introduction to optics](../introduction-to-optics.md) — where the lens
   sits among prisms, affines, isos and setters, and why.
-- [The DSL reference](../api/dsl.md) — every `@Lucida` form on one page.
+- [The DSL reference](../api/dsl.md) — every `@f` form on one page.
 - Next example: [prisms](prisms.md) — for parts that may not be there.

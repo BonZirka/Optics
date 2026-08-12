@@ -1,6 +1,6 @@
 # Internals: reserved names and macro plumbing
 
-The `@Lucida` macros expand **inside your package** — the emitted code has to
+The `@f` macros expand **inside your package** — the emitted code has to
 resolve every library symbol from your own `import lucida.*` /
 `import lucida.macrodsl.*`. Cangjie has no mechanism to hide library members
 from that surface (see the referencing matrix at the bottom), so the plumbing
@@ -26,7 +26,7 @@ is irreducibly public. What makes it safe to ignore is a namespace contract.
 | `RegistryMagical<T>`, `RegistryIsos/Lenses/Prisms/Affines/Setters<T>` | phantom kinds — empty structs whose only job is selecting the right composition row and kind gate at compile time |
 | `magic<T>()`, `magicFirstClass`, `magicFirstClassDowncast` | enter the registry world: mint a phantom for a type or a first-class optic |
 | `__downcast`, `__<name>_optics`, `__<name>_impl_forward/backward` | per-derived-type members the `@DeriveOptics` expansion emits: the registry hop and the halves of each field/case optic |
-| `__method_<name>_impl_forward/backward`, `__method_<name>_optics`, `__downcast_method_<name>` | the same, for optics declared with `@LucidaOptic` |
+| `__method_<name>_impl_forward/backward`, `__method_<name>_optics`, `__downcast_method_<name>` | the same, for optics declared with `@Optic` |
 | `__OpticsCompositions.composeForward/composeBackward/opticsUpcast` | the generated 25-row composition table; `opticsUpcast` returns the lattice meet (the weaker kind) |
 | `__fwdApplyTotal/Partial`, `__bwdApply`, `__bwdApplyTotal` | the kind gates — overload sets that turn a wrong `.`/`?.` mark into a compile error |
 | `pinForward`, `pinBackward`, `pinBackwardSourceless`, `pinPrismForward1..16` | the fused-walk helpers the macro's chains emit calls to; the prism family is generated (`@GeneratePrismForward`) |
@@ -34,7 +34,7 @@ is irreducibly public. What makes it safe to ignore is a namespace contract.
 | `GenerateTupleExtendsLenses`, `GeneratePrismForward`, `GenerateCompositions` | the generation macros; applied inside the library, not meant for external use |
 
 Per-type members are emitted into **your** package by `@DeriveOptics` /
-`@LucidaOptic` — they are part of your type's surface and appear in docs and
+`@Optic` — they are part of your type's surface and appear in docs and
 completion. The `__` prefix is what keeps them from colliding with your own
 names.
 

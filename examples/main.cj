@@ -16,12 +16,12 @@ public struct A {
 
 main() {
     let x = A("Hello")
-    let firstClass = @Lucida(@TypeOf(x).coerce<String>())
-    let setter = @Lucida(@Optic(firstClass) <- "Bye")
-    let evaled = @Lucida(x.@Optic(setter))
+    let firstClass = @f(@typeof(x).coerce<String>())
+    let setter = @f(@use(firstClass) <- "Bye")
+    let evaled = @f(x.@use(setter))
 
     println(evaled)
     let y = [3, 4, 5]
-    let updated = @Lucida(y.at(2) <- 100)
+    let updated = @f(y.at(2) <- 100)
     println(updated)
 }

@@ -1,6 +1,6 @@
-# The @Lucida DSL
+# The @f DSL
 
-`@Lucida` is the library's one macro. Hand it a chain — a source spelled left
+`@f` is the library's one macro. Hand it a chain — a source spelled left
 to right, segment after segment — and the expression evaluates the focus at
 the end. The same syntax writes: mark the chain with `<-` and a new value,
 and the expression returns a new whole with that value at the focus —
@@ -12,18 +12,18 @@ accepts. The kinds behind the segments are the five structs of
 ## Grammar
 
 ```text
-@Lucida(<chain>)                        // read: evaluates to the focus
-@Lucida(<chain> <- <newValue>)          // write: evaluates to the new whole
-@Lucida[unfuse](<chain>)                // read, forced onto the composed path
-@Lucida[unfuse](<chain> <- <newValue>)  // write, forced onto the composed path
+@f(<chain>)                        // read: evaluates to the focus
+@f(<chain> <- <newValue>)          // write: evaluates to the new whole
+@f[unfuse](<chain>)                // read, forced onto the composed path
+@f[unfuse](<chain> <- <newValue>)  // write, forced onto the composed path
 ```
 
 - `<chain>` is the macro's single argument: one chain expression, optionally
   followed by `<-` and the new value. The arrow is the only write spelling —
   a comma form is not rejected, but extra comma-separated arguments compile
-  as a read and are silently ignored: `@Lucida(o.name, "Denver")` is the
-  read `@Lucida(o.name)`. If a write didn't take, check for the arrow. An
-  empty call fails with `@Lucida expects at least one argument`.
+  as a read and are silently ignored: `@f(o.name, "Denver")` is the
+  read `@f(o.name)`. If a write didn't take, check for the arrow. An
+  empty call fails with `@f expects at least one argument`.
 - A read evaluates to the focus. If any segment is partial (`?.`), the read
   evaluates to `Option` — `Some(payload)` on a match, `None`
   carrying the original source on a miss.
@@ -33,7 +33,7 @@ accepts. The kinds behind the segments are the five structs of
   wired in by the kind.
 - `[unfuse]` is the only modifier. It changes the code shape, not the
   results ([when to unfuse](composition.md#when-to-unfuse)). Any other
-  attribute is rejected: `@Lucida: unknown modifier 'X'`.
+  attribute is rejected: `@f: unknown modifier 'X'`.
 
 A chain is ordinary member-access syntax — `.` and `?.` between segments —
 and it takes one of two shapes, which decides what the expression is:
@@ -41,30 +41,30 @@ and it takes one of two shapes, which decides what the expression is:
 - **Rooted at a value** — `o.customer.address.city.name`, `call().x` — the
   chain anchors at the value's type. A read evaluates the focus; a write
   applies to the value and returns the new whole. The same read rules apply
-  to partial writes: `@Lucida(sq?.Circle <- Nested(99))` rebuilds on a
+  to partial writes: `@f(sq?.Circle <- Nested(99))` rebuilds on a
   match, returns the source unchanged on a miss.
-- **Sourceless** — rooted at `@Type`, `@TypeOf` or `@Optic` — the chain names
+- **Sourceless** — rooted at `@ty`, `@typeof` or `@use` — the chain names
   a focus without a source. A read mints the first-class optic of the
   chain's kind; a write mints a `Setter` with the new value baked in
   ([first-class optics](first-class.md)).
 
 One example of each — the first two and the last two are verbatim from the
 suite; the middle two spell the sourceless forms (the suite's own lens-mint
-read is `@Lucida(@TypeOf(probeInstance).f)`):
+read is `@f(@typeof(probeInstance).f)`):
 
 ```cangjie
-@Lucida(o.customer.address.city.name)              // read: "Atlanta"
-@Lucida(o.customer.address.city.name <- "Denver")  // write: a new Order
-@Lucida(@TypeOf(c).zip)                            // mints a lens
-@Lucida(@TypeOf(circleVal)?.Circle)                // mints an affine
-@Lucida(@TypeOf(c).zip <- 99999)                   // mints a Setter
-@Lucida[unfuse](o.customer.address.city.name)      // same read, composed path
+@f(o.customer.address.city.name)              // read: "Atlanta"
+@f(o.customer.address.city.name <- "Denver")  // write: a new Order
+@f(@typeof(c).zip)                            // mints a lens
+@f(@typeof(circleVal)?.Circle)                // mints an affine
+@f(@typeof(c).zip <- 99999)                   // mints a Setter
+@f[unfuse](o.customer.address.city.name)      // same read, composed path
 ```
 
 ## Chain segments
 
 Every segment is one of the forms below. The first four continue a chain;
-two anchors start one; `@Optic(o)` begins **or continues** one;
+two anchors start one; `@use(o)` begins **or continues** one;
 `coerce<T>()` continues one.
 
 | Segment | Meaning |
@@ -72,25 +72,25 @@ two anchors start one; `@Optic(o)` begins **or continues** one;
 | `field` | derived lens — a constructor field of a struct or class derived with `@DeriveOptics`; total, rides on `.` |
 | `_0` … `_15` | tuple element lens — an element of a tuple riding the chain (a tuple-typed field, a multi-payload case's focus, a user optic's tuple focus); total, rides on `.`. Arity 2-16 generated (raising the bound is one generator argument, but high-arity generic declarations get build-time expensive — [compiler notes](../compiler-issues.md)); an update value for the whole tuple is a tuple literal |
 | `CaseName` | derived case optic — a case of a derived enum; the focus is the payload for single-payload cases, a tuple of payloads for multi-payload cases, and `Unit` for payloadless ones; partial, rides on `?.` (the library kinds a case optic as an *affine* — same partial contract, same miss-is-identity) |
-| `name()` / `name(args)` | user-declared method optic, declared with `@LucidaOptic` and called by name — total kinds (`Lens`, `Iso`) under `.`, partial kinds (`Prism`, `Affine`) under `?.`; generic ones take type arguments |
+| `name()` / `name(args)` | user-declared method optic, declared with `@Optic` and called by name — total kinds (`Lens`, `Iso`) under `.`, partial kinds (`Prism`, `Affine`) under `?.`; generic ones take type arguments |
 | `Array.at(i)` / `Array.selectFirst(pred)` | the library's own affines on `Array<T>` — the element at index `i`, the first element matching `pred`; partial, `?.` |
-| `@Type(T)` | start anchor — begin the chain from the type `T` itself |
-| `@TypeOf(expr)` | start anchor — begin from the type of `expr`; the anchor a value-rooted chain starts from implicitly |
-| `@Optic(o)` | splice anchor — begin a chain with, or splice into a chain, the first-class optic value `o` (any of the five kinds, setters included; a chain that is only `@Optic(o)` hands the value back as a first-class optic) |
+| `@ty(T)` | start anchor — begin the chain from the type `T` itself |
+| `@typeof(expr)` | start anchor — begin from the type of `expr`; the anchor a value-rooted chain starts from implicitly |
+| `@use(o)` | splice anchor — begin a chain with, or splice into a chain, the first-class optic value `o` (any of the five kinds, setters included; a chain that is only `@use(o)` hands the value back as a first-class optic) |
 | `expr.coerce<T>()` | iso coercion between a one-field derivation and its field type; total, rides on `.` |
 
 Notes the table leans on:
 
-- `@Type`, `@TypeOf` and `@Optic` are themselves macros, valid only inside
-  `@Lucida` — used anywhere else, each rejects itself:
-  `@Type: macro should be contained inside '@Lucida'` (likewise for
-  `@TypeOf` and `@Optic`).
+- `@ty`, `@typeof` and `@use` are themselves macros, valid only inside
+  `@f` — used anywhere else, each rejects itself:
+  `@ty: macro should be contained inside '@f'` (likewise for
+  `@typeof` and `@use`).
 - A derived case optic is affine-kind: its read can miss and its write
   returns the source untouched on a miss. That is why the segment carries
   `?.` and not `.` ([deriving](../examples/deriving.md) names the kind;
   [prisms](../examples/prisms.md) walks it).
 - `Array.at` and `Array.selectFirst` are method optics the library declares
-  on `Array<T>` — the same plumbing a `@LucidaOptic` declaration emits, so
+  on `Array<T>` — the same plumbing a `@Optic` declaration emits, so
   they mark and compose exactly like user-declared segments
   ([chains](../examples/chains.md) works both).
 - `coerce<T>()` resolves against the iso a one-field derive emits, so `T`
@@ -107,7 +107,7 @@ guarantee the optic behind it makes:
 | `.` | total — the part is always there; read and write cannot miss | derived fields, `coerce<T>()`, `.`-marked user optics |
 | `?.` | partial — a read evaluates to `Option`: `Some(payload)` on a match, `None` on a miss | derived case optics, `Array.at`, `Array.selectFirst`, `?.`-marked user optics |
 
-A spliced `@Optic(o)` carries no mark of its own — the spliced optic's kind
+A spliced `@use(o)` carries no mark of its own — the spliced optic's kind
 decides the read: a spliced lens reads total, a spliced prism or affine
 reads partial (the composed shapes are on
 [composition](composition.md)).
@@ -118,15 +118,15 @@ compile.
 
 - `.` on a partial optic — a total read of an optic whose read can miss:
 
-  `@Lucida: '.' on a partial optic (Prism/Affine) — its forward returns Option, so a total read is impossible. Use '?.' and match Some/None.`
+  `@f: '.' on a partial optic (Prism/Affine) — its forward returns Option, so a total read is impossible. Use '?.' and match Some/None.`
 
 - `?.` on a total optic — a partial read of an optic that cannot miss:
 
-  `@Lucida: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.`
+  `@f: '?.' on a total optic (Lens/Iso) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.`
 
 - `?.` on `coerce<T>()` is rejected at parse time, with the same reasoning:
 
-  `@Lucida: '?.' on a total optic (coerce) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.`
+  `@f: '?.' on a total optic (coerce) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.`
 
 Writes obey the same marks with one deliberate asymmetry. A partial write is
 unconditional — the miss is an identity — so a `.`-write through an
@@ -134,12 +134,12 @@ affine-kind optic is legal: its backward is sourceful and guarded, and a
 miss keeps the source. A `.`-write through a `Prism`-kind optic, whose
 backward rebuilds from the focus alone, is rejected:
 
-`@Lucida: '.'-write through a prism — '.'-writes assert a match and would rebuild the source unconditionally on miss. Use '?.' to preserve the source on miss.`
+`@f: '.'-write through a prism — '.'-writes assert a match and would rebuild the source unconditionally on miss. Use '?.' to preserve the source on miss.`
 
 The mark belongs to the segment, not the chain: after a `?.` segment the
 chain returns to `.` for the total segments that follow
 ([chains](../examples/chains.md) walks mixed chains end to end). Every
-diagnostic `@Lucida` can produce is collected in
+diagnostic `@f` can produce is collected in
 [diagnostics](diagnostics.md).
 
 ## Starting a chain
@@ -148,10 +148,10 @@ A chain starts in exactly one of four ways:
 
 - **A value** — any member access rooted at an expression:
   `o.customer.name`, `call().x.y`. The chain anchors at the value's type;
-  the macro inserts the `@TypeOf` anchor for you.
-- **`@Type(T)`** — the type itself, no value needed.
-- **`@TypeOf(expr)`** — the type of an expression.
-- **`@Optic(o)`** — a first-class optic value you already hold (the only
+  the macro inserts the `@typeof` anchor for you.
+- **`@ty(T)`** — the type itself, no value needed.
+- **`@typeof(expr)`** — the type of an expression.
+- **`@use(o)`** — a first-class optic value you already hold (the only
   anchor that may also appear mid-chain).
 
 Everything else is rejected at the head of the chain. The derived and
@@ -159,23 +159,23 @@ user-declared segments are continuations — they need an owner — and
 `coerce<T>()` cannot lead either:
 
 - a derived field first — the walk fails with
-  `@Lucida: a derived field optic cannot start a chain here`
-  (hint: `Start the chain with the owning value, @Type, @TypeOf or @Optic`);
+  `@f: a derived field optic cannot start a chain here`
+  (hint: `Start the chain with the owning value, @ty, @typeof or @use`);
 - a user-declared optic first —
-  `@Lucida: user-defined method optics cannot start a chain` (same hint);
+  `@f: user-defined method optics cannot start a chain` (same hint);
 - `coerce<T>()` first — rejected at parse time with
   `Cannot make 'coerce<Type>()' method first`; the walk carries the same
-  guard as a backstop, `@Lucida: 'coerce<Type>()' cannot start a chain`.
+  guard as a backstop, `@f: 'coerce<Type>()' cannot start a chain`.
 
-The start anchors are start-only in the other direction too. `@Type` or
-`@TypeOf` in the middle of a chain fails with
-`@Lucida: @Type is only allowed at the start of a chain` or
-`@Lucida: @TypeOf is only allowed at the start of a chain`. And malformed
+The start anchors are start-only in the other direction too. `@ty` or
+`@typeof` in the middle of a chain fails with
+`@f: @ty is only allowed at the start of a chain` or
+`@f: @typeof is only allowed at the start of a chain`. And malformed
 calls fail with their own messages: an argument that is not a chain at all
-gets `Unknown expression, passed to @Lucida macro`; a write with nothing
+gets `Unknown expression, passed to @f macro`; a write with nothing
 before or after the arrow gets
-`@Lucida expects a lens chain before '<-'` or
-`@Lucida expects a value after '<-'`.
+`@f expects a lens chain before '<-'` or
+`@f expects a value after '<-'`.
 
 ## Evaluation
 
@@ -186,7 +186,7 @@ code-shape decision, not a semantic one; the results are the same.
 - **Reads** fuse when the chain allows: each segment's halves are bound
   once, then read in one straight-line pass (`pinForward` for total chains,
   `pinPrismForward1`–`pinPrismForward8` for chains with partial segments —
-  up to eight of them). Chains that splice a `@Optic` value in, or carry
+  up to eight of them). Chains that splice a `@use` value in, or carry
   more than eight
   partial segments, fall back to the composed path: one
   `__OpticsCompositions.composeForward` step per segment.
@@ -200,7 +200,7 @@ code-shape decision, not a semantic one; the results are the same.
   (reads) or the `Setter` (writes)
   ([first-class optics](first-class.md)).
 
-The fused write of `@Lucida(o.customer.name <- "Denver")` comes out as the
+The fused write of `@f(o.customer.name <- "Denver")` comes out as the
 bindings below (generated code — the names are the macro's and the
 library's, not calls to write by hand):
 
@@ -242,7 +242,7 @@ fallback shape ([composition](composition.md) documents the composed calls;
   on.
 - [User-declared optics](../examples/user-optics.md) — bringing your own
   segments, marked `.` or `?.`.
-- [Diagnostics](diagnostics.md) — every message `@Lucida` can produce,
+- [Diagnostics](diagnostics.md) — every message `@f` can produce,
   collected on one page.
 - [The fusion walk](../architecture/fusion-walk.md) — what the fused path
   emits, segment by segment.

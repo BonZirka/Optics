@@ -85,7 +85,7 @@ class FusedPrismLaws {
     func prismForwardMatch(): Unit {
         let h = ShapeHolder(Circle(7))
         var ok = false
-        let fwd = @Lucida(h.shape?.Circle)
+        let fwd = @f(h.shape?.Circle)
         match (fwd) {
             case Some(r) => ok = (r == 7)
             case _ => ()
@@ -97,7 +97,7 @@ class FusedPrismLaws {
     func prismForwardMiss(): Unit {
         let h = ShapeHolder(Square(99))
         var leftOk = false
-        let fwd = @Lucida(h.shape?.Circle)
+        let fwd = @f(h.shape?.Circle)
         match (fwd) {
             case None => leftOk = true
             case _ => ()
@@ -108,7 +108,7 @@ class FusedPrismLaws {
     @TestCase
     func prismBackwardMatch(): Unit {
         let h = ShapeHolder(Circle(7))
-        let updated = @Lucida(h.shape?.Circle <- 42)
+        let updated = @f(h.shape?.Circle <- 42)
         var ok = false
         match (updated.shape) {
             case Circle(v) => ok = (v == 42)
@@ -125,7 +125,7 @@ class FusedPrismLaws {
     @TestCase
     func trailingPrismForwardMissCarriesSource(): Unit {
         let h = ShapeHolder(Square(99))
-        let miss = @Lucida(h.shape?.Circle)
+        let miss = @f(h.shape?.Circle)
         var ok = false
         match (miss) {
             case None => ok = true
@@ -138,7 +138,7 @@ class FusedPrismLaws {
     @TestCase
     func mixedLensPrismLensForwardMatch(): Unit {
         let h = PayloadHolder(Rect(Box(42)))
-        let fwd = @Lucida(h.shape?.Rect.w)
+        let fwd = @f(h.shape?.Rect.w)
         var ok = false
         match (fwd) {
             case Some(v) => ok = (v == 42)
@@ -151,7 +151,7 @@ class FusedPrismLaws {
     @TestCase
     func mixedLensPrismLensForwardMissCarriesSource(): Unit {
         let h = PayloadHolder(Dot(1))
-        let miss = @Lucida(h.shape?.Rect.w)
+        let miss = @f(h.shape?.Rect.w)
         var ok = false
         match (miss) {
             case None => ok = true
@@ -164,7 +164,7 @@ class FusedPrismLaws {
     @TestCase
     func prismPrismLensForwardMatch(): Unit {
         let w = Wrap2D.Wrap(Rect(Box(7)))
-        let fwd = @Lucida(w?.Wrap?.Rect.w)
+        let fwd = @f(w?.Wrap?.Rect.w)
         var ok = false
         match (fwd) {
             case Some(v) => ok = (v == 7)
@@ -176,7 +176,7 @@ class FusedPrismLaws {
     @TestCase
     func prismPrismLensForwardMissCarriesSource(): Unit {
         let w = Wrap2D.Wrap(Dot(3))
-        let miss = @Lucida(w?.Wrap?.Rect.w)
+        let miss = @f(w?.Wrap?.Rect.w)
         var ok = false
         match (miss) {
             case None => ok = true
@@ -190,7 +190,7 @@ class FusedPrismLaws {
     @TestCase
     func affinePrismForwardFallback(): Unit {
         let shapes = [Payload2D.Dot(1), Payload2D.Rect(Box(7))]
-        let fwd = @Lucida(shapes?.selectFirst({ p: Payload2D => match (p) { case Rect(_) => true case _ => false } })?.Rect.w)
+        let fwd = @f(shapes?.selectFirst({ p: Payload2D => match (p) { case Rect(_) => true case _ => false } })?.Rect.w)
         var ok = false
         match (fwd) {
             case Some(v) => ok = (v == 7)
@@ -203,7 +203,7 @@ class FusedPrismLaws {
     @TestCase
     func atPrismLensForwardMatch(): Unit {
         let shapes = [Payload2D.Dot(1), Payload2D.Rect(Box(7))]
-        let fwd = @Lucida(shapes?.at(1)?.Rect.w)
+        let fwd = @f(shapes?.at(1)?.Rect.w)
         var ok = false
         match (fwd) {
             case Some(v) => ok = (v == 7)
@@ -216,7 +216,7 @@ class FusedPrismLaws {
     @TestCase
     func selectFirstPrismLensBackward(): Unit {
         let shapes = [Payload2D.Dot(1), Payload2D.Rect(Box(5))]
-        let updated = @Lucida(shapes?.selectFirst({ p: Payload2D => match (p) { case Rect(_) => true case _ => false } })?.Rect.w <- 7)
+        let updated = @f(shapes?.selectFirst({ p: Payload2D => match (p) { case Rect(_) => true case _ => false } })?.Rect.w <- 7)
         var ok = false
         match (updated[1]) {
             case Rect(b) => ok = (b.w == 7)
@@ -235,7 +235,7 @@ class FusedPrismLaws {
     @TestCase
     func selectFirstPrismLensBackwardMissIsIdentity(): Unit {
         let shapes = [Payload2D.Dot(1), Payload2D.Dot(2)]
-        let updated = @Lucida(shapes?.selectFirst({ p: Payload2D => match (p) { case Rect(_) => true case _ => false } })?.Rect.w <- 7)
+        let updated = @f(shapes?.selectFirst({ p: Payload2D => match (p) { case Rect(_) => true case _ => false } })?.Rect.w <- 7)
         var ok = false
         match (updated[0]) {
             case Dot(v) => ok = (v == 1)
@@ -255,13 +255,13 @@ class FusedPrismLaws {
     @TestCase
     func coerceTailForward(): Unit {
         let mb = MeterBox(Meters(7))
-        @Assert(@Lucida(mb.m.coerce<Int64>()) == 7)
+        @Assert(@f(mb.m.coerce<Int64>()) == 7)
     }
 
     @TestCase
     func coerceTailBackward(): Unit {
         let mb = MeterBox(Meters(7))
-        let updated = @Lucida(mb.m.coerce<Int64>() <- 5)
+        let updated = @f(mb.m.coerce<Int64>() <- 5)
         @Assert(updated.m.v == 5)
     }
 
@@ -269,13 +269,13 @@ class FusedPrismLaws {
     @TestCase
     func coerceMiddleChainForward(): Unit {
         let h = WBox(W1(Nested(3)))
-        @Assert(@Lucida(h.w.coerce<Nested>().n) == 3)
+        @Assert(@f(h.w.coerce<Nested>().n) == 3)
     }
 
     @TestCase
     func coerceMiddleChainBackward(): Unit {
         let h = WBox(W1(Nested(3)))
-        let updated = @Lucida(h.w.coerce<Nested>().n <- 9)
+        let updated = @f(h.w.coerce<Nested>().n <- 9)
         @Assert(updated.w.f.n == 9)
     }
 
@@ -283,7 +283,7 @@ class FusedPrismLaws {
     @TestCase
     func coerceAfterPrismForwardMatch(): Unit {
         let s = Shape.Circle(Nested(3))
-        let fwd = @Lucida(s?.Circle.coerce<Int64>())
+        let fwd = @f(s?.Circle.coerce<Int64>())
         var ok = false
         match (fwd) {
             case Some(v) => ok = (v == 3)
@@ -295,7 +295,7 @@ class FusedPrismLaws {
     @TestCase
     func coerceAfterPrismForwardMissCarriesSource(): Unit {
         let s = Shape.Square(2)
-        let miss = @Lucida(s?.Circle.coerce<Int64>())
+        let miss = @f(s?.Circle.coerce<Int64>())
         var ok = false
         match (miss) {
             case None => ok = true
@@ -307,7 +307,7 @@ class FusedPrismLaws {
     @TestCase
     func coerceAfterPrismBackward(): Unit {
         let s = Shape.Circle(Nested(3))
-        let updated = @Lucida(s?.Circle.coerce<Int64>() <- 5)
+        let updated = @f(s?.Circle.coerce<Int64>() <- 5)
         var ok = false
         match (updated) {
             case Circle(inner) => ok = (inner.n == 5)
@@ -321,7 +321,7 @@ class FusedPrismLaws {
     @TestCase
     func mixedLensPrismLensBackward(): Unit {
         let h = PayloadHolder(Rect(Box(42)))
-        let updated = @Lucida(h.shape?.Rect.w <- 7)
+        let updated = @f(h.shape?.Rect.w <- 7)
         var ok = false
         match (updated.shape) {
             case Rect(inner) => ok = (inner.w == 7)
@@ -333,7 +333,7 @@ class FusedPrismLaws {
     @TestCase
     func mixedLensPrismLensBackwardMissIsIdentity(): Unit {
         let h = PayloadHolder(Dot(1))
-        let updated = @Lucida(h.shape?.Rect.w <- 7)
+        let updated = @f(h.shape?.Rect.w <- 7)
         var ok = false
         match (updated.shape) {
             case Dot(v) => ok = (v == 1)
@@ -346,7 +346,7 @@ class FusedPrismLaws {
     @TestCase
     func prismPrismLensBackward(): Unit {
         let w = Wrap2D.Wrap(Rect(Box(5)))
-        let updated = @Lucida(w?.Wrap?.Rect.w <- 7)
+        let updated = @f(w?.Wrap?.Rect.w <- 7)
         var ok = false
         match (updated) {
             case Wrap(inner) => match (inner) {
@@ -362,7 +362,7 @@ class FusedPrismLaws {
     @TestCase
     func prismPrismLensBackwardMissIsIdentity(): Unit {
         let w = Wrap2D.Wrap(Dot(3))
-        let updated = @Lucida(w?.Wrap?.Rect.w <- 7)
+        let updated = @f(w?.Wrap?.Rect.w <- 7)
         var ok = false
         match (updated) {
             case Wrap(inner) => match (inner) {
@@ -378,7 +378,7 @@ class FusedPrismLaws {
     @TestCase
     func fourPrismsForwardMatch(): Unit {
         let d = Deep1.V1(Deep2.V2(Deep3.V3(Deep4.V4(42))))
-        let fwd = @Lucida(d?.V1?.V2?.V3?.V4)
+        let fwd = @f(d?.V1?.V2?.V3?.V4)
         var ok = false
         match (fwd) {
             case Some(v) => ok = (v == 42)
@@ -390,7 +390,7 @@ class FusedPrismLaws {
     @TestCase
     func fourPrismsForwardMissCarriesSource(): Unit {
         let d = Deep1.V1(Deep2.V2(Deep3.V3(Deep4.N4(5))))
-        let miss = @Lucida(d?.V1?.V2?.V3?.V4)
+        let miss = @f(d?.V1?.V2?.V3?.V4)
         var ok = false
         match (miss) {
             case None => ok = true
@@ -402,7 +402,7 @@ class FusedPrismLaws {
     @TestCase
     func fourPrismsBackward(): Unit {
         let d = Deep1.V1(Deep2.V2(Deep3.V3(Deep4.V4(42))))
-        let updated = @Lucida(d?.V1?.V2?.V3?.V4 <- 9)
+        let updated = @f(d?.V1?.V2?.V3?.V4 <- 9)
         var ok = false
         match (updated) {
             case V1(i2) => match (i2) {
@@ -423,7 +423,7 @@ class FusedPrismLaws {
     @TestCase
     func fourPrismsBackwardMissIsIdentity(): Unit {
         let d = Deep1.V1(Deep2.V2(Deep3.V3(Deep4.N4(5))))
-        let updated = @Lucida(d?.V1?.V2?.V3?.V4 <- 9)
+        let updated = @f(d?.V1?.V2?.V3?.V4 <- 9)
         var ok = false
         match (updated) {
             case V1(i2) => match (i2) {
@@ -444,7 +444,7 @@ class FusedPrismLaws {
     @TestCase
     func prismBackwardMissIsIdentity(): Unit {
         let h = ShapeHolder(Square(99))
-        let updated = @Lucida(h.shape?.Circle <- 42)
+        let updated = @f(h.shape?.Circle <- 42)
         // Original source type preserved; non-match => identity
         match (updated.shape) {
             case Square(v) => @Assert(v == 99)
@@ -529,7 +529,7 @@ class TenPrismChainLaws {
     @TestCase
     func tenPrismsForwardMatch(): Unit {
         var ok = false
-        match (@Lucida(hugeDeep()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
+        match (@f(hugeDeep()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
             case Some(v) => ok = (v == 42)
             case _ => ()
         }
@@ -539,7 +539,7 @@ class TenPrismChainLaws {
     @TestCase
     func tenPrismsForwardMissCarriesSource(): Unit {
         var ok = false
-        match (@Lucida(hugeMiss()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
+        match (@f(hugeMiss()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
             case None => ok = true
             case _ => ()
         }
@@ -548,9 +548,9 @@ class TenPrismChainLaws {
 
     @TestCase
     func tenPrismsBackwardRoundTrip(): Unit {
-        let updated = @Lucida(hugeDeep()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10 <- 9)
+        let updated = @f(hugeDeep()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10 <- 9)
         var ok = false
-        match (@Lucida(updated?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
+        match (@f(updated?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
             case Some(v) => ok = (v == 9)
             case _ => ()
         }
@@ -559,9 +559,9 @@ class TenPrismChainLaws {
 
     @TestCase
     func tenPrismsBackwardMissIsIdentity(): Unit {
-        let updated = @Lucida(hugeMiss()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10 <- 9)
+        let updated = @f(hugeMiss()?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10 <- 9)
         var ok = false
-        match (@Lucida(updated?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
+        match (@f(updated?.H1?.H2?.H3?.H4?.H5?.H6?.H7?.H8?.H9?.H10)) {
             case None => ok = true
             case _ => ()
         }
@@ -574,14 +574,14 @@ class FusedLensLaws {
     @TestCase
     func deepLensChainForward(): Unit {
         let o = Order(1, Customer("Ada", Address(City("Atlanta", 30301))))
-        @Assert(@Lucida(o.customer.address.city.name) == "Atlanta")
-        @Assert(@Lucida(o.customer.address.city.zip) == 30301)
+        @Assert(@f(o.customer.address.city.name) == "Atlanta")
+        @Assert(@f(o.customer.address.city.zip) == 30301)
     }
 
     @TestCase
     func deepLensChainBackwardImmutable(): Unit {
         let o = Order(1, Customer("Ada", Address(City("Atlanta", 30301))))
-        let updated = @Lucida(o.customer.address.city.name <- "Denver")
+        let updated = @f(o.customer.address.city.name <- "Denver")
         @Assert(updated.customer.address.city.name == "Denver")
         @Assert(o.customer.address.city.name == "Atlanta")
         @Assert(updated.id == 1)
@@ -590,21 +590,21 @@ class FusedLensLaws {
     @TestCase
     func deepLensChainRoundTrip(): Unit {
         let o = Order(1, Customer("Ada", Address(City("Atlanta", 30301))))
-        let z = @Lucida(o.customer.address.city.zip)
-        let rewritten = @Lucida(o.customer.address.city.zip <- z)
+        let z = @f(o.customer.address.city.zip)
+        let rewritten = @f(o.customer.address.city.zip <- z)
         @Assert(rewritten.customer.address.city.zip == o.customer.address.city.zip)
     }
 
     @TestCase
     func unfusedForward(): Unit {
         let o = Order(1, Customer("Ada", Address(City("Atlanta", 30301))))
-        @Assert(@Lucida[unfuse](o.customer.address.city.name) == "Atlanta")
+        @Assert(@f[unfuse](o.customer.address.city.name) == "Atlanta")
     }
 
     @TestCase
     func unfusedBackward(): Unit {
         let o = Order(1, Customer("Ada", Address(City("Atlanta", 30301))))
-        let updated = @Lucida[unfuse](o.customer.address.city.name <- "Denver")
+        let updated = @f[unfuse](o.customer.address.city.name <- "Denver")
         @Assert(updated.customer.address.city.name == "Denver")
         @Assert(o.customer.address.city.name == "Atlanta")
         @Assert(updated.id == 1)

@@ -31,7 +31,7 @@ most of it; LTO removes the rest and lets the optimizer see the whole chain.
 
 Depth-suite medians, 3 runs per configuration (ns):
 
-| Build                | native | fused `@Lucida` | hand rebuild | unfused |
+| Build                | native | fused `@f` | hand rebuild | unfused |
 |----------------------|--------|-----------------|--------------|---------|
 | static, no LTO       | 2.3    | 52.5            | 58.4         | 343     |
 | static + thin LTO    | 2.1    | 48.9            | 55.1         | 322     |
@@ -48,8 +48,8 @@ Baseline: `nativeBaseline` (direct field mutation).
 | Case             | What it does                                   | Median    | Ratio    |
 |------------------|------------------------------------------------|-----------|----------|
 | nativeBaseline   | mutate fields in place                         | 0.824 ns  | 100%     |
-| opticsBaseline   | `@Lucida(bow.x.y <- "New")` (fused)            | 0.822 ns  | 100%     |
-| unfusedOptics    | `@Lucida[unfuse](...)` (library composition)   | 0.825 ns  | 100%     |
+| opticsBaseline   | `@f(bow.x.y <- "New")` (fused)            | 0.822 ns  | 100%     |
+| unfusedOptics    | `@f[unfuse](...)` (library composition)   | 0.825 ns  | 100%     |
 | reconstruction   | hand-written rebuild `A(B(x, "New"), y)`       | 0.797 ns  | -3%      |
 
 With LTO, all four spellings of the update flatten to the same code at this
@@ -64,8 +64,8 @@ Baseline: `reconstruction` (hand-written 10-level rebuild).
 |------------------|------------------------------------------------|-----------|----------|
 | reconstruction   | hand-written nested rebuild                    | 53.29 ns  | 100%     |
 | nativeBaseline   | mutate the leaf in place                       | 2.079 ns  | -96.1%   |
-| opticsBaseline   | `@Lucida(...)` (fused)                         | 48.58 ns  | -8.9%    |
-| unfusedOptics    | `@Lucida[unfuse](...)` (library composition)   | 325.9 ns  | +511%    |
+| opticsBaseline   | `@f(...)` (fused)                         | 48.58 ns  | -8.9%    |
+| unfusedOptics    | `@f[unfuse](...)` (library composition)   | 325.9 ns  | +511%    |
 
 The fused chain now **beats the hand-written rebuild** (the optimizer folds
 the emission into the same constructor chain, minus the human's redundant
@@ -76,12 +76,12 @@ to in-place mutation is the immutable-update cost itself: 10 allocations.
 
 `BenchBumpSerialized`: the value lives as serialized `DataModel`; the baseline
 deserializes, rebuilds, and re-serializes by hand, the optic case expresses the
-same update as a `@Lucida[unfuse]` chain over the serialization adapter.
+same update as a `@f[unfuse]` chain over the serialization adapter.
 
 | Case            | What it does                                        | Median    | Ratio    |
 |-----------------|-----------------------------------------------------|-----------|----------|
 | baseline        | hand-written deserialize / rebuild / serialize      | 3.071 us  | 100%     |
-| opticsBaseline  | `@Lucida[unfuse]` over the serialization adapter    | 4.554 us  | +48%     |
+| opticsBaseline  | `@f[unfuse]` over the serialization adapter    | 4.554 us  | +48%     |
 
 The adapter path is 1.5× the hand-written version; absolute cost is dominated
 by (de)serialization, and the chain is deliberately unfused — user-defined

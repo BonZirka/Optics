@@ -5,7 +5,7 @@ the `Order` and its `Customer`, `Address` and `City` on the
 [lenses](lenses.md) page, the `Shape` enum on the [prisms](prisms.md) page,
 `Employee2` and `Meters` on the [chains](chains.md) page. This page is about
 the derive itself. `@DeriveOptics` applied to a `struct`, `class` or `enum`
-emits the plumbing behind `@Lucida` for that type — a lens per constructor
+emits the plumbing behind `@f` for that type — a lens per constructor
 field, an affine per single-payload case, and, for one-field structs and
 classes, an iso — so that chains can walk its fields and cases.
 
@@ -30,8 +30,8 @@ one derive is why chains ending on a city work — the same fixture the
 
 ```cangjie
 let o = sampleOrder()
-@Assert(@Lucida(o.customer.address.city.name) == "Atlanta")
-@Assert(@Lucida(o.customer.address.city.zip) == 30301)
+@Assert(@f(o.customer.address.city.name) == "Atlanta")
+@Assert(@f(o.customer.address.city.zip) == 30301)
 ```
 
 (`sampleOrder` builds the whole `Order`; every type on the way down is derived
@@ -103,13 +103,13 @@ as readily as for a `GBox<String>`:
 
 ```cangjie
 let b = GBox<Int64>(5)
-@Assert(@Lucida(b.v) == 5)
+@Assert(@f(b.v) == 5)
 ```
 
 The write is the usual lens write — a new `GBox`, nothing mutates:
 
 ```cangjie
-let updated = @Lucida(b.v <- 7)
+let updated = @f(b.v <- 7)
 @Assert(updated.v == 7)
 @Assert(b.v == 5)
 ```
@@ -137,7 +137,7 @@ unwraps the wrapper mid-chain (see
 
 ```cangjie
 let m = Meters(7)
-let unwrapped = @Lucida(m.coerce<Int64>())
+let unwrapped = @f(m.coerce<Int64>())
 @Assert(unwrapped == 7)
 ```
 
@@ -157,6 +157,6 @@ lens for `v` first, the iso alongside.)
   this page named: which are total, which can miss.
 - [Lenses](lenses.md), [prisms](prisms.md) and [chains](chains.md) — the
   derived optics in action, one page each.
-- [The DSL reference](../api/dsl.md) — every `@Lucida` form on one page.
+- [The DSL reference](../api/dsl.md) — every `@f` form on one page.
 - Next example: [user optics](user-optics.md) — bringing your own segments,
   marked `.` or `?.`.

@@ -44,7 +44,7 @@ twice.
 The same change, as an optic, is one expression:
 
 ```cangjie
-let updated = @Lucida(serialized.serialization<Department>()
+let updated = @f(serialized.serialization<Department>()
     .information.address.city <- "Melbourne")
 ```
 
@@ -78,24 +78,24 @@ value, a new part, and a new whole with that spot filled). The part is a
                the place refilled; S untouched
 ```
 
-`@Lucida` names a focus in one expression. The chain's first field — `o` here —
+`@f` names a focus in one expression. The chain's first field — `o` here —
 is the *source*: a concrete value the focus is applied to. This is partial
 application — pin the source and the answer is already fixed — which is why
 reading it looks like a plain field access:
 
 ```cangjie
-let name = @Lucida(o.customer.address.city.name)
+let name = @f(o.customer.address.city.name)
 ```
 
 The focus itself is the path after the source — `customer.address.city.name` —
 and that is the place, not a value: the same focus applies to any value of that
-shape. `@Type` makes that place a value: it names the focus *without* pinning a
+shape. `@ty` makes that place a value: it names the focus *without* pinning a
 source, and hands you the path itself as a first-class optic (the explicit
-`@Type` spelling of the anchor — the value-rooted form earlier in this
+`@ty` spelling of the anchor — the value-rooted form earlier in this
 section is the implicit one):
 
 ```cangjie
-let cityName = @Lucida(@Type(Order).customer.address.city.name)
+let cityName = @f(@ty(Order).customer.address.city.name)
 let mapped = cityName.update(o, "Denver")
 ```
 
@@ -106,7 +106,7 @@ the focus from any `Order` with `cityName.view(o)`; write it with
 `cityName.update(o, ...)`. The write form fills the place and returns a new `o`:
 
 ```cangjie
-let updated = @Lucida(o.customer.address.city.name <- "Denver")
+let updated = @f(o.customer.address.city.name <- "Denver")
 ```
 
 "focusing on `o.customer.address.city.name`, set it to `"Denver"`" — the whole
@@ -164,7 +164,7 @@ why chains need two operators — further down.
 
 ```cangjie
 let sq = Shape.Square(5)
-let updated = @Lucida(sq?.Circle <- Nested(99))
+let updated = @f(sq?.Circle <- Nested(99))
 // updated is still Square(5) — the miss was an identity
 ```
 
@@ -212,6 +212,6 @@ returns new values by design — wrong tool.
 
 ---
 
-Curious how `@Lucida` finds the optic behind each segment of a chain? Those
+Curious how `@f` finds the optic behind each segment of a chain? Those
 mechanics live in [registry plumbing](architecture/registry-plumbing.md) — not
 required reading to use the library.

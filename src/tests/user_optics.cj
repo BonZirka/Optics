@@ -12,7 +12,7 @@ public struct GPair<T, U> {
 
 // ===== User-declared optics (see 2026-09-09-user-declared-optics-design.md) =====
 
-@LucidaOptic[
+@Optic[
     source: Array<T>
     focus: T
     kind: Affine
@@ -26,7 +26,7 @@ public struct UBox {
     public UBox(public let v: Int64) { }
 }
 
-@LucidaOptic[
+@Optic[
     source: UBox
     focus: Int64
     kind: Lens
@@ -39,7 +39,7 @@ public struct ULen {
     public ULen(public let m: Int64) { }
 }
 
-@LucidaOptic[
+@Optic[
     source: ULen
     focus: Int64
     kind: Iso
@@ -53,7 +53,7 @@ public enum UMaybe {
     | UNothing
 }
 
-@LucidaOptic[
+@Optic[
     source: UMaybe
     focus: Int64
     kind: Prism
@@ -62,22 +62,22 @@ public enum UMaybe {
 ]
 struct uJust {}
 
-@LucidaOptic[source: GBox<T>, focus: T, kind: Lens, forward: { src.v }, backward: { GBox(focus) }]
+@Optic[source: GBox<T>, focus: T, kind: Lens, forward: { src.v }, backward: { GBox(focus) }]
 struct guBoxLens<T> {}
 
-@LucidaOptic[source: GBox<T>, focus: T, kind: Lens, forward: { src.v }, backward: { GBox(focus) }]
+@Optic[source: GBox<T>, focus: T, kind: Lens, forward: { src.v }, backward: { GBox(focus) }]
 struct guBoxLensStr<T> {}
 
-@LucidaOptic[source: GBox<T>, focus: T, kind: Affine, forward: { Some(src.v) }, backward: { GBox(focus) }]
+@Optic[source: GBox<T>, focus: T, kind: Affine, forward: { Some(src.v) }, backward: { GBox(focus) }]
 struct guBoxAffine<T> {}
 
-@LucidaOptic[source: GBox<T>, focus: Int64, kind: Lens, forward: { 1 }, backward: { src }]
+@Optic[source: GBox<T>, focus: Int64, kind: Lens, forward: { 1 }, backward: { src }]
 struct guBoxTag<T> {}
 
-@LucidaOptic[source: GBox<GBox<T>>, focus: T, kind: Lens, forward: { src.v.v }, backward: { GBox(GBox(focus)) }]
+@Optic[source: GBox<GBox<T>>, focus: T, kind: Lens, forward: { src.v.v }, backward: { GBox(GBox(focus)) }]
 struct guBoxNested<T> {}
 
-@LucidaOptic[source: GPair<T, U>, focus: T, kind: Lens, forward: { src.first }, backward: { GPair(focus, src.second) }]
+@Optic[source: GPair<T, U>, focus: T, kind: Lens, forward: { src.first }, backward: { GPair(focus, src.second) }]
 struct gpairFirst<T, U> {}
 
 @Test
@@ -86,8 +86,8 @@ class OpticChainForms {
     @TestCase
     func firstClassFromDerived(): Unit {
         let b = UBox(3)
-        let lens = @Lucida(@TypeOf(b).uBoxLens())
-        @Assert(@Lucida(b.@Optic(lens)) == 3)
+        let lens = @f(@typeof(b).uBoxLens())
+        @Assert(@f(b.@use(lens)) == 3)
         @Assert(b.v == 3)
     }
 
@@ -96,9 +96,9 @@ class OpticChainForms {
     @TestCase
     func opticStartRoundTrip(): Unit {
         let b = UBox(3)
-        let lens = @Lucida(@TypeOf(b).uBoxLens())
-        let same = @Lucida(@Optic(lens))
-        @Assert(@Lucida(b.@Optic(same)) == 3)
+        let lens = @f(@typeof(b).uBoxLens())
+        let same = @f(@use(lens))
+        @Assert(@f(b.@use(same)) == 3)
         @Assert(b.v == 3)
     }
 
@@ -107,9 +107,9 @@ class OpticChainForms {
     @TestCase
     func opticStartSetter(): Unit {
         let b = UBox(3)
-        let lens = @Lucida(@TypeOf(b).uBoxLens())
-        let setter = @Lucida(@Optic(lens) <- 42)
-        let updated = @Lucida(b.@Optic(setter))
+        let lens = @f(@typeof(b).uBoxLens())
+        let setter = @f(@use(lens) <- 42)
+        let updated = @f(b.@use(setter))
         @Assert(updated.v == 42)
         @Assert(b.v == 3)
     }
@@ -121,7 +121,7 @@ class UserAffineOpticLaws {
     func forwardMatch(): Unit {
         let xs = [1, 2, 3]
         var ok = false
-        match (@Lucida(xs?.at2(1))) {
+        match (@f(xs?.at2(1))) {
             case Some(r) => ok = (r == 2)
             case _ => ()
         }
@@ -132,7 +132,7 @@ class UserAffineOpticLaws {
     func forwardMissIsIdentity(): Unit {
         let xs = [1, 2, 3]
         var ok = false
-        match (@Lucida(xs?.at2(10))) {
+        match (@f(xs?.at2(10))) {
             case None => ok = true
             case _ => ()
         }
@@ -142,7 +142,7 @@ class UserAffineOpticLaws {
     @TestCase
     func backwardUpdate(): Unit {
         let xs = [1, 2, 3]
-        let updated = @Lucida(xs?.at2(1) <- 9)
+        let updated = @f(xs?.at2(1) <- 9)
         @Assert(updated[1] == 9)
         @Assert(updated[0] == 1 && updated[2] == 3)
     }
@@ -150,7 +150,7 @@ class UserAffineOpticLaws {
     @TestCase
     func backwardMissIsIdentity(): Unit {
         let xs = [1, 2, 3]
-        let updated = @Lucida(xs?.at2(10) <- 9)
+        let updated = @f(xs?.at2(10) <- 9)
         @Assert(updated == xs)
     }
 }
@@ -160,32 +160,32 @@ class UserLensIsoPrismLaws {
     @TestCase
     func lensForward(): Unit {
         let b = UBox(3)
-        @Assert(@Lucida(b.uBoxLens()) == 3)
+        @Assert(@f(b.uBoxLens()) == 3)
     }
 
     @TestCase
     func lensBackward(): Unit {
         let b = UBox(3)
-        @Assert(@Lucida(b.uBoxLens() <- 5).v == 5)
+        @Assert(@f(b.uBoxLens() <- 5).v == 5)
     }
 
     @TestCase
     func isoForward(): Unit {
         let m = ULen(5)
-        @Assert(@Lucida(m.uLenIso()) == 5)
+        @Assert(@f(m.uLenIso()) == 5)
     }
 
     @TestCase
     func isoBackward(): Unit {
         let m = ULen(5)
-        @Assert(@Lucida(m.uLenIso() <- 9).m == 9)
+        @Assert(@f(m.uLenIso() <- 9).m == 9)
     }
 
     @TestCase
     func prismForwardMatch(): Unit {
         let m = UMaybe.UJust(7)
         var ok = false
-        match (@Lucida(m?.uJust())) {
+        match (@f(m?.uJust())) {
             case Some(r) => ok = (r == 7)
             case _ => ()
         }
@@ -195,7 +195,7 @@ class UserLensIsoPrismLaws {
     @TestCase
     func prismForwardMissCarriesSource(): Unit {
         let m = UMaybe.UNothing
-        let fwd = @Lucida(m?.uJust())
+        let fwd = @f(m?.uJust())
         var ok = false
         match (fwd) {
             case None => ok = true
@@ -207,7 +207,7 @@ class UserLensIsoPrismLaws {
     @TestCase
     func prismBackward(): Unit {
         let m = UMaybe.UJust(7)
-        let bwd = @Lucida(m?.uJust() <- 9)
+        let bwd = @f(m?.uJust() <- 9)
         var ok = false
         match (bwd) {
             case UJust(v) => ok = (v == 9)
@@ -219,7 +219,7 @@ class UserLensIsoPrismLaws {
     @TestCase
     func prismBackwardMissIsIdentity(): Unit {
         let m = UMaybe.UNothing
-        let bwd = @Lucida(m?.uJust() <- 9)
+        let bwd = @f(m?.uJust() <- 9)
         var ok = false
         match (bwd) {
             case UNothing => ok = true
@@ -248,7 +248,7 @@ class UserMixedChainLaws {
     func userTailAfterBuiltinAffine(): Unit {
         let bs = [UBox(1), UBox(2)]
         var ok = false
-        match (@Lucida(bs?.at2(0).uBoxLens())) {
+        match (@f(bs?.at2(0).uBoxLens())) {
             case Some(r) => ok = (r == 1)
             case _ => ()
         }
@@ -258,7 +258,7 @@ class UserMixedChainLaws {
     @TestCase
     func userTailAfterBuiltinAffineBackward(): Unit {
         let bs = [UBox(1), UBox(2)]
-        let updated = @Lucida(bs?.at2(0).uBoxLens() <- 7)
+        let updated = @f(bs?.at2(0).uBoxLens() <- 7)
         @Assert(updated[0].v == 7 && updated[1].v == 2)
     }
 
@@ -266,7 +266,7 @@ class UserMixedChainLaws {
     func userPrismAfterBuiltinAffine(): Unit {
         let ms = [UMaybe.UJust(1), UMaybe.UNothing]
         var ok = false
-        match (@Lucida(ms?.at2(0)?.uJust())) {
+        match (@f(ms?.at2(0)?.uJust())) {
             case Some(r) => ok = (r == 1)
             case _ => ()
         }
@@ -277,7 +277,7 @@ class UserMixedChainLaws {
     func userPrismAfterBuiltinAffineMissCarriesOriginalSource(): Unit {
         let ms = [UMaybe.UJust(1), UMaybe.UNothing]
         var ok = false
-        match (@Lucida(ms?.at2(1)?.uJust())) {
+        match (@f(ms?.at2(1)?.uJust())) {
             case None => ok = true
             case _ => ()
         }
@@ -294,7 +294,7 @@ class UserMixedChainLaws {
     @TestCase
     func unfuseFallbackStillWorks(): Unit {
         let xs = [1, 2, 3]
-        let updated = @Lucida[unfuse](xs.at2(1) <- 9)
+        let updated = @f[unfuse](xs.at2(1) <- 9)
         @Assert(updated[1] == 9)
     }
 }
@@ -328,8 +328,8 @@ class GenericUserOpticLaws {
     @TestCase
     func explicitGenericLensForwardBackward(): Unit {
         let gb = GBox<Int64>(5)
-        @Assert(@Lucida(gb.guBoxLens()) == 5)
-        let updated = @Lucida(gb.guBoxLens() <- 9)
+        @Assert(@f(gb.guBoxLens()) == 5)
+        let updated = @f(gb.guBoxLens() <- 9)
         @Assert(updated.v == 9)
     }
 
@@ -338,8 +338,8 @@ class GenericUserOpticLaws {
     @TestCase
     func explicitCarrierStringLensForwardBackward(): Unit {
         let gb = GBox<String>("x")
-        @Assert(@Lucida(gb.guBoxLensStr()) == "x")
-        let updated = @Lucida(gb.guBoxLensStr() <- "y")
+        @Assert(@f(gb.guBoxLensStr()) == "x")
+        let updated = @f(gb.guBoxLensStr() <- "y")
         @Assert(updated.v == "y")
     }
 
@@ -349,14 +349,14 @@ class GenericUserOpticLaws {
     @TestCase
     func genericAffineReadAndUnfuseWrite(): Unit {
         let gb = GBox<Int64>(5)
-        let rd = @Lucida(gb?.guBoxAffine())
+        let rd = @f(gb?.guBoxAffine())
         var ok = false
         match (rd) {
             case Some(v) => ok = (v == 5)
             case _ => ()
         }
         @Assert(ok)
-        let updated = @Lucida[unfuse](gb.guBoxAffine() <- 9)
+        let updated = @f[unfuse](gb.guBoxAffine() <- 9)
         @Assert(updated.v == 9)
     }
 
@@ -365,8 +365,8 @@ class GenericUserOpticLaws {
     @TestCase
     func paramOnlyInSource(): Unit {
         let gb = GBox<String>("x")
-        @Assert(@Lucida(gb.guBoxTag()) == 1)
-        let updated = @Lucida(gb.guBoxTag() <- 7)
+        @Assert(@f(gb.guBoxTag()) == 1)
+        let updated = @f(gb.guBoxTag() <- 7)
         @Assert(updated.v == "x")
     }
 
@@ -374,8 +374,8 @@ class GenericUserOpticLaws {
     @TestCase
     func nestedGenericLens(): Unit {
         let g = GBox<GBox<Int64>>(GBox(3))
-        @Assert(@Lucida(g.guBoxNested()) == 3)
-        let updated = @Lucida(g.guBoxNested() <- 4)
+        @Assert(@f(g.guBoxNested()) == 3)
+        let updated = @f(g.guBoxNested() <- 4)
         @Assert(updated.v.v == 4)
     }
 
@@ -383,8 +383,8 @@ class GenericUserOpticLaws {
     @TestCase
     func multiParamExplicitCarrier(): Unit {
         let gp = GPair<Int64, String>(1, "a")
-        @Assert(@Lucida(gp.gpairFirst()) == 1)
-        let updated = @Lucida(gp.gpairFirst() <- 2)
+        @Assert(@f(gp.gpairFirst()) == 1)
+        let updated = @f(gp.gpairFirst() <- 2)
         @Assert(updated.first == 2)
         @Assert(updated.second == "a")
     }
@@ -394,7 +394,7 @@ class GenericUserOpticLaws {
     @TestCase
     func genericAffineFusedWrite(): Unit {
         let gb = GBox<Int64>(5)
-        let updated = @Lucida(gb?.guBoxAffine() <- 9)
+        let updated = @f(gb?.guBoxAffine() <- 9)
         @Assert(updated.v == 9)
     }
 
@@ -403,7 +403,7 @@ class GenericUserOpticLaws {
     @TestCase
     func paramOnlyInSourceSecondInstantiation(): Unit {
         let gb = GBox<Bool>(true)
-        @Assert(@Lucida(gb.guBoxTag()) == 1)
+        @Assert(@f(gb.guBoxTag()) == 1)
     }
 
     // Manual-registry multi-arg call site (the salary_bump pattern): member
@@ -413,7 +413,7 @@ class GenericUserOpticLaws {
     @TestCase
     func manualRegistryMultiTypeArg(): Unit {
         let gp = GPair<Int64, String>(1, "a")
-        let focused = @Lucida(gp.mfirst<Int64, String>())
+        let focused = @f(gp.mfirst<Int64, String>())
         @Assert(focused.first == 1 && focused.second == "a")
     }
 }

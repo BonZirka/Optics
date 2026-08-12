@@ -42,11 +42,11 @@ read `Circle` out of both:
 ```cangjie
 let c = Shape.Circle(Nested(3))
 let s = Shape.Square(2)
-@Assert(isSomeCircle(@Lucida(c?.Circle), 3))
-@Assert(isNoneSquare(@Lucida(s?.Circle)))
+@Assert(isSomeCircle(@f(c?.Circle), 3))
+@Assert(isNoneSquare(@f(s?.Circle)))
 ```
 
-`@Lucida(c?.Circle)` is a partial read: it evaluates to `Option<Nested>`.
+`@f(c?.Circle)` is a partial read: it evaluates to `Option<Nested>`.
 `c` is a `Circle`, so the answer is `Some(payload)` — the `Nested(3)` inside
 `c`. `s` is a `Square`, so the read misses and the answer is `None` — no
 object comes back at all; the original `s` is still right where you left it,
@@ -78,7 +78,7 @@ and `c?.Square` — asking a circle for a square's payload — comes back `None`
 
 ```cangjie
 let sq = Shape.Square(5)
-let updated = @Lucida(sq?.Circle <- Nested(99))
+let updated = @f(sq?.Circle <- Nested(99))
 // updated is still Square(5)
 ```
 
@@ -97,7 +97,7 @@ match (updated) {
 ```
 
 That is the lesson this page exists for: a partial write is unconditional.
-Write `@Lucida(src?.Case <- newValue)` without checking anything first. When
+Write `@f(src?.Case <- newValue)` without checking anything first. When
 the case matches, the write rebuilds it around the new payload and you get a
 new value — nothing mutates (the matching side is the next section's write).
 When it misses, the same source comes back — nothing mutates either.
@@ -110,7 +110,7 @@ with `.`:
 
 ```cangjie
 let c = Shape.Circle(Nested(3))
-let updated = @Lucida(c?.Circle.n <- 7)
+let updated = @f(c?.Circle.n <- 7)
 // updated is Circle(Nested(7)); a Square source would stay untouched
 ```
 
@@ -120,7 +120,7 @@ the miss rule from the last section, with a lens riding after the prism:
 
 ```cangjie
 let sq = Shape.Square(4)
-let untouched = @Lucida(sq?.Circle.n <- 7)
+let untouched = @f(sq?.Circle.n <- 7)
 var untouchedOk = false
 match (untouched) {
     case Square(v) => untouchedOk = v == 4
@@ -142,6 +142,6 @@ or the untouched `Square` — and either way, nothing mutates.
 - [Introduction to optics](../introduction-to-optics.md) — where the prism
   sits among lenses, affines, isos and setters, and *a miss is an identity*
   from the ideas side.
-- [The DSL reference](../api/dsl.md) — every `@Lucida` form on one page.
+- [The DSL reference](../api/dsl.md) — every `@f` form on one page.
 - [Deriving](deriving.md) — what `@DeriveOptics` generates for each type.
 - Next example: [chains](chains.md) — mixing `.` and `?.` in one chain.

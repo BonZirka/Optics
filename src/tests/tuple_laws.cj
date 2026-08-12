@@ -46,14 +46,14 @@ class TupleWholeLaws {
     @TestCase
     func wholeTupleRead(): Unit {
         let p = PairBox((1, "a"))
-        let r = @Lucida(p.pair)
+        let r = @f(p.pair)
         @Assert(r[0] == 1 && r[1] == "a")
     }
 
     @TestCase
     func wholeTupleWrite(): Unit {
         let p = PairBox((1, "a"))
-        let updated = @Lucida(p.pair <- (2, "b"))
+        let updated = @f(p.pair <- (2, "b"))
         @Assert(updated.pair[0] == 2 && updated.pair[1] == "b")
         // the original is never mutated
         @Assert(p.pair[0] == 1 && p.pair[1] == "a")
@@ -62,15 +62,15 @@ class TupleWholeLaws {
     @TestCase
     func wholeTupleRoundTrip(): Unit {
         let p = PairBox((1, "a"))
-        let r = @Lucida(p.pair)
-        let back = @Lucida(p.pair <- r)
+        let r = @f(p.pair)
+        let back = @f(p.pair <- r)
         @Assert(back.pair[0] == 1 && back.pair[1] == "a")
     }
 
     @TestCase
     func tripleWrite(): Unit {
         let t = TripleBox((1, "x", true))
-        let updated = @Lucida(t.t <- (2, "y", false))
+        let updated = @f(t.t <- (2, "y", false))
         @Assert(updated.t[0] == 2 && updated.t[1] == "y" && !updated.t[2])
         @Assert(t.t[2])
     }
@@ -83,18 +83,18 @@ class TupleElementLaws {
     @TestCase
     func elementReads(): Unit {
         let p = PairBox((1, "a"))
-        @Assert(@Lucida(p.pair._0) == 1)
-        @Assert(@Lucida(p.pair._1) == "a")
+        @Assert(@f(p.pair._0) == 1)
+        @Assert(@f(p.pair._1) == "a")
     }
 
     @TestCase
     func elementWrites(): Unit {
         let p = PairBox((1, "a"))
-        let onlyInt = @Lucida(p.pair._0 <- 9)
+        let onlyInt = @f(p.pair._0 <- 9)
         @Assert(onlyInt.pair[0] == 9 && onlyInt.pair[1] == "a")
         @Assert(p.pair[0] == 1)
 
-        let onlyStr = @Lucida(p.pair._1 <- "z")
+        let onlyStr = @f(p.pair._1 <- "z")
         @Assert(onlyStr.pair[0] == 1 && onlyStr.pair[1] == "z")
         @Assert(p.pair[1] == "a")
     }
@@ -102,19 +102,19 @@ class TupleElementLaws {
     @TestCase
     func elementRoundTrip(): Unit {
         let p = PairBox((1, "a"))
-        let v = @Lucida(p.pair._0)
-        let back = @Lucida(p.pair._0 <- v)
+        let v = @f(p.pair._0)
+        let back = @f(p.pair._0 <- v)
         @Assert(back.pair[0] == 1 && back.pair[1] == "a")
     }
 
     @TestCase
     func tripleElementWrites(): Unit {
         let t = TripleBox((1, "x", true))
-        let a = @Lucida(t.t._0 <- 7)
+        let a = @f(t.t._0 <- 7)
         @Assert(a.t[0] == 7 && a.t[1] == "x" && a.t[2])
-        let b = @Lucida(t.t._1 <- "q")
+        let b = @f(t.t._1 <- "q")
         @Assert(b.t[0] == 1 && b.t[1] == "q" && b.t[2])
-        let c = @Lucida(t.t._2 <- false)
+        let c = @f(t.t._2 <- false)
         @Assert(c.t[0] == 1 && c.t[1] == "x" && !c.t[2])
         // original untouched by all three
         @Assert(t.t[0] == 1 && t.t[1] == "x" && t.t[2])
@@ -123,10 +123,10 @@ class TupleElementLaws {
     @TestCase
     func nestedTupleElements(): Unit {
         let p = NestedPairBox(((1, 2), "a"))
-        @Assert(@Lucida(p.pair._0._0) == 1)
-        @Assert(@Lucida(p.pair._0._1) == 2)
-        @Assert(@Lucida(p.pair._1) == "a")
-        let updated = @Lucida(p.pair._0._1 <- 42)
+        @Assert(@f(p.pair._0._0) == 1)
+        @Assert(@f(p.pair._0._1) == 2)
+        @Assert(@f(p.pair._1) == "a")
+        let updated = @f(p.pair._0._1 <- 42)
         @Assert(updated.pair[0][1] == 42 && updated.pair[0][0] == 1 && updated.pair[1] == "a")
         @Assert(p.pair[0][1] == 2)
     }
@@ -136,8 +136,8 @@ class TupleElementLaws {
     @TestCase
     func chainContinuesIntoStructElement(): Unit {
         let d = DeepPairBox((1, Inner(5)))
-        @Assert(@Lucida(d.pair._1.v) == 5)
-        let updated = @Lucida(d.pair._1.v <- 6)
+        @Assert(@f(d.pair._1.v) == 5)
+        let updated = @f(d.pair._1.v <- 6)
         @Assert(updated.pair[1].v == 6 && updated.pair[0] == 1)
         @Assert(d.pair[1].v == 5)
     }
@@ -145,8 +145,8 @@ class TupleElementLaws {
     @TestCase
     func chainContinuesIntoGenericElement(): Unit {
         let g = GPairBox((GBox<Int64>(3), "s"))
-        @Assert(@Lucida(g.pair._0.v) == 3)
-        let updated = @Lucida(g.pair._0.v <- 4)
+        @Assert(@f(g.pair._0.v) == 3)
+        let updated = @f(g.pair._0.v <- 4)
         @Assert(updated.pair[0].v == 4 && updated.pair[1] == "s")
     }
 }
@@ -162,14 +162,14 @@ class TupleEnumChainLaws {
     func enumCaseTupleElementRead(): Unit {
         let f = Status.Failed("boom", 7)
         var msgOk = false
-        match (@Lucida(f?.Failed._0)) {
+        match (@f(f?.Failed._0)) {
             case Some(v) => msgOk = (v == "boom")
             case _ => ()
         }
         @Assert(msgOk)
 
         var codeOk = false
-        match (@Lucida(f?.Failed._1)) {
+        match (@f(f?.Failed._1)) {
             case Some(v) => codeOk = (v == 7)
             case _ => ()
         }
@@ -179,7 +179,7 @@ class TupleEnumChainLaws {
     @TestCase
     func enumCaseTupleElementWrite(): Unit {
         let f = Status.Failed("boom", 7)
-        let fixed = @Lucida(f?.Failed._0 <- "fixed")
+        let fixed = @f(f?.Failed._0 <- "fixed")
         var ok = false
         match (fixed) {
             case Failed(msg, code) => ok = (msg == "fixed" && code == 7)
@@ -198,7 +198,7 @@ class TupleEnumChainLaws {
     @TestCase
     func enumCaseMissCarriesSource(): Unit {
         let a = Status.Active(2)
-        let untouched = @Lucida(a?.Failed._0 <- "x")
+        let untouched = @f(a?.Failed._0 <- "x")
         var kept = false
         match (untouched) {
             case Active(v) => kept = (v == 2)
@@ -213,20 +213,20 @@ class TupleEnumChainLaws {
     func nestedListThroughTupleElements(): Unit {
         let l = IntList.Cons(1, IntList.Cons(2, IntList.Nil))
         var headOk = false
-        match (@Lucida(l?.Cons._0)) {
+        match (@f(l?.Cons._0)) {
             case Some(v) => headOk = (v == 1)
             case _ => ()
         }
         @Assert(headOk)
 
         var secondOk = false
-        match (@Lucida(l?.Cons._1?.Cons._0)) {
+        match (@f(l?.Cons._1?.Cons._0)) {
             case Some(v) => secondOk = (v == 2)
             case _ => ()
         }
         @Assert(secondOk)
 
-        let updated = @Lucida(l?.Cons._1?.Cons._0 <- 42)
+        let updated = @f(l?.Cons._1?.Cons._0 <- 42)
         var ok = false
         match (updated) {
             case Cons(h, t) => match (t) {
@@ -242,7 +242,7 @@ class TupleEnumChainLaws {
     func nestedListMissIsIdentity(): Unit {
         let l = IntList.Cons(1, IntList.Nil)
         // the inner Cons misses; the whole chain keeps the source
-        let updated = @Lucida(l?.Cons._1?.Cons._0 <- 42)
+        let updated = @f(l?.Cons._1?.Cons._0 <- 42)
         var kept = false
         match (updated) {
             case Cons(h, t) => match (t) {
@@ -272,9 +272,9 @@ class TupleArityLaws {
     @TestCase
     func quintElements(): Unit {
         let q = QuintBox((1, 2, 3, 4, 5))
-        @Assert(@Lucida(q.t._0) == 1)
-        @Assert(@Lucida(q.t._4) == 5)
-        let updated = @Lucida(q.t._2 <- 30)
+        @Assert(@f(q.t._0) == 1)
+        @Assert(@f(q.t._4) == 5)
+        let updated = @f(q.t._2 <- 30)
         @Assert(updated.t[2] == 30 && updated.t[0] == 1 && updated.t[4] == 5)
         @Assert(q.t[2] == 3)
     }
@@ -282,9 +282,9 @@ class TupleArityLaws {
     @TestCase
     func octoElements(): Unit {
         let o = OctoBox((1, 2, 3, 4, 5, 6, 7, 8))
-        @Assert(@Lucida(o.t._0) == 1)
-        @Assert(@Lucida(o.t._7) == 8)
-        let updated = @Lucida(o.t <- (8, 7, 6, 5, 4, 3, 2, 1))
+        @Assert(@f(o.t._0) == 1)
+        @Assert(@f(o.t._7) == 8)
+        let updated = @f(o.t <- (8, 7, 6, 5, 4, 3, 2, 1))
         @Assert(updated.t[0] == 8 && updated.t[7] == 1)
         @Assert(o.t[0] == 1)
     }
@@ -297,7 +297,7 @@ class TupleFirstClassLaws {
     @TestCase
     func firstClassWholeTuple(): Unit {
         let p = PairBox((1, "a"))
-        let lens = @Lucida(@TypeOf(p).pair)
+        let lens = @f(@typeof(p).pair)
         let r = lens.view(p)
         @Assert(r[0] == 1 && r[1] == "a")
         let updated = lens.update(p, (2, "b"))
@@ -307,7 +307,7 @@ class TupleFirstClassLaws {
     @TestCase
     func firstClassElement(): Unit {
         let p = PairBox((1, "a"))
-        let lens = @Lucida(@TypeOf(p).pair._0)
+        let lens = @f(@typeof(p).pair._0)
         @Assert(lens.view(p) == 1)
         let updated = lens.update(p, 9)
         @Assert(updated.pair[0] == 9 && updated.pair[1] == "a")
@@ -316,7 +316,7 @@ class TupleFirstClassLaws {
 
 // ===== user-declared optic with a tuple focus =====
 
-@LucidaOptic[
+@Optic[
     source: Point
     focus: (Int64, Int64)
     kind: Iso
@@ -334,17 +334,17 @@ class TupleUserOpticLaws {
     @TestCase
     func userIsoTupleFocusRead(): Unit {
         let pt = Point(3, 4)
-        let coords = @Lucida(pt.pointCoords())
+        let coords = @f(pt.pointCoords())
         @Assert(coords[0] == 3 && coords[1] == 4)
         // the iso is total, so the chain continues into the tuple elements
-        @Assert(@Lucida(pt.pointCoords()._0) == 3)
-        @Assert(@Lucida(pt.pointCoords()._1) == 4)
+        @Assert(@f(pt.pointCoords()._0) == 3)
+        @Assert(@f(pt.pointCoords()._1) == 4)
     }
 
     @TestCase
     func userIsoTupleFocusWrite(): Unit {
         let pt = Point(3, 4)
-        let moved = @Lucida(pt.pointCoords()._0 <- 10)
+        let moved = @f(pt.pointCoords()._0 <- 10)
         @Assert(moved.x == 10 && moved.y == 4)
         @Assert(pt.x == 3)
     }

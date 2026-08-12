@@ -3,7 +3,7 @@
 Optics compose. Two first-class optics — each a value carrying its halves,
 the read arrow and the rebuild arrow ([first-class optics](first-class.md)) —
 combine into one pair of composed functions, and because that is all a chain
-in the `@Lucida` DSL does per segment, a chain *is* composition: one upcast
+in the `@f` DSL does per segment, a chain *is* composition: one upcast
 and one composition step per extra mark. This page is the reference for the
 composition machinery itself — the full table of kind pairs, the lattice that
 resolves mixed kinds, and the `[unfuse]` switch that forces the library path
@@ -286,7 +286,7 @@ composed, step by step, from `composeForward`/`composeBackward` and
 @TestCase
 func unfusedForward(): Unit {
     let o = Order(1, Customer("Ada", Address(City("Atlanta", 30301))))
-    @Assert(@Lucida[unfuse](o.customer.address.city.name) == "Atlanta")
+    @Assert(@f[unfuse](o.customer.address.city.name) == "Atlanta")
 }
 ```
 
@@ -297,7 +297,7 @@ func unfusedForward(): Unit {
 @TestCase
 func unfusedBackward(): Unit {
     let o = Order(1, Customer("Ada", Address(City("Atlanta", 30301))))
-    let updated = @Lucida[unfuse](o.customer.address.city.name <- "Denver")
+    let updated = @f[unfuse](o.customer.address.city.name <- "Denver")
     @Assert(updated.customer.address.city.name == "Denver")
     @Assert(o.customer.address.city.name == "Atlanta")
     @Assert(updated.id == 1)
@@ -310,14 +310,14 @@ the write still returns a new value — nothing mutates.
 The macro also falls back on its own, no attribute needed, whenever the fused
 walk does not apply:
 
-- **A spliced first-class optic** — `@Optic(o)` anywhere in the chain always
+- **A spliced first-class optic** — `@use(o)` anywhere in the chain always
   takes the library path; the fused walk does not support the splice.
 - **Reads with more than eight either-producing segments** — each partial
   segment (`?.` on a derived case, a `?.`-marked user optic) is pinned to a
   slot in the fused read walk, and the slots run out at eight; longer chains
   fall back automatically. Writes are not capped.
 - **Segments the walk cannot carry** — derived fields, user-declared optics
-  used by name (not `@Optic` splices), and coercions fuse; anything else
+  used by name (not `@use` splices), and coercions fuse; anything else
   falls back.
 
 So `[unfuse]` is for opting in deliberately — keeping a specific call site on

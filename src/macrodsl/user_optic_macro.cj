@@ -24,7 +24,7 @@ private func splitOpticFields(attr: Tokens): ArrayList<(Token, Tokens)> {
     while (i < toks.size) {
         if (!isOpticFieldStart(toks, i)) {
             throw DiagReportException(
-                "@LucidaOptic: unexpected token in fields",
+                "@Optic: unexpected token in fields",
                 toks[i].toTokens(),
                 hint: "Expected one of: source:, focus:, kind:, args:, forward:, backward:"
             )
@@ -52,7 +52,7 @@ private func splitOpticFields(attr: Tokens): ArrayList<(Token, Tokens)> {
         }
         if (value.isEmpty()) {
             throw DiagReportException(
-                "@LucidaOptic: field '${name.value}' is empty", name.toTokens())
+                "@Optic: field '${name.value}' is empty", name.toTokens())
         }
         fields.add((name, Tokens(value)))
     }
@@ -70,7 +70,7 @@ private func getField(fields: ArrayList<(Token, Tokens)>, name: String): ?Tokens
 private func requireSingleIdentifier(field: String, value: Tokens): Token {
     if (value.size != 1 || value[0].kind != TokenKind.IDENTIFIER) {
         throw DiagReportException(
-            "@LucidaOptic: field '${field}' must be a single identifier", value)
+            "@Optic: field '${field}' must be a single identifier", value)
     }
     return value[0]
 }
@@ -92,13 +92,13 @@ private func parseOpticArgs(value: Tokens): ArrayList<(Token, Tokens)> {
     let fd = match (parseDecl(quote(func __lucida_optic_args_probe($paramValue): Unit { }))) {
         case f: FuncDecl => f
         case _ => throw DiagReportException(
-            "@LucidaOptic: cannot parse args list", value)
+            "@Optic: cannot parse args list", value)
     }
     let out = ArrayList<(Token, Tokens)>()
     for (p in fd.funcParams) {
         if (p.identifier.value == "src" || p.identifier.value == "focus" || p.identifier.value == "_src") {
             throw DiagReportException(
-                "@LucidaOptic: arg name '${p.identifier.value}' is reserved",
+                "@Optic: arg name '${p.identifier.value}' is reserved",
                 p.toTokens(),
                 hint: "src/_src/focus are fixed slots of the generated lambdas"
             )
@@ -114,7 +114,7 @@ private func stripOuterBraces(field: String, value: Tokens): Tokens {
     value |> forEach { t: Token => toks.add(t) }
     if (toks.size < 2 || toks[0].kind != TokenKind.LCURL || toks[toks.size - 1].kind != TokenKind.RCURL) {
         throw DiagReportException(
-            "@LucidaOptic: field '${field}' must be a { ... } block", value)
+            "@Optic: field '${field}' must be a { ... } block", value)
     }
     let inner = ArrayList<Token>()
     for (i in 1..toks.size - 1) {
@@ -136,7 +136,7 @@ private func rejectSrcInSourcelessBackward(body: Tokens, kindTok: Token): Unit {
             case TokenKind.IDENTIFIER =>
                 if (depth == 0 && t.value == "src") {
                     throw DiagReportException(
-                        "@LucidaOptic: backward of kind '${kindTok.value}' has no src slot",
+                        "@Optic: backward of kind '${kindTok.value}' has no src slot",
                         t.toTokens(),
                         hint: "Lens/Affine backwards receive src; Prism/Iso rebuild from focus"
                     )
@@ -234,48 +234,48 @@ private func emitUserOptic(
     )
 }
 
-public macro LucidaOptic(attr: Tokens, input: Tokens): Tokens {
+public macro Optic(attr: Tokens, input: Tokens): Tokens {
     try {
         let decl = parseDecl(input)
         let carrier = match (decl) {
             case s: StructDecl => s
             case _ => throw DiagReportException(
-                "@LucidaOptic: carrier must be a struct declaration", input,
-                hint: "Use: @LucidaOptic[fields] struct Name<T> {}")
+                "@Optic: carrier must be a struct declaration", input,
+                hint: "Use: @Optic[fields] struct Name<T> {}")
         }
         if (carrier.body.decls.size != 0) {
             throw DiagReportException(
-                "@LucidaOptic: carrier struct must be empty",
+                "@Optic: carrier struct must be empty",
                 carrier.identifier.toTokens(),
                 hint: "The struct only carries the optic name and type parameters")
         }
         if (carrier.genericConstraint.size != 0) {
             throw DiagReportException(
-                "@LucidaOptic: generic constraints ('where' clauses) are not supported",
+                "@Optic: generic constraints ('where' clauses) are not supported",
                 carrier.identifier.toTokens(),
                 hint: "Remove the constraint or hand-write the optics")
         }
         let fields = splitOpticFields(attr)
 
         let kindValue = getField(fields, "kind") ?? throw DiagReportException(
-            "@LucidaOptic: missing required field 'kind'", carrier.identifier.toTokens())
+            "@Optic: missing required field 'kind'", carrier.identifier.toTokens())
         let kindTok = requireSingleIdentifier("kind", kindValue)
         if (!opticKindNames.contains(kindTok.value)) {
             throw DiagReportException(
-                "@LucidaOptic: unknown kind '${kindTok.value}'", kindTok.toTokens(),
+                "@Optic: unknown kind '${kindTok.value}'", kindTok.toTokens(),
                 hint: "kind must be one of: Lens, Prism, Affine, Iso")
         }
 
         let source = getField(fields, "source") ?? throw DiagReportException(
-            "@LucidaOptic: missing required field 'source'", carrier.identifier.toTokens())
+            "@Optic: missing required field 'source'", carrier.identifier.toTokens())
         let focus = getField(fields, "focus") ?? throw DiagReportException(
-            "@LucidaOptic: missing required field 'focus'", carrier.identifier.toTokens())
+            "@Optic: missing required field 'focus'", carrier.identifier.toTokens())
 
         let forwardValue = getField(fields, "forward") ?? throw DiagReportException(
-            "@LucidaOptic: missing required field 'forward'", carrier.identifier.toTokens())
+            "@Optic: missing required field 'forward'", carrier.identifier.toTokens())
         let forward = stripOuterBraces("forward", forwardValue)
         let backwardValue = getField(fields, "backward") ?? throw DiagReportException(
-            "@LucidaOptic: missing required field 'backward'", carrier.identifier.toTokens())
+            "@Optic: missing required field 'backward'", carrier.identifier.toTokens())
         let backward = stripOuterBraces("backward", backwardValue)
 
         let args = match (getField(fields, "args")) {

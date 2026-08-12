@@ -66,7 +66,7 @@ was verified by benchmark), so this is a capability gap, not a blocker.
 ## 5. Tuple element access parses neither `.0` nor `t[0]`-style chains (FYI)
 
 Tuples index as `t[i]` in source, but a member-access AST node for `.0`
-does not exist and the `@Lucida` macro receives index expressions as opaque
+does not exist and the `@f` macro receives index expressions as opaque
 `Unknown expression`. Not a defect — the DSL's `._i` spelling sidesteps it —
 but any DSL authoring tuples should know the grammar constraints up front.
 

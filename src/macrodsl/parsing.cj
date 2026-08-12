@@ -6,34 +6,34 @@ import std.collection.*
 enum OpticalExpr {
     /**
      * Refers to the cases:
-     *  @Lucida(val.x.y)
-     *  @Lucida(call().x.y)
+     *  @f(val.x.y)
+     *  @f(call().x.y)
      *
      * NOTE: For setter Forward == Backward(id). That's not conventional, but for us that's quite handy
-     * @Lucida(call().@Optic(someSetter)) will work
+     * @f(call().@use(someSetter)) will work
      */
     | OpticsForward(Expr, Array<CompositionNode>)
     /**
      * Refers to the cases:
-     *  @Lucida(val.x.y = 3)
-     *  @Lucida(call().x.y = 3)
+     *  @f(val.x.y = 3)
+     *  @f(call().x.y = 3)
      *
      * Basically translated to:
-     *  @Lucida(call().@TypeOf(call()).x.y = 3)
+     *  @f(call().@typeof(call()).x.y = 3)
      */
     | OpticsBackward(Expr, Array<CompositionNode>, Expr)
     /**
      * Refers to the cases:
-     *  @Lucida(@Type(String).x.y)
-     *  @Lucida(@Optic(optics).x.y)
-     *  @Lucida(@TypeOf(val).x.y)
+     *  @f(@ty(String).x.y)
+     *  @f(@use(optics).x.y)
+     *  @f(@typeof(val).x.y)
      */
     | FirstClassOptics(Array<CompositionNode>)
     /**
      * Refers to the cases:
-     *  @Lucida(@Type(String).x.y = 3)
-     *  @Lucida(@Optic(optics).x.y = 3)
-     *  @Lucida(@TypeOf(val).x.y = 3)
+     *  @f(@ty(String).x.y = 3)
+     *  @f(@use(optics).x.y = 3)
+     *  @f(@typeof(val).x.y = 3)
      */
     | FirstClassSetter(Array<CompositionNode>, Expr)
 
@@ -61,7 +61,7 @@ func parseModifier(attr: Tokens): Bool {
 }
 
 // Lead-expression classification shared by the forward and backward forms:
-// decompose the leading member access (or @Optic call) into an optional base
+// decompose the leading member access (or @use call) into an optional base
 // expression — the chain's source anchor — plus the composition nodes. None
 // means the chain is first-class (no source at the call site).
 private func classifyLead(lead: Expr, input: Tokens): (?Expr, Array<CompositionNode>) {
@@ -94,7 +94,7 @@ private func classifyLead(lead: Expr, input: Tokens): (?Expr, Array<CompositionN
 }
 
 func parseOpticalExpression(input: Tokens): OpticalExpr {
-    // Scan for '<-' token to detect assignment form: @Lucida(o.x.y <- 3)
+    // Scan for '<-' token to detect assignment form: @f(o.x.y <- 3)
     var arrowIdx = -1
     for (i in 0..input.size) {
         if (input[i].value == "<-") {
@@ -161,9 +161,9 @@ enum OpticKind {
 
 enum CompositionNode {
     | Derived(Token, OpticKind)        // kind set by parser: . -> Lens, ?. -> Prism
-    | Type(RefExpr)                    // start anchor @Type(T)
-    | TypeOf(Tokens)                   // start anchor @TypeOf(x) or auto-derived from leading identifier
-    | Optic(Token)                     // start anchor @Optic(o); forces fallback
+    | Type(RefExpr)                    // start anchor @ty(T)
+    | TypeOf(Tokens)                   // start anchor @typeof(x) or auto-derived from leading identifier
+    | Optic(Token)                     // start anchor @use(o); forces fallback
     | Coerce(TypeNode)                 // kind = Iso
     | UserDefined(Token, ArrayList<TypeNode>, ArrayList<Argument>, Bool)
     // Bool = total: operator-derived call-site expectation.
@@ -176,7 +176,7 @@ private func getCompositionNode(input: Expr, total!: Bool = true): CompositionNo
             let re = ce.callFunc as RefExpr ?? throw DiagReportException("${mainMacroName}: unsupported callee form in a chain segment", ce.toTokens())
             if (re.identifier.value == typeFakeCallexprId.value) {
                 Type(ce.arguments[0].expr as RefExpr ?? throw DiagReportException(
-                    "${mainMacroName}: '@Type' expects a plain type name, e.g. @Type(GBox)",
+                    "${mainMacroName}: '@ty' expects a plain type name, e.g. @ty(GBox)",
                     ce.arguments[0].expr.toTokens()
                 ))
             } else if (re.identifier.value == typeOfFakeCallexprId.value) {
@@ -206,7 +206,7 @@ private func getCompositionNode(input: Expr, total!: Bool = true): CompositionNo
             throw DiagReportException(
                 "${mainMacroName}: unsupported expression in a chain",
                 input.toTokens(),
-                hint: "Chains support field accesses, method calls, and the @Type/@TypeOf/@Optic anchors"
+                hint: "Chains support field accesses, method calls, and the @ty/@typeof/@use anchors"
             )
     }
 }

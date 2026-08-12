@@ -49,7 +49,7 @@ class DerivedEnumShapeLaws {
         // Some(()) when the source IS the case — a match check.
         let e0 = Slot.Empty
         var ok = false
-        match (@Lucida(e0?.Empty)) {
+        match (@f(e0?.Empty)) {
             case Some(_) => ok = true
             case _ => ()
         }
@@ -58,7 +58,7 @@ class DerivedEnumShapeLaws {
         // A Held value misses: None — nothing handed back.
         let h0 = Slot.Held(3)
         var missed = false
-        match (@Lucida(h0?.Empty)) {
+        match (@f(h0?.Empty)) {
             case None => missed = true
             case _ => ()
         }
@@ -68,7 +68,7 @@ class DerivedEnumShapeLaws {
     @TestCase
     func payloadlessCaseUpdate(): Unit {
         let m = Slot.Empty
-        let updated = @Lucida(m?.Empty <- ())
+        let updated = @f(m?.Empty <- ())
         var stillEmpty = false
         match (updated) {
             case Empty => stillEmpty = true
@@ -78,7 +78,7 @@ class DerivedEnumShapeLaws {
 
         // Set through a non-matching prism is identity (the §1.1 law).
         let h1 = Slot.Held(3)
-        let untouched = @Lucida(h1?.Empty <- ())
+        let untouched = @f(h1?.Empty <- ())
         var identityKept = false
         match (untouched) {
             case Held(v) => identityKept = (v == 3)
@@ -92,7 +92,7 @@ class DerivedEnumShapeLaws {
     func multiPayloadTupleFocus(): Unit {
         let l = IntList.Cons(1, IntList.Nil)
         var ok = false
-        match (@Lucida(l?.Cons)) {
+        match (@f(l?.Cons)) {
             case Some(pair) => match (pair) {
                 case (h, t) => match (t) {
                     case Nil => ok = (h == 1)
@@ -106,7 +106,7 @@ class DerivedEnumShapeLaws {
 
         let n0 = IntList.Nil
         var missed = false
-        match (@Lucida(n0?.Cons)) {
+        match (@f(n0?.Cons)) {
             case None => missed = true
             case _ => ()
         }
@@ -116,7 +116,7 @@ class DerivedEnumShapeLaws {
     @TestCase
     func multiPayloadTupleUpdate(): Unit {
         let l = IntList.Cons(1, IntList.Nil)
-        let updated = @Lucida(l?.Cons <- (9, IntList.Cons(2, IntList.Nil)))
+        let updated = @f(l?.Cons <- (9, IntList.Cons(2, IntList.Nil)))
         var rebuilt = false
         match (updated) {
             case Cons(h, t) => match (t) {
@@ -129,7 +129,7 @@ class DerivedEnumShapeLaws {
 
         // mismatched source: identity
         let n1 = IntList.Nil
-        let untouched = @Lucida(n1?.Cons <- (9, IntList.Nil))
+        let untouched = @f(n1?.Cons <- (9, IntList.Nil))
         var kept = false
         match (untouched) {
             case Nil => kept = true
@@ -145,7 +145,7 @@ class DerivedEnumShapeLaws {
     func mixedShapesDeriveTogether(): Unit {
         let a = Status.Active(2)
         var activeOk = false
-        match (@Lucida(a?.Active)) {
+        match (@f(a?.Active)) {
             case Some(v) => activeOk = (v == 2)
             case _ => ()
         }
@@ -153,7 +153,7 @@ class DerivedEnumShapeLaws {
 
         let f = Status.Failed("boom", 7)
         var failedOk = false
-        match (@Lucida(f?.Failed)) {
+        match (@f(f?.Failed)) {
             case Some(pair) => match (pair) {
                 case (msg, code) => failedOk = (msg == "boom" && code == 7)
                 case _ => ()
@@ -164,13 +164,13 @@ class DerivedEnumShapeLaws {
 
         let p = Status.Pending
         var pendingOk = false
-        match (@Lucida(p?.Pending)) {
+        match (@f(p?.Pending)) {
             case Some(_) => pendingOk = true
             case _ => ()
         }
         @Assert(pendingOk)
 
-        let updated = @Lucida(f?.Failed <- ("ok", 0))
+        let updated = @f(f?.Failed <- ("ok", 0))
         var writeOk = false
         match (updated) {
             case Failed(msg, code) => writeOk = (msg == "ok" && code == 0)
@@ -184,7 +184,7 @@ class DerivedEnumShapeLaws {
     func genericEnumWithPayloadlessCase(): Unit {
         let w = Envelope<Int64>.Sealed(3)
         var ok = false
-        match (@Lucida(w?.Sealed)) {
+        match (@f(w?.Sealed)) {
             case Some(v) => ok = (v == 3)
             case _ => ()
         }
@@ -192,7 +192,7 @@ class DerivedEnumShapeLaws {
 
         let e = Envelope<Int64>.Vacant
         var emptyOk = false
-        match (@Lucida(e?.Vacant)) {
+        match (@f(e?.Vacant)) {
             case Some(_) => emptyOk = true
             case _ => ()
         }
@@ -203,24 +203,24 @@ class DerivedEnumShapeLaws {
 @Test
 class EnumPrismLaws {
     // ===== forward =====
-    // With a source present, @Lucida(src?.Case) evaluates the prism directly:
+    // With a source present, @f(src?.Case) evaluates the prism directly:
     // matching case -> Some(payload), mismatched -> None.
     @TestCase
     func forwardMatchAndMismatch(): Unit {
         let c = Shape.Circle(Nested(3))
         let s = Shape.Square(2)
-        @Assert(isSomeCircle(@Lucida(c?.Circle), 3))
-        @Assert(isNoneSquare(@Lucida(s?.Circle)))
-        @Assert(isSomeSquare(@Lucida(s?.Square), 2))
-        @Assert(isNoneCircle(@Lucida(c?.Square)))
+        @Assert(isSomeCircle(@f(c?.Circle), 3))
+        @Assert(isNoneSquare(@f(s?.Circle)))
+        @Assert(isSomeSquare(@f(s?.Square), 2))
+        @Assert(isNoneCircle(@f(c?.Square)))
     }
 
     // ===== backward rebuilds the case with the new payload =====
     @TestCase
     func backwardRebuilds(): Unit {
         let circleVal = Shape.Circle(Nested(1))
-        // Sourceless @TypeOf form constructs the first-class affine itself.
-        let aff = @Lucida(@TypeOf(circleVal)?.Circle)
+        // Sourceless @typeof form constructs the first-class affine itself.
+        let aff = @f(@typeof(circleVal)?.Circle)
         let rebuilt = aff.update(circleVal, Nested(9))
         var rebuiltOk = false
         match (rebuilt) {
@@ -234,7 +234,7 @@ class EnumPrismLaws {
     @TestCase
     func nonMatchSetIsIdentity(): Unit {
         let sq = Shape.Square(5)
-        let updated = @Lucida(sq?.Circle <- Nested(99))
+        let updated = @f(sq?.Circle <- Nested(99))
         var identityKept = false
         match (updated) {
             case Square(v) => identityKept = v == 5
@@ -247,7 +247,7 @@ class EnumPrismLaws {
     @TestCase
     func chainedThroughPayloadField(): Unit {
         let c = Shape.Circle(Nested(3))
-        let updated = @Lucida(c?.Circle.n <- 7)
+        let updated = @f(c?.Circle.n <- 7)
         var updatedOk = false
         match (updated) {
             case Circle(inner) => updatedOk = inner.n == 7
@@ -257,7 +257,7 @@ class EnumPrismLaws {
 
         // non-matching source stays untouched
         let sq = Shape.Square(4)
-        let untouched = @Lucida(sq?.Circle.n <- 7)
+        let untouched = @f(sq?.Circle.n <- 7)
         var untouchedOk = false
         match (untouched) {
             case Square(v) => untouchedOk = v == 4
@@ -270,11 +270,11 @@ class EnumPrismLaws {
     @TestCase
     func roundTripAgreement(): Unit {
         let c = Shape.Circle(Nested(3))
-        let fwdBack = @Lucida(c?.Circle)
+        let fwdBack = @f(c?.Circle)
         var agree = false
         match (fwdBack) {
             case Some(p) =>
-                let back = @Lucida(@TypeOf(c)?.Circle)
+                let back = @f(@typeof(c)?.Circle)
                 match (back.update(c, p)) {
                     case Circle(inner) => agree = inner.n == 3
                     case _ => ()

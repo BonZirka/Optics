@@ -15,13 +15,13 @@ class GenericDeriveLaws {
     @TestCase
     func gboxLensForwardBackward(): Unit {
         let b = GBox<Int64>(5)
-        @Assert(@Lucida(b.v) == 5)
+        @Assert(@f(b.v) == 5)
     }
 
     @TestCase
     func gboxLensSet(): Unit {
         let b = GBox<Int64>(5)
-        let updated = @Lucida(b.v <- 7)
+        let updated = @f(b.v <- 7)
         @Assert(updated.v == 7)
         @Assert(b.v == 5)
     }

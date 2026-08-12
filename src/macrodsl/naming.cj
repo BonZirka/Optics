@@ -13,10 +13,10 @@ let registrySetterId   = Token(IDENTIFIER, "RegistrySetters")
 // Macros
 let deriveOpticsMacro = "@DeriveOptics"
 
-let mainMacroName   = "@Lucida"
-let typeMacroName   = "@Type"
-let typeOfMacroName = "@TypeOf"
-let opticMacroName  = "@Optic"
+let mainMacroName   = "@f"
+let typeMacroName   = "@ty"
+let typeOfMacroName = "@typeof"
+let opticMacroName  = "@use"
 
 // Fake Call Exprs
 let typeFakeCallexprId     = Token(IDENTIFIER, "__lucida_type_fake_callexpr")

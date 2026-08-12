@@ -3,11 +3,11 @@ macro package lucida.macrodsl
 import std.ast.*
 import std.collection.*
 
-public macro Lucida(input: Tokens): Tokens {
+public macro f(input: Tokens): Tokens {
     lucidaDispatch(false, input)
 }
 
-public macro Lucida(attr: Tokens, input: Tokens): Tokens {
+public macro f(attr: Tokens, input: Tokens): Tokens {
     lucidaDispatch(parseModifier(attr), input)
 }
 
@@ -96,7 +96,7 @@ private func composeOptics(nodes: Array<CompositionNode>): ((Token, Token) -> To
             case Derived(input, _)     => throw DiagReportException(
                 "${mainMacroName}: a derived field optic cannot start a chain here",
                 input.toTokens(),
-                hint: "Start the chain with the owning value, @Type, @TypeOf or @Optic"
+                hint: "Start the chain with the owning value, @ty, @typeof or @use"
             )
             case Type(input)        =>
                 currentNode = iter.next()
@@ -108,8 +108,8 @@ private func composeOptics(nodes: Array<CompositionNode>): ((Token, Token) -> To
                 // Identity magic-cont: Optic is the only start node whose
                 // emitter ignores the incoming magical expression (a
                 // first-class optic anchors itself), so quote() is safe here.
-                // Reaching this branch is normal: @Lucida(@Optic(o)) and
-                // @Lucida(@Optic(o) <- v) both start a chain with Optic.
+                // Reaching this branch is normal: @f(@use(o)) and
+                // @f(@use(o) <- v) both start a chain with Optic.
                 { x => x(quote()) }
             case Coerce(input)      => throw DiagReportException(
                 "${mainMacroName}: '${coercionFakeCallexprId.value}<Type>()' cannot start a chain",
@@ -118,7 +118,7 @@ private func composeOptics(nodes: Array<CompositionNode>): ((Token, Token) -> To
             case UserDefined(name, _, _, _) => throw DiagReportException(
                 "${mainMacroName}: user-defined method optics cannot start a chain",
                 name.toTokens(),
-                hint: "Start the chain with the owning value, @Type, @TypeOf or @Optic"
+                hint: "Start the chain with the owning value, @ty, @typeof or @use"
             )
         }
     } else {
@@ -137,11 +137,11 @@ private func composeOptics(nodes: Array<CompositionNode>): ((Token, Token) -> To
                 compositionCont = wireSegment(first, magicCont, currentCont,
                     derivedSplices(input, 0), { i: UInt64 => derivedSplices(input, i) })
             case Type(input)        => throw DiagReportException(
-                "${mainMacroName}: @Type is only allowed at the start of a chain",
+                "${mainMacroName}: @ty is only allowed at the start of a chain",
                 input.toTokens()
             )
             case TypeOf(input)      => throw DiagReportException(
-                "${mainMacroName}: @TypeOf is only allowed at the start of a chain",
+                "${mainMacroName}: @typeof is only allowed at the start of a chain",
                 input.toTokens()
             )
             case Optic(input)       =>

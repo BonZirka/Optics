@@ -3,7 +3,7 @@ macro package lucida.macrodsl
 import std.ast.*
 import std.collection.*
 
-public macro Type(input: Tokens): Tokens {
+public macro ty(input: Tokens): Tokens {
     try {
         if (insideParentContext(mainMacroName[1..])) {
             let re = if (input.size == 1) {
@@ -31,7 +31,7 @@ public macro Type(input: Tokens): Tokens {
     }
 }
 
-public macro TypeOf(input: Tokens): Tokens {
+public macro typeof(input: Tokens): Tokens {
     try {
         if (insideParentContext(mainMacroName[1..])) {
             return quote($typeOfFakeCallexprId($input))
@@ -51,7 +51,7 @@ public macro TypeOf(input: Tokens): Tokens {
     }
 }
 
-public macro Optic(input: Tokens): Tokens {
+public macro use(input: Tokens): Tokens {
     try {
         if (insideParentContext(mainMacroName[1..])) {
             let re = if (input.size == 1) {

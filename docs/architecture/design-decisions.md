@@ -172,7 +172,7 @@ The diagnostic form follows from the resolution rules. Each illegal
 mark–kind pair resolves *only* to an overload declared strict-deprecated:
 
 ```cangjie
-@Deprecated[message: "@Lucida: '.'-write through a prism — '.'-writes assert a match and would rebuild the source unconditionally on miss. Use '?.' to preserve the source on miss.", strict: true]
+@Deprecated[message: "@f: '.'-write through a prism — '.'-writes assert a match and would rebuild the source unconditionally on miss. Use '?.' to preserve the source on miss.", strict: true]
 public func __bwdApplyTotal<T, S, A>(_: RegistryPrisms<T>, backward: (A) -> S, src: S, focus: A): S {
     backward(focus)
 }
@@ -216,7 +216,7 @@ not writing a parameter.
 
 The explicit route is the only signal the macro can see reliably, so it is the
 design: type parameters come from the carrier struct's generic list —
-`@LucidaOptic[...] struct boxLens<T> {}`
+`@Optic[...] struct boxLens<T> {}`
 ([user-declared optics](../examples/user-optics.md)) — and the receiver pins
 them at call sites, the compiler inferring `T` from the receiver's registry
 exactly as it would for any generic extension member.

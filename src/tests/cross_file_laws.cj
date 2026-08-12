@@ -15,18 +15,18 @@ public let probeInstance = ProbeVal(1)
 class CrossFileLaws {
     @TestCase
     func crossFileBackward(): Unit {
-        let updated = @Lucida(probeInstance.f <- 2)
+        let updated = @f(probeInstance.f <- 2)
         @Assert(updated.f == 2)
     }
 
     @TestCase
     func crossFileForward(): Unit {
-        @Assert(@Lucida(probeInstance.f) == 1)
+        @Assert(@f(probeInstance.f) == 1)
     }
 
     @TestCase
     func crossFileTypeOf(): Unit {
-        let lens = @Lucida(@TypeOf(probeInstance).f)
+        let lens = @f(@typeof(probeInstance).f)
         @Assert(lens.view(probeInstance) == 1)
     }
 }

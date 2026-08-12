@@ -113,7 +113,7 @@ Who emits what:
 |---|---|---|---|
 | `@DeriveOptics`, struct or class | `__downcast` | `RegistryMagical<T>` | `RegistryLenses<T>` |
 | `@DeriveOptics`, enum | `__downcast` | `RegistryMagical<T>` | `RegistryAffines<T>` |
-| `@LucidaOptic` | `__downcast_method_<name>` | `RegistryMagical<S>` | the declared kind's registry |
+| `@Optic` | `__downcast_method_<name>` | `RegistryMagical<S>` | the declared kind's registry |
 | stdlib (`at`, `selectFirst`) | `__downcast_method_at`, `__downcast_method_selectFirst` | `RegistryMagical<Array<T>>` | `RegistryAffines<Array<T>>` |
 | the runtime, for `coerce<T>()` | `__downcast_method_coerce` (free function) | takes two `RegistryMagical` | `RegistryIsos<T>` |
 
@@ -176,7 +176,7 @@ what resolves direction; the next section shows why that matters.
 The macro is syntactic, so it does not decide — it asks. Every registry
 call it emits is a question posed to an overload set, and the member that
 resolves is the answer. Consider what the composed expansion of
-`@Lucida(o.customer.name)` holds:
+`@f(o.customer.name)` holds:
 
 - `magic0` is bound by `magic({ => o })`, so its type is
   `RegistryMagical<Order>` — the anchor's type parameter came from the
@@ -261,7 +261,7 @@ public func magic<T>(): RegistryMagical<T> {
 }
 ```
 
-`magic<T>(thunk)` anchors a chain rooted at a value: the `@TypeOf` anchor
+`magic<T>(thunk)` anchors a chain rooted at a value: the `@typeof` anchor
 emits `magic({ => o })`, and the thunk's return type pins `T`. The
 parameter is unnamed and unread — the lambda's *type* is the entire
 payload. Passing the source expression as a thunk rather than a value keeps
@@ -270,7 +270,7 @@ the expansion applies the source afresh at the tail of the walk, so the
 anchor binding must not evaluate it on the way. (The fused walk's pinning
 helpers lean on the same thunk trick — [the fusion
 walk](fusion-walk.md) covers them.) The bare `magic<T>()` serves the two
-places the type is already explicit: the `@Type(T)` anchor, which names the
+places the type is already explicit: the `@ty(T)` anchor, which names the
 type and has no expression to infer from, and the coercion segment's
 arriving registry, where the target type is equally explicit —
 `magic<Target>()` mints the registry that `__downcast_method_coerce`
@@ -307,7 +307,7 @@ documents it as the bridge the registry round is built on).
 `magicFirstClass` asks *where does the chain continue* — its currency is
 typed at the optic's **focus**, because the next segment's members must
 resolve against the focus type's emissions, exactly as they would after an
-accessor had moved the currency there. For `@Lucida(@Optic(myLens).field)`
+accessor had moved the currency there. For `@f(@use(myLens).field)`
 the shape of the emission is:
 
 ```cangjie

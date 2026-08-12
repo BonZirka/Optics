@@ -31,11 +31,11 @@ probe() {
     fi
 }
 
-probe "empty @Lucida()"            "expects at least one argument" <<'EOF'
+probe "empty @f()"            "expects at least one argument" <<'EOF'
 package lucida.tests
 import lucida.*
 import lucida.macrodsl.*
-func z(): Unit { let _ = @Lucida() }
+func z(): Unit { let _ = @f() }
 EOF
 
 probe "generic where-clause"       "generic constraints" <<'EOF'
@@ -51,34 +51,34 @@ probe "unknown chain start"        "Unknown expression" <<'EOF'
 package lucida.tests
 import lucida.*
 import lucida.macrodsl.*
-func z(): Unit { let _ = @Lucida(3 + 4) }
+func z(): Unit { let _ = @f(3 + 4) }
 EOF
 
 probe "optic unknown field"       "unexpected token in fields" <<'EOF'
 package lucida.tests
 import lucida.macrodsl.*
-@LucidaOptic[kolor: red]
+@Optic[kolor: red]
 struct BadOptic1 {}
 EOF
 
 probe "optic bad kind"            "unknown kind" <<'EOF'
 package lucida.tests
 import lucida.macrodsl.*
-@LucidaOptic[source: Int64, focus: Int64, kind: Setter]
+@Optic[source: Int64, focus: Int64, kind: Setter]
 struct BadOptic2 {}
 EOF
 
 probe "optic non-empty carrier"   "carrier struct must be empty" <<'EOF'
 package lucida.tests
 import lucida.macrodsl.*
-@LucidaOptic[source: Int64, focus: Int64, kind: Iso, forward: { src }, backward: { focus }]
+@Optic[source: Int64, focus: Int64, kind: Iso, forward: { src }, backward: { focus }]
 struct BadOptic3 { public BadOptic3(public let v: Int64) { } }
 EOF
 
 probe "optic src in sourceless backward" "has no src slot" <<'EOF'
 package lucida.tests
 import lucida.macrodsl.*
-@LucidaOptic[source: Int64, focus: Int64, kind: Prism, forward: { Right(src) }, backward: { src }]
+@Optic[source: Int64, focus: Int64, kind: Prism, forward: { Right(src) }, backward: { src }]
 struct BadOptic4 {}
 EOF
 
@@ -89,9 +89,9 @@ import lucida.macrodsl.*
 public struct DotBox {
     public DotBox(public let v: Int64) { }
 }
-@LucidaOptic[source: DotBox, focus: Int64, kind: Prism, forward: { Right(src.v) }, backward: { DotBox(focus) }]
+@Optic[source: DotBox, focus: Int64, kind: Prism, forward: { Right(src.v) }, backward: { DotBox(focus) }]
 struct dotPartial {}
-func z1(): Unit { let _ = @Lucida(DotBox(1).dotPartial()) }
+func z1(): Unit { let _ = @f(DotBox(1).dotPartial()) }
 EOF
 
 probe "optic question-dot on total" "on a total optic (Lens/Iso)" <<'EOF'
@@ -101,9 +101,9 @@ import lucida.macrodsl.*
 public struct DotBox2 {
     public DotBox2(public let v: Int64) { }
 }
-@LucidaOptic[source: DotBox2, focus: Int64, kind: Lens, forward: { src.v }, backward: { DotBox2(focus) }]
+@Optic[source: DotBox2, focus: Int64, kind: Lens, forward: { src.v }, backward: { DotBox2(focus) }]
 struct qdotTotal {}
-func z2(): Unit { let _ = @Lucida(DotBox2(1)?.qdotTotal()) }
+func z2(): Unit { let _ = @f(DotBox2(1)?.qdotTotal()) }
 EOF
 
 probe "optic dot-write on prism"  "rebuild the source unconditionally on miss" <<'EOF'
@@ -113,11 +113,11 @@ import lucida.macrodsl.*
 public struct DotBox3 {
     public DotBox3(public let v: Int64) { }
 }
-@LucidaOptic[source: DotBox3, focus: Int64, kind: Prism, forward: { Right(src.v) }, backward: { DotBox3(focus) }]
+@Optic[source: DotBox3, focus: Int64, kind: Prism, forward: { Right(src.v) }, backward: { DotBox3(focus) }]
 struct dotPartialW {}
 func z3(): Unit {
     let b = DotBox3(1)
-    let wr = @Lucida(b.dotPartialW() <- 9)
+    let wr = @f(b.dotPartialW() <- 9)
     let _ = wr
 }
 EOF
@@ -128,7 +128,7 @@ import lucida.*
 import lucida.macrodsl.*
 func z4(): Unit {
     let mb = MeterBox(Meters(7))
-    let rd = @Lucida(mb.m?.coerce<Int64>())
+    let rd = @f(mb.m?.coerce<Int64>())
     let _ = rd
 }
 EOF
@@ -139,7 +139,7 @@ import lucida.*
 import lucida.macrodsl.*
 func z5(): Unit {
     let h = PayloadHolder(Rect(Box(42)))
-    let rd = @Lucida(h.shape.Rect.w)
+    let rd = @f(h.shape.Rect.w)
     let _ = rd
 }
 EOF
@@ -150,7 +150,7 @@ import lucida.*
 import lucida.macrodsl.*
 func z6(): Unit {
     let mb = MeterBox(Meters(7))
-    let rd = @Lucida(mb.m?.v)
+    let rd = @f(mb.m?.v)
     let _ = rd
 }
 EOF
@@ -162,11 +162,11 @@ import lucida.macrodsl.*
 public struct WBox2<T> {
     public WBox2(public let v: T) { }
 }
-@LucidaOptic[source: WBox2<T>, focus: T, kind: Lens, forward: { src.v }, backward: { WBox2(focus) }]
+@Optic[source: WBox2<T>, focus: T, kind: Lens, forward: { src.v }, backward: { WBox2(focus) }]
 struct wbox2Lens<T> where T <: ToString {}
 func z7(): Unit {
     let w = WBox2<Int64>(1)
-    let rd = @Lucida(w.wbox2Lens())
+    let rd = @f(w.wbox2Lens())
     let _ = rd
 }
 EOF
@@ -177,7 +177,7 @@ import lucida.*
 import lucida.macrodsl.*
 func z(): Unit {
     let mb = MeterBox(Meters(7))
-    let rd = @Lucida(mb.m.coerce())
+    let rd = @f(mb.m.coerce())
     let _ = rd
 }
 EOF

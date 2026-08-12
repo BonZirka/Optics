@@ -38,15 +38,15 @@ main() {
     let ada = co.employees[0]
 
     // One expression reaching several levels deep (all lenses — always present).
-    println(@Lucida(ada.address.street))    // res: 1 High St
+    println(@f(ada.address.street))    // res: 1 High St
 
     // Update the first employee's salary; the array is untouched otherwise.
-    let raised = @Lucida(co.employees?.at(0).salary <- 120000)
+    let raised = @f(co.employees?.at(0).salary <- 120000)
     println(raised.employees[0].salary)     // res: 120000
     println(co.employees[0].salary)         // res: 100000
 
     // selectFirst updates only the matching element.
-    let moved = @Lucida(co.employees?.selectFirst({ e: Employee => e.name == "Bob" }).address.zip <- 20002)
+    let moved = @f(co.employees?.selectFirst({ e: Employee => e.name == "Bob" }).address.zip <- 20002)
     println(moved.employees[1].address.zip) // res: 20002
     println(moved.employees[0].address.zip) // res: 10001
 }
@@ -58,14 +58,14 @@ main() {
 struct, so `Employee` gets optics for `name`, `salary`, and `address` — and
 `Address` for `street` and `zip`.
 
-**Reading.** `@Lucida(ada.address.street)` walks the chain `ada.address.street`
+**Reading.** `@f(ada.address.street)` walks the chain `ada.address.street`
 and evaluates to the value:
 
 ```
 // res: 1 High St
 ```
 
-**Writing.** `@Lucida(<chain> <- <newValue>)` returns a *new* value with the
+**Writing.** `@f(<chain> <- <newValue>)` returns a *new* value with the
 focused part replaced. The array updates show two ways to aim a chain:
 
 - `co.employees?.at(0).salary <- 120000` — the first element's salary:
@@ -88,6 +88,6 @@ didn't touch are carried over for you.
 
 ---
 
-Curious what `@Lucida` expands to? It is a compile-time macro. See
+Curious what `@f` expands to? It is a compile-time macro. See
 [registry plumbing](architecture/registry-plumbing.md) for the internals — not
 required reading to use the library.

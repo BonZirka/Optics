@@ -30,7 +30,7 @@ Start with an array of numbers and one index:
 
 ```cangjie
 let nums = [10, 20, 30]
-let bumped = @Lucida(nums?.at(1) <- 99)
+let bumped = @f(nums?.at(1) <- 99)
 @Assert(bumped[0] == 10)
 @Assert(bumped[1] == 99)
 @Assert(bumped[2] == 30)
@@ -51,7 +51,7 @@ Out of bounds, there is no element to replace, so the same write returns the
 source unchanged:
 
 ```cangjie
-let untouched = @Lucida(nums?.at(7) <- 99)
+let untouched = @f(nums?.at(7) <- 99)
 @Assert(untouched.size == 3)
 @Assert(untouched[0] == 10 && untouched[1] == 20 && untouched[2] == 30)
 ```
@@ -64,12 +64,12 @@ went, in the same `Option` the prisms page introduced:
 ```cangjie
 // source-form read returns Option: Some(focus) / None
 var noneOk = false
-if (let None <- @Lucida(nums?.at(7))) {
+if (let None <- @f(nums?.at(7))) {
     noneOk = true
 }
 @Assert(noneOk)
 var rightOk = false
-if (let Some(fv) <- @Lucida(nums?.at(0))) {
+if (let Some(fv) <- @f(nums?.at(0))) {
     rightOk = fv == 10
 }
 @Assert(rightOk)
@@ -92,7 +92,7 @@ staff.add(Employee2("dup", 200))
 staff.add(Employee2("other", 300))
 let arr = staff.toArray()
 
-let raised = @Lucida(arr?.selectFirst({ e: Employee2 => e.name == "dup" }).salary <- 999)
+let raised = @f(arr?.selectFirst({ e: Employee2 => e.name == "dup" }).salary <- 999)
 @Assert(raised[0].salary == 999)
 @Assert(raised[1].salary == 200)
 @Assert(raised[2].salary == 300)
@@ -107,7 +107,7 @@ cannot miss.
 No match, no write:
 
 ```cangjie
-let miss = @Lucida(arr?.selectFirst({ e: Employee2 => e.name == "nobody" }).salary <- 999)
+let miss = @f(arr?.selectFirst({ e: Employee2 => e.name == "nobody" }).salary <- 999)
 @Assert(miss.size == 3)
 @Assert(miss[0].salary == 100)
 @Assert(miss[1].salary == 200)
@@ -125,7 +125,7 @@ struct whose single field is an `Int64`, and coerces it:
 
 ```cangjie
 let m = Meters(7)
-let unwrapped = @Lucida(m.coerce<Int64>())
+let unwrapped = @f(m.coerce<Int64>())
 @Assert(unwrapped == 7)
 ```
 
@@ -134,7 +134,7 @@ the same information in different clothes, so the focus evaluates to `7` — a
 plain `Int64`, no wrapper. Total means no `Option` and no miss, hence `.`.
 
 And the negative: because `coerce<T>()` is total, it never takes `?.` —
-`x?.coerce<T>()` does not compile. Every chain form `@Lucida` accepts is on
+`x?.coerce<T>()` does not compile. Every chain form `@f` accepts is on
 the [DSL reference](../api/dsl.md) page.
 
 ## Gotchas
@@ -150,7 +150,7 @@ the [DSL reference](../api/dsl.md) page.
   fused walk.
 - [Lenses](lenses.md) and [prisms](prisms.md) — the two ingredients this page
   mixes, one page each.
-- [The DSL reference](../api/dsl.md) — every `@Lucida` form on one page.
+- [The DSL reference](../api/dsl.md) — every `@f` form on one page.
 - Next example: [deriving](deriving.md) — what `@DeriveOptics` generates for
   each type, including the single-field isos that `coerce<T>()` rides on; then
   [user optics](user-optics.md) — bringing your own segments, marked `.` or
