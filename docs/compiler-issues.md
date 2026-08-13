@@ -116,3 +116,69 @@ Notes:
 
 First observed on cjc 1.2.0-alpha.20260710020028, still reproduces on
 1.3.0-alpha.20260925001050.
+
+## 7. `case _` after an exhaustive multi-case match is flagged unreachable — but removing it is a hard error
+
+A hand-written match over a multi-case enum whose scrutinee is a *direct
+enum-constructor value* reports every non-constructor arm as
+`unreachable pattern`, while deleting those same arms fails with
+`non-exhaustive patterns`:
+
+```cangjie
+let f = Status.Failed("boom", 7)   // Status = Pending | Active(Int64) | Failed(String, Int64)
+match (f) {
+    case Pending => ()             // warning: unreachable pattern
+    case Active(_) => ()           // warning: unreachable pattern
+    case Failed(msg, code) => work // ...but removing these two arms
+}                                  //      errors: non-exhaustive patterns
+```
+
+- The identical match over a macro-produced value of the same static type
+  (`let fixed = @f(...)`) raises no warning — the flag tracks how the
+  scrutinee value was created, not its type.
+- Explicit type annotation (`let f: Status = ...`), arm reordering, and
+  wildcard vs named arms all behave identically; the two analyses
+  (reachability and exhaustiveness) simply disagree.
+- Workaround shipped in this repo: extract the needed case with an affine
+  read (`if (let Some(pair) <- @f(f?.Failed))`) instead of matching.
+
+First observed on cjc 1.3.0-alpha.20260925001050.
+
+## 8. Identity lambdas in generic curried positions report `unused variable` on the used parameter
+
+`{ p => p }` passed as a function argument whose parameter/return types are
+still generic reports `unused variable: 'p'` even though the body returns
+the parameter. The same lambda in a concrete-typed `let` raises nothing, so
+the use-analysis misses the return-position use while the parameter's type
+is unresolved.
+
+- Affects macro-emitted identity run lambdas passed to the generated
+  generic pyramid walkers.
+- Bare generic function references (`__identityRun` unapplied) do not help:
+  they fail with `generic type should be used with type argument`.
+- Workaround shipped in this repo: emit identity runs as
+  `{ p => let _ = p; p }` (see `emitLensRunLambda`).
+
+First observed on cjc 1.3.0-alpha.20260925001050.
+
+## 9. `-Wparser` fires on phantom line breaks from nested-macro token remapping
+
+The `possibly confusing line terminator` heuristic (meant for U+2028/2029-
+class characters) fires on pure-ASCII sources in two shapes:
+
+1. An assert nesting a macro call — `@Assert(@f(x.y) == v)` — expands to
+   `assertEqual` whose expression argument contains the `@f` expansion
+   spliced inline; the expansion's tokens carry remapped positions, and the
+   heuristic reports a terminator "between `)` and `==`" although the real
+   line break is nowhere near (the string argument embeds the same expansion
+   with literal `\n` escapes on one line). Write-form asserts
+   (`@f(x <- v).y == z`) do not trip it — only specific token pairs like
+   `) ==` do.
+2. A `&&`/`||` chain wrapped with the operator leading the next line
+   (`... name\n        && ...`); ending lines with the operator is
+   accepted.
+
+Workarounds shipped in this repo: bind the macro result and assert on the
+local (`let got = @f(x.y)`) instead of nesting, end wrapped boolean lines
+with the operator, or `-Woff parser` for code that must keep the nested
+shape.

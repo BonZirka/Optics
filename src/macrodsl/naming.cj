@@ -8,7 +8,6 @@ let registryIsoId      = Token(IDENTIFIER, "RegistryIsos")
 let registryLensId     = Token(IDENTIFIER, "RegistryLenses")
 let registryPrismId    = Token(IDENTIFIER, "RegistryPrisms")
 let registryOptionalId = Token(IDENTIFIER, "RegistryAffines")
-let registrySetterId   = Token(IDENTIFIER, "RegistrySetters")
 
 // Macros
 let deriveOpticsMacro = "@DeriveOptics"
@@ -34,7 +33,6 @@ let opticsUpcastCallexprId = quote(__OpticsCompositions.opticsUpcast)
 
 let pinForwardCallexprId = Token(IDENTIFIER, "pinForward")
 let pinBackwardCallexprId = Token(IDENTIFIER, "pinBackward")
-let pinBackwardSourcelessCallexprId = Token(IDENTIFIER, "pinBackwardSourceless")
 let bwdApplyCallexprId = Token(IDENTIFIER, "__bwdApply")
 let bwdApplyTotalCallexprId = Token(IDENTIFIER, "__bwdApplyTotal")
 let fwdApplyTotalCallexprId = Token(IDENTIFIER, "__fwdApplyTotal")
@@ -54,11 +52,6 @@ let forwardFieldId = quote(__FirstClassGetters.forward)
 let backwardFieldId = quote(__FirstClassGetters.backward)
 let constructFirstClassCallexprId = quote(__FirstClassConstruction.perform)
 
-let isoStructId      = Token(IDENTIFIER, "Iso")
-let lensStructId     = Token(IDENTIFIER, "Lens")
-let prismStructId    = Token(IDENTIFIER, "Prism")
-let optionalStructId = Token(IDENTIFIER, "Affine")
-let setterStructId   = Token(IDENTIFIER, "Setter")
 
 // Final Setter
 let finalizingSetterForwardCallexpr = Token(IDENTIFIER, "finalizingSetterForward")

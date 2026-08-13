@@ -56,7 +56,7 @@ private func prismForwardDecl(k: UInt64): Tokens {
     typeParams.add(quote($b))
 
     let params = ArrayList<Tokens>()
-    params.add(quote(sourceThunk: () -> $s))
+    params.add(quote(_ : () -> $s))
     for (i in 1..k+1) {
         let ti = idTok("T${i}")
         let ai = idTok("A${i}")
@@ -76,7 +76,7 @@ private func prismForwardDecl(k: UInt64): Tokens {
     let contK = idTok("cont${k}")
     params.add(quote($contK: ($ak) -> $b))
 
-    let body = buildPrismPyramid(k, s, b)
+    let body = buildPrismPyramid(k, b)
 
     quote(
         @Frozen
@@ -92,7 +92,7 @@ private func prismForwardDecl(k: UInt64): Tokens {
 
 // Builds the nested Right/Left match pyramid innermost-first. Pattern
 // variables are the lowercase `a${i}`; `T${i}`/`A${i}`/`S`/`B` are types.
-private func buildPrismPyramid(k: UInt64, s: Token, b: Token): Tokens {
+private func buildPrismPyramid(k: UInt64, b: Token): Tokens {
     let contK = idTok("cont${k}")
     let aK = idTok("a${k}")
     var inner = quote(Some<$b>($contK($aK)))
@@ -101,7 +101,6 @@ private func buildPrismPyramid(k: UInt64, s: Token, b: Token): Tokens {
         let ai = idTok("a${i}")
         let fwdI = idTok("fwd${i}")
         let probe = if (i == 1) {
-            let run0 = idTok("run0")
             quote($fwdI(run0(s)))
         } else {
             let aPrev = idTok("a${i-1}")

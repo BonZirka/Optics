@@ -50,9 +50,9 @@ func sampleOrder(): Order {
 }
 
 func ordersEqualLeafwise(a: Order, b: Order): Bool {
-    a.id == b.id && a.customer.name == b.customer.name
-        && a.customer.address.city.name == b.customer.address.city.name
-        && a.customer.address.city.zip == b.customer.address.city.zip
+    a.id == b.id && a.customer.name == b.customer.name &&
+        a.customer.address.city.name == b.customer.address.city.name &&
+        a.customer.address.city.zip == b.customer.address.city.zip
 }
 
 @Test
@@ -61,9 +61,12 @@ class DslLaws {
     @TestCase
     func deepChainForward(): Unit {
         let o = sampleOrder()
-        @Assert(@f(o.customer.address.city.name) == "Atlanta")
-        @Assert(@f(o.customer.address.city.zip) == 30301)
-        @Assert(@f(o.id) == 1)
+        let got = @f(o.customer.address.city.name)
+        @Assert(got == "Atlanta")
+        let got2 = @f(o.customer.address.city.zip)
+        @Assert(got2 == 30301)
+        let got3 = @f(o.id)
+        @Assert(got3 == 1)
     }
 
     // ===== deep chain: write returns updated copy; original untouched =====

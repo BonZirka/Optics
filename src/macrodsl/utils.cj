@@ -55,16 +55,6 @@ func parseCommaSeparatedExpressions(input: Tokens): Array<Expr> {
     return parsedFakeCall.arguments |> map { arg: Argument => arg.expr } |> collectArray
 }
 
-func parseCommaSeparatedExpressions2(input: Tokens): Array<Expr> {
-    let parsedFakeCall = (parseExpr(quote(dummy($input))) as CallExpr).getOrThrow()
-    if (parsedFakeCall.arguments.size != 2) {
-        throw DiagReportException(
-            "Expected 2 arguments, but got ${parsedFakeCall.arguments.size}",
-            input
-        )
-    }
-    return parsedFakeCall.arguments |> map { arg: Argument => arg.expr } |> collectArray
-}
 
 func generics(targs: ArrayList<TypeNode>): Tokens {
     if (targs.size == 0) { quote() }
@@ -79,10 +69,15 @@ func generics(targs: ArrayList<TypeNode>): Tokens {
 /// for a Derived (struct field) segment. The caller threads the next magical
 /// expression (referencing the local `__magical${index}` binding) into the next
 /// segment via `derivedNextMagicalExpr`.
+// `bindBackward`: reads never rebuild — the forward walk consumes only the
+// gated forwards. `isLast`: the deepest segment's next-hop magical binding
+// has no continuation consumer.
 func emitDerivedLeafBindings(
     index: Int64,
     fieldTok: Token,
-    prevMagicalExpr: Tokens
+    prevMagicalExpr: Tokens,
+    bindForward!: Bool = true,
+    bindBackward!: Bool = true
 ): Tokens {
     let currMagical = Token(IDENTIFIER, "__magical${index}")
     let opticsId   = Token(IDENTIFIER, "__optics${index}")
@@ -90,11 +85,21 @@ func emitDerivedLeafBindings(
     let bwdId      = Token(IDENTIFIER, "__bwd${index}")
     let accessForward  = Token(IDENTIFIER, "__${fieldTok.value}_impl_forward")
     let accessBackward = Token(IDENTIFIER, "__${fieldTok.value}_impl_backward")
+    let forward = if (bindForward) {
+        quote(let $fwdId = $opticsId.$accessForward)
+    } else {
+        quote()
+    }
+    let backward = if (bindBackward) {
+        quote(let $bwdId = $opticsId.$accessBackward)
+    } else {
+        quote()
+    }
     quote(
         let $currMagical = $prevMagicalExpr
         let $opticsId = $currMagical.__downcast($currMagical)
-        let $fwdId = $opticsId.$accessForward
-        let $bwdId = $opticsId.$accessBackward
+        $forward
+        $backward
     )
 }
 
@@ -116,7 +121,9 @@ func emitUserDefinedLeafBindings(
     name: Token,
     targs: ArrayList<TypeNode>,
     args: ArrayList<Argument>,
-    prevMagicalExpr: Tokens
+    prevMagicalExpr: Tokens,
+    bindForward!: Bool = true,
+    bindBackward!: Bool = true
 ): Tokens {
     let currMagical = Token(IDENTIFIER, "__magical${index}")
     let opticsId   = Token(IDENTIFIER, "__optics${index}")
@@ -126,11 +133,21 @@ func emitUserDefinedLeafBindings(
     let accessBackward = Token(IDENTIFIER, "__method_${name.value}_impl_backward")
     let downcastName   = Token(IDENTIFIER, "__downcast_method_${name.value}")
     let gen = generics(targs)
+    let forward = if (bindForward) {
+        quote(let $fwdId = $opticsId.$accessForward$gen($currMagical, $(commaSeparated(args))))
+    } else {
+        quote()
+    }
+    let backward = if (bindBackward) {
+        quote(let $bwdId = $opticsId.$accessBackward$gen($currMagical, $(commaSeparated(args))))
+    } else {
+        quote()
+    }
     quote(
         let $currMagical = $prevMagicalExpr
         let $opticsId = $currMagical.$downcastName$gen($currMagical)
-        let $fwdId = $opticsId.$accessForward$gen($currMagical, $(commaSeparated(args)))
-        let $bwdId = $opticsId.$accessBackward$gen($currMagical, $(commaSeparated(args)))
+        $forward
+        $backward
     )
 }
 
@@ -148,17 +165,33 @@ func userDefinedNextMagicalExpr(index: Int64, name: Token, targs: ArrayList<Type
 /// impl members take BOTH the source and the target registry; the target
 /// registry is `magic<Target>()`, which also becomes the next segment's
 /// magical expression.
-func emitCoerceLeafBindings(index: Int64, targs: TypeNode, prevMagicalExpr: Tokens): Tokens {
+func emitCoerceLeafBindings(
+    index: Int64,
+    targs: TypeNode,
+    prevMagicalExpr: Tokens,
+    bindForward!: Bool = true,
+    bindBackward!: Bool = true
+): Tokens {
     let currMagical = Token(IDENTIFIER, "__magical${index}")
     let nextMagical = Token(IDENTIFIER, "__nmagic${index}")
     let opticsId    = Token(IDENTIFIER, "__optics${index}")
     let fwdId       = Token(IDENTIFIER, "__fwd${index}")
     let bwdId       = Token(IDENTIFIER, "__bwd${index}")
+    let forward = if (bindForward) {
+        quote(let $fwdId = $opticsId.$coerceForwardId($currMagical, $nextMagical))
+    } else {
+        quote()
+    }
+    let backward = if (bindBackward) {
+        quote(let $bwdId = $opticsId.$coerceBackwardId($currMagical, $nextMagical))
+    } else {
+        quote()
+    }
     quote(
         let $currMagical = $prevMagicalExpr
         let $nextMagical = $magicCallexprId<$targs>()
         let $opticsId = $downcastMethodCoerceId($currMagical, $nextMagical)
-        let $fwdId = $opticsId.$coerceForwardId($currMagical, $nextMagical)
-        let $bwdId = $opticsId.$coerceBackwardId($currMagical, $nextMagical)
+        $forward
+        $backward
     )
 }

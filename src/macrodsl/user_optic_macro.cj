@@ -126,6 +126,18 @@ private func stripOuterBraces(field: String, value: Tokens): Tokens {
 /// Sourceless backwards (Prism/Iso) have no `src` slot. Scan only at brace
 /// depth 0 of the body so nested lambdas that shadow `src` don't false-positive.
 private func rejectSrcInSourcelessBackward(body: Tokens, kindTok: Token): Unit {
+    if (referencesAtDepth0(body, "src")) {
+        throw DiagReportException(
+            "@Optic: backward of kind '${kindTok.value}' has no src slot",
+            body,
+            hint: "Lens/Affine backwards receive src; Prism/Iso rebuild from focus"
+        )
+    }
+}
+
+/// True when `name` appears as a bare identifier at brace depth 0 of `body`.
+/// Nested lambdas that shadow the name don't count.
+private func referencesAtDepth0(body: Tokens, name: String): Bool {
     let toks = ArrayList<Token>()
     body |> forEach { t: Token => toks.add(t) }
     var depth: Int64 = 0
@@ -134,16 +146,11 @@ private func rejectSrcInSourcelessBackward(body: Tokens, kindTok: Token): Unit {
             case TokenKind.LCURL => depth += 1
             case TokenKind.RCURL => depth -= 1
             case TokenKind.IDENTIFIER =>
-                if (depth == 0 && t.value == "src") {
-                    throw DiagReportException(
-                        "@Optic: backward of kind '${kindTok.value}' has no src slot",
-                        t.toTokens(),
-                        hint: "Lens/Affine backwards receive src; Prism/Iso rebuild from focus"
-                    )
-                }
+                if (depth == 0 && t.value == name) { return true }
             case _ => ()
         }
     }
+    return false
 }
 
 private func argParamTokens(args: ArrayList<(Token, Tokens)>): Tokens {
@@ -208,10 +215,29 @@ private func emitUserOptic(
         case "Lens" | "Affine" => quote(($source, $focus) -> $source)
         case _ => quote(($focus) -> $source)
     }
-    let fwdLambda = quote({ src: $source => $forwardBody })
+    // Bind a slot only when the body uses it; otherwise name the parameter _
+    // so no unused-variable warning is emitted for user bodies like
+    // `forward: { 1 }` or single-field `backward: { GBox(focus) }`.
+    let fwdParam: Tokens = if (referencesAtDepth0(forwardBody, "src")) {
+        quote(src: $source)
+    } else {
+        quote(_ : $source)
+    }
+    let fwdLambda = quote({ $fwdParam => $forwardBody })
     let bwdLambda = match (kindTok.value) {
-        case "Lens" | "Affine" => quote({ src: $source, focus: $focus => $backwardBody })
-        case _ => quote({ focus: $focus => $backwardBody })
+        case "Lens" | "Affine" =>
+            let usesSrc = referencesAtDepth0(backwardBody, "src")
+            let usesFocus = referencesAtDepth0(backwardBody, "focus")
+            let srcP: Tokens = if (usesSrc) { quote(src: $source) } else { quote(_ : $source) }
+            let fcsP: Tokens = if (usesFocus) { quote(focus: $focus) } else { quote(_ : $focus) }
+            quote({ $srcP, $fcsP => $backwardBody })
+        case _ =>
+            let fcsP: Tokens = if (referencesAtDepth0(backwardBody, "focus")) {
+                quote(focus: $focus)
+            } else {
+                quote(_ : $focus)
+            }
+            quote({ $fcsP => $backwardBody })
     }
 
     return quote(

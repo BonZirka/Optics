@@ -50,7 +50,7 @@ public func evalBackward<S, A>(optic: (S, A) -> S, source: S, target: A): S {
 
 @Frozen
 public func finalizingSetterForward<S, A>(optic: (A) -> S, target: A): (S) -> S {
-    { source: S => optic(target) }
+    { _ : S => optic(target) }
 }
 
 @Frozen
@@ -60,12 +60,12 @@ public func finalizingSetterForward<S, A>(optic: (S, A) -> S, target: A): (S) ->
 
 @Frozen
 public func finalizingSetterForward<S, A>(optic: (S, (A) -> A) -> S, target: A): (S) -> S {
-    { source: S => optic(source, { x: A => target }) }
+    { source: S => optic(source, { _ : A => target }) }
 }
 
 @Frozen
 public func finalizingSetterBackward<S, A>(optic: (A) -> S, target: A): (S, (A) -> A) -> S {
-    { source: S, modifier: (A) -> A => optic(modifier(target)) }
+    { _ : S, modifier: (A) -> A => optic(modifier(target)) }
 }
 
 @Frozen
@@ -75,7 +75,7 @@ public func finalizingSetterBackward<S, A>(optic: (S, A) -> S, target: A): (S, (
 
 @Frozen
 public func finalizingSetterBackward<S, A>(optic: (S, (A) -> A) -> S, target: A): (S, (A) -> A) -> S {
-    { source: S, modifier: (A) -> A => optic(source, { x: A => modifier(target) }) }
+    { source: S, modifier: (A) -> A => optic(source, { _ : A => modifier(target) }) }
 }
 
 @Frozen
@@ -106,17 +106,17 @@ public func magicFirstClass<S, A>(_: Setter<S, A>): RegistryMagical<A> { Registr
 // allowing the walk lambda (S) -> R / (S, R) -> S to be typed without an IIFE.
 
 @Frozen
-public func pinForward<S, R>(sourceThunk: () -> S, walk: (S) -> R): (S) -> R {
+public func pinForward<S, R>(_ : () -> S, walk: (S) -> R): (S) -> R {
     { s: S => walk(s) }
 }
 
 @Frozen
-public func pinBackward<S, R>(sourceThunk: () -> S, targetThunk: () -> R, walk: (S, R) -> S): (S, R) -> S {
+public func pinBackward<S, R>(_ : () -> S, _ : () -> R, walk: (S, R) -> S): (S, R) -> S {
     { s: S, r: R => walk(s, r) }
 }
 
 @Frozen
-public func pinBackwardSourceless<S, R>(targetThunk: () -> R, walk: (R) -> S): (R) -> S {
+public func pinBackwardSourceless<S, R>(_ : () -> R, walk: (R) -> S): (R) -> S {
     { r: R => walk(r) }
 }
 
@@ -127,7 +127,7 @@ public func __bwdApply<S, A>(backward: (S, A) -> S, src: S, focus: A): S {
     backward(src, focus)
 }
 
-public func __bwdApply<S, A>(backward: (A) -> S, src: S, focus: A): S {
+public func __bwdApply<S, A>(backward: (A) -> S, _ : S, focus: A): S {
     backward(focus)
 }
 
@@ -144,12 +144,12 @@ public func __bwdApplyTotal<T, S, A>(_: RegistryAffines<T>, backward: (S, A) -> 
     backward(src, focus)
 }
 
-public func __bwdApplyTotal<T, S, A>(_: RegistryIsos<T>, backward: (A) -> S, src: S, focus: A): S {
+public func __bwdApplyTotal<T, S, A>(_: RegistryIsos<T>, backward: (A) -> S, _ : S, focus: A): S {
     backward(focus)
 }
 
 @Deprecated[message: "@f: '.'-write through a prism — '.'-writes assert a match and would rebuild the source unconditionally on miss. Use '?.' to preserve the source on miss.", strict: true]
-public func __bwdApplyTotal<T, S, A>(_: RegistryPrisms<T>, backward: (A) -> S, src: S, focus: A): S {
+public func __bwdApplyTotal<T, S, A>(_: RegistryPrisms<T>, backward: (A) -> S, _ : S, focus: A): S {
     backward(focus)
 }
 

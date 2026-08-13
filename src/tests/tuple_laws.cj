@@ -83,8 +83,10 @@ class TupleElementLaws {
     @TestCase
     func elementReads(): Unit {
         let p = PairBox((1, "a"))
-        @Assert(@f(p.pair._0) == 1)
-        @Assert(@f(p.pair._1) == "a")
+        let got = @f(p.pair._0)
+        @Assert(got == 1)
+        let got2 = @f(p.pair._1)
+        @Assert(got2 == "a")
     }
 
     @TestCase
@@ -123,9 +125,12 @@ class TupleElementLaws {
     @TestCase
     func nestedTupleElements(): Unit {
         let p = NestedPairBox(((1, 2), "a"))
-        @Assert(@f(p.pair._0._0) == 1)
-        @Assert(@f(p.pair._0._1) == 2)
-        @Assert(@f(p.pair._1) == "a")
+        let got3 = @f(p.pair._0._0)
+        @Assert(got3 == 1)
+        let got4 = @f(p.pair._0._1)
+        @Assert(got4 == 2)
+        let got5 = @f(p.pair._1)
+        @Assert(got5 == "a")
         let updated = @f(p.pair._0._1 <- 42)
         @Assert(updated.pair[0][1] == 42 && updated.pair[0][0] == 1 && updated.pair[1] == "a")
         @Assert(p.pair[0][1] == 2)
@@ -136,7 +141,8 @@ class TupleElementLaws {
     @TestCase
     func chainContinuesIntoStructElement(): Unit {
         let d = DeepPairBox((1, Inner(5)))
-        @Assert(@f(d.pair._1.v) == 5)
+        let got6 = @f(d.pair._1.v)
+        @Assert(got6 == 5)
         let updated = @f(d.pair._1.v <- 6)
         @Assert(updated.pair[1].v == 6 && updated.pair[0] == 1)
         @Assert(d.pair[1].v == 5)
@@ -145,7 +151,8 @@ class TupleElementLaws {
     @TestCase
     func chainContinuesIntoGenericElement(): Unit {
         let g = GPairBox((GBox<Int64>(3), "s"))
-        @Assert(@f(g.pair._0.v) == 3)
+        let got7 = @f(g.pair._0.v)
+        @Assert(got7 == 3)
         let updated = @f(g.pair._0.v <- 4)
         @Assert(updated.pair[0].v == 4 && updated.pair[1] == "s")
     }
@@ -178,19 +185,22 @@ class TupleEnumChainLaws {
 
     @TestCase
     func enumCaseTupleElementWrite(): Unit {
-        let f = Status.Failed("boom", 7)
+        let f: Status = Status.Failed("boom", 7)
         let fixed = @f(f?.Failed._0 <- "fixed")
         var ok = false
         match (fixed) {
+            case Pending => ()
+            case Active(_) => ()
             case Failed(msg, code) => ok = (msg == "fixed" && code == 7)
-            case _ => ()
         }
         @Assert(ok)
         // the original is untouched
         var originalKept = false
-        match (f) {
-            case Failed(msg, code) => originalKept = (msg == "boom" && code == 7)
-            case _ => ()
+        // (a plain match on f trips a cjc unreachable-pattern false positive
+        // here — see docs/compiler-issues.md; the affine read dodges it)
+        if (let Some(pair) <- @f(f?.Failed)) {
+            let (msg, code) = pair
+            originalKept = (msg == "boom" && code == 7)
         }
         @Assert(originalKept)
     }
@@ -272,8 +282,10 @@ class TupleArityLaws {
     @TestCase
     func quintElements(): Unit {
         let q = QuintBox((1, 2, 3, 4, 5))
-        @Assert(@f(q.t._0) == 1)
-        @Assert(@f(q.t._4) == 5)
+        let got8 = @f(q.t._0)
+        @Assert(got8 == 1)
+        let got9 = @f(q.t._4)
+        @Assert(got9 == 5)
         let updated = @f(q.t._2 <- 30)
         @Assert(updated.t[2] == 30 && updated.t[0] == 1 && updated.t[4] == 5)
         @Assert(q.t[2] == 3)
@@ -282,8 +294,10 @@ class TupleArityLaws {
     @TestCase
     func octoElements(): Unit {
         let o = OctoBox((1, 2, 3, 4, 5, 6, 7, 8))
-        @Assert(@f(o.t._0) == 1)
-        @Assert(@f(o.t._7) == 8)
+        let got10 = @f(o.t._0)
+        @Assert(got10 == 1)
+        let got11 = @f(o.t._7)
+        @Assert(got11 == 8)
         let updated = @f(o.t <- (8, 7, 6, 5, 4, 3, 2, 1))
         @Assert(updated.t[0] == 8 && updated.t[7] == 1)
         @Assert(o.t[0] == 1)
@@ -337,8 +351,10 @@ class TupleUserOpticLaws {
         let coords = @f(pt.pointCoords())
         @Assert(coords[0] == 3 && coords[1] == 4)
         // the iso is total, so the chain continues into the tuple elements
-        @Assert(@f(pt.pointCoords()._0) == 3)
-        @Assert(@f(pt.pointCoords()._1) == 4)
+        let got12 = @f(pt.pointCoords()._0)
+        @Assert(got12 == 3)
+        let got13 = @f(pt.pointCoords()._1)
+        @Assert(got13 == 4)
     }
 
     @TestCase

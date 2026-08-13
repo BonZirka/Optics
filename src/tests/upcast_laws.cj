@@ -15,35 +15,35 @@ class UpcastLaws {
     // ===== same-kind upcasts =====
     @TestCase
     func isoIsoUpcastsToIso(): Unit {
-        let r: RegistryIsos<Int64> =
+        let _ : RegistryIsos<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryIsos<Int64>(), RegistryIsos<Int64>())
         @Assert(true)
     }
 
     @TestCase
     func lensLensUpcastsToLens(): Unit {
-        let r: RegistryLenses<Int64> =
+        let _ : RegistryLenses<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryLenses<Int64>(), RegistryLenses<Int64>())
         @Assert(true)
     }
 
     @TestCase
     func prismPrismUpcastsToPrism(): Unit {
-        let r: RegistryPrisms<Int64> =
+        let _ : RegistryPrisms<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryPrisms<Int64>(), RegistryPrisms<Int64>())
         @Assert(true)
     }
 
     @TestCase
     func affineAffineUpcastsToAffine(): Unit {
-        let r: RegistryAffines<Int64> =
+        let _ : RegistryAffines<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryAffines<Int64>(), RegistryAffines<Int64>())
         @Assert(true)
     }
 
     @TestCase
     func setterSetterUpcastsToSetter(): Unit {
-        let r: RegistrySetters<Int64> =
+        let _ : RegistrySetters<Int64> =
             __OpticsCompositions.opticsUpcast(RegistrySetters<Int64>(), RegistrySetters<Int64>())
         @Assert(true)
     }
@@ -51,35 +51,35 @@ class UpcastLaws {
     // ===== the weaker kind wins =====
     @TestCase
     func isoLensUpcastsToLens(): Unit {
-        let r: RegistryLenses<Int64> =
+        let _ : RegistryLenses<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryIsos<Int64>(), RegistryLenses<Int64>())
         @Assert(true)
     }
 
     @TestCase
     func lensIsoUpcastsToLens(): Unit {
-        let r: RegistryLenses<Int64> =
+        let _ : RegistryLenses<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryLenses<Int64>(), RegistryIsos<Int64>())
         @Assert(true)
     }
 
     @TestCase
     func isoPrismUpcastsToPrism(): Unit {
-        let r: RegistryPrisms<Int64> =
+        let _ : RegistryPrisms<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryIsos<Int64>(), RegistryPrisms<Int64>())
         @Assert(true)
     }
 
     @TestCase
     func isoAffineUpcastsToAffine(): Unit {
-        let r: RegistryAffines<Int64> =
+        let _ : RegistryAffines<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryIsos<Int64>(), RegistryAffines<Int64>())
         @Assert(true)
     }
 
     @TestCase
     func isoSetterUpcastsToSetter(): Unit {
-        let r: RegistrySetters<Int64> =
+        let _ : RegistrySetters<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryIsos<Int64>(), RegistrySetters<Int64>())
         @Assert(true)
     }
@@ -87,42 +87,42 @@ class UpcastLaws {
     // ===== the mixed joins =====
     @TestCase
     func lensPrismUpcastsToAffine(): Unit {
-        let r: RegistryAffines<Int64> =
+        let _ : RegistryAffines<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryLenses<Int64>(), RegistryPrisms<Int64>())
         @Assert(true)
     }
 
     @TestCase
     func lensAffineUpcastsToAffine(): Unit {
-        let r: RegistryAffines<Int64> =
+        let _ : RegistryAffines<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryLenses<Int64>(), RegistryAffines<Int64>())
         @Assert(true)
     }
 
     @TestCase
     func lensSetterUpcastsToSetter(): Unit {
-        let r: RegistrySetters<Int64> =
+        let _ : RegistrySetters<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryLenses<Int64>(), RegistrySetters<Int64>())
         @Assert(true)
     }
 
     @TestCase
     func prismAffineUpcastsToAffine(): Unit {
-        let r: RegistryAffines<Int64> =
+        let _ : RegistryAffines<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryPrisms<Int64>(), RegistryAffines<Int64>())
         @Assert(true)
     }
 
     @TestCase
     func prismSetterUpcastsToSetter(): Unit {
-        let r: RegistrySetters<Int64> =
+        let _ : RegistrySetters<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryPrisms<Int64>(), RegistrySetters<Int64>())
         @Assert(true)
     }
 
     @TestCase
     func affineSetterUpcastsToSetter(): Unit {
-        let r: RegistrySetters<Int64> =
+        let _ : RegistrySetters<Int64> =
             __OpticsCompositions.opticsUpcast(RegistryAffines<Int64>(), RegistrySetters<Int64>())
         @Assert(true)
     }

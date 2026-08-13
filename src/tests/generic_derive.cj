@@ -15,7 +15,8 @@ class GenericDeriveLaws {
     @TestCase
     func gboxLensForwardBackward(): Unit {
         let b = GBox<Int64>(5)
-        @Assert(@f(b.v) == 5)
+        let got = @f(b.v)
+        @Assert(got == 5)
     }
 
     @TestCase

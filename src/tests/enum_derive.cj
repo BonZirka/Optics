@@ -98,7 +98,6 @@ class DerivedEnumShapeLaws {
                     case Nil => ok = (h == 1)
                     case _ => ()
                 }
-                case _ => ()
             }
             case _ => ()
         }
@@ -156,7 +155,6 @@ class DerivedEnumShapeLaws {
         match (@f(f?.Failed)) {
             case Some(pair) => match (pair) {
                 case (msg, code) => failedOk = (msg == "boom" && code == 7)
-                case _ => ()
             }
             case _ => ()
         }

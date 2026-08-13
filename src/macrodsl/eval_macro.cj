@@ -60,7 +60,7 @@ private func evalOptics(expr: OpticalExpr, unfuse: Bool): Tokens {
             if (!unfuse && isFusible(nodes)) {
                 emitFusedForwardWalk(nodes, source)
             } else {
-                composeOptics(nodes)({ forward: Token, backward: Token =>
+                composeOptics(nodes, true, false)({ forward: Token, _ : Token =>
                     quote($forward($source))
                 })
             }
@@ -68,16 +68,16 @@ private func evalOptics(expr: OpticalExpr, unfuse: Bool): Tokens {
             if (!unfuse && isFusible(nodes)) {
                 emitFusedBackwardWalk(nodes, source, target)
             } else {
-                composeOptics(nodes)({ forward: Token, backward: Token =>
+                composeOptics(nodes, false, true)({ _ : Token, backward: Token =>
                     quote($evalBackwardCallexprId($backward, $source, $target))
                 })
             }
         case FirstClassOptics(_) =>
-            composeOptics(nodes)({ forward: Token, backward: Token =>
+            composeOptics(nodes, true, true)({ forward: Token, backward: Token =>
                 quote($constructFirstClassCallexprId($forward, $backward))
             })
         case FirstClassSetter(_, target) =>
-            composeOptics(nodes)({ forward: Token, backward: Token =>
+            composeOptics(nodes, false, true)({ _ : Token, backward: Token =>
                 quote(
                     let $finalSetterForwardVarname = $finalizingSetterForwardCallexpr($backward, $target)
                     let $finalSetterBackwardVarname = $finalizingSetterBackwardCallexpr($backward, $target)
@@ -87,7 +87,10 @@ private func evalOptics(expr: OpticalExpr, unfuse: Bool): Tokens {
     }
 }
 
-private func composeOptics(nodes: Array<CompositionNode>): ((Token, Token) -> Tokens) -> Tokens {
+// `needF`/`needB`: which halves the terminal continuation consumes — the
+// last segment emits only those (plus the expect upcast, which no terminal
+// consumes).
+private func composeOptics(nodes: Array<CompositionNode>, needF: Bool, needB: Bool): ((Token, Token) -> Tokens) -> Tokens {
     let iter = nodes.iterator()
 
     var currentNode: ?CompositionNode = iter.next()
@@ -130,11 +133,19 @@ private func composeOptics(nodes: Array<CompositionNode>): ((Token, Token) -> To
 
     var compositionCont: ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens = { _ => quote() }
     var first = true
+    // The pre-loop match consumes a Type/TypeOf anchor (the loop then starts
+    // at node 1); an Optic-first chain is wired by the loop itself (starts at
+    // node 0). Derived-first chains throw before either.
+    var pos: Int64 = match (nodes[0]) {
+        case Type(_) | TypeOf(_) => 1
+        case _ => 0
+    }
     while (let Some(node) <- currentNode) {
         let currentCont = compositionCont
+        let tail: Bool = (pos == nodes.size - 1)
         match (node) {
             case Derived(input, _) =>
-                compositionCont = wireSegment(first, magicCont, currentCont,
+                compositionCont = wireSegment(first, tail, needF, needB, magicCont, currentCont,
                     derivedSplices(input, 0), { i: UInt64 => derivedSplices(input, i) })
             case Type(input)        => throw DiagReportException(
                 "${mainMacroName}: @ty is only allowed at the start of a chain",
@@ -145,22 +156,23 @@ private func composeOptics(nodes: Array<CompositionNode>): ((Token, Token) -> To
                 input.toTokens()
             )
             case Optic(input)       =>
-                compositionCont = wireSegment(first, magicCont, currentCont,
+                compositionCont = wireSegment(first, tail, needF, needB, magicCont, currentCont,
                     opticSplices(input, 0), { i: UInt64 => opticSplices(input, i) })
             case Coerce(input)      =>
-                compositionCont = wireSegment(first, magicCont, currentCont,
+                compositionCont = wireSegment(first, tail, needF, needB, magicCont, currentCont,
                     coercionSplices(input, 0), { i: UInt64 => coercionSplices(input, i) })
             case UserDefined(name, targs, args, _) =>
-                compositionCont = wireSegment(first, magicCont, currentCont,
+                compositionCont = wireSegment(first, tail, needF, needB, magicCont, currentCont,
                     userDefinedSplices(name, targs, args, 0),
                     { i: UInt64 => userDefinedSplices(name, targs, args, i) })
         }
         first = false
+        pos = pos + 1
         currentNode = iter.next()
     }
     let currentCont = compositionCont
     { cont: (Token, Token) -> Tokens =>
-        currentCont { currMagicalExpr: Tokens, expectOptics: Token, forward: Token, backward: Token, index: UInt64 =>
+        currentCont { _: Tokens, _: Token, forward: Token, backward: Token, _: UInt64 =>
             cont(forward, backward)
         }
     }
@@ -189,7 +201,15 @@ private func isPartialProducing(node: CompositionNode): Bool {
     }
 }
 
-private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>): (Tokens, ArrayList<Token>, ArrayList<Token>) {
+// Which halves the walk consumes — the leaf bindings are demand-driven:
+// reads never bind backward halves, writes never bind what their fold does
+// not consume, and the deepest segment binds no next-hop magical.
+enum LeafWalk {
+    | Forward
+    | Backward
+}
+
+private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>, walk: LeafWalk): (Tokens, ArrayList<Token>, ArrayList<Token>) {
     let startNode = nodes[0]
     let startMagicalExpr: Tokens = match (startNode) {
         case TypeOf(input) => quote($magicCallexprId({ => $input }))
@@ -200,21 +220,36 @@ private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>): (Tokens, Arr
     let fwdIds = ArrayList<Token>()
     let bwdIds = ArrayList<Token>()
     var prevMagical = startMagicalExpr
-    for (i in 1..nodes.size) {
+    let n = nodes.size
+    for (i in 1..n) {
         let idx: Int64 = Int64(i - 1)
+        // Forward walks consume every forward; backward walks consume the
+        // forward of segment j only through its partial guard or a consumed
+        // probe binding (see backwardProbeMask) — anything else is dead.
+        let bindFwd: Bool = match (walk) {
+            case Forward => true
+            case Backward => isPartialProducing(nodes[i]) || backwardProbeMask(nodes)[idx]
+        }
+        let bindBwd: Bool = match (walk) {
+            case Backward => true
+            case Forward => false
+        }
         match (nodes[i]) {
             case Derived(fieldTok, _) =>
-                bindings.add(emitDerivedLeafBindings(idx, fieldTok, prevMagical))
+                bindings.add(emitDerivedLeafBindings(idx, fieldTok, prevMagical,
+                    bindForward: bindFwd, bindBackward: bindBwd))
                 fwdIds.add(Token(IDENTIFIER, "__fwd${idx}"))
                 bwdIds.add(Token(IDENTIFIER, "__bwd${idx}"))
                 prevMagical = derivedNextMagicalExpr(idx, fieldTok)
             case UserDefined(name, targs, args, _) =>
-                bindings.add(emitUserDefinedLeafBindings(idx, name, targs, args, prevMagical))
+                bindings.add(emitUserDefinedLeafBindings(idx, name, targs, args, prevMagical,
+                    bindForward: bindFwd, bindBackward: bindBwd))
                 fwdIds.add(Token(IDENTIFIER, "__fwd${idx}"))
                 bwdIds.add(Token(IDENTIFIER, "__bwd${idx}"))
                 prevMagical = userDefinedNextMagicalExpr(idx, name, targs)
             case Coerce(t) =>
-                bindings.add(emitCoerceLeafBindings(idx, t, prevMagical))
+                bindings.add(emitCoerceLeafBindings(idx, t, prevMagical,
+                    bindForward: bindFwd, bindBackward: bindBwd))
                 fwdIds.add(Token(IDENTIFIER, "__fwd${idx}"))
                 bwdIds.add(Token(IDENTIFIER, "__bwd${idx}"))
                 prevMagical = quote($magicCallexprId<$t>())
@@ -235,8 +270,14 @@ private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>): (Tokens, Arr
 /// range yields the identity lambda.
 private func emitLensRunLambda(fwdIds: ArrayList<Token>, from: Int64, upto: Int64, paramTok: Token): Tokens {
     if (from >= upto) {
+        // Identity run: `let _ = param; param` — a bare `{ p => p }` trips a
+        // cjc unused-parameter false positive in generic curried positions
+        // (see docs/compiler-issues.md).
         return quote(
-            { $paramTok => $paramTok }
+            { $paramTok =>
+                let _ = $paramTok
+                $paramTok
+            }
         )
     }
     var body = quote()
@@ -355,7 +396,7 @@ private func emitFusedForwardWalk(nodes: Array<CompositionNode>, source: Expr): 
         // the operator mark is checked against each segment's kind registry
         // (writes keep the ungated forwards: a '.'-write through an affine is
         // legal — its backward is sourceful).
-        let (allBindings, fwdIds, _) = emitLeafBindingsAndIds(nodes)
+        let (allBindings, fwdIds, _) = emitLeafBindingsAndIds(nodes, LeafWalk.Forward)
         let (gateBindings, gatedIds) = emitFwdGateBindings(nodes, fwdIds)
         let src = idTok("src")
         var walk = quote($src)
@@ -377,11 +418,11 @@ private func emitFusedForwardWalk(nodes: Array<CompositionNode>, source: Expr): 
         if (!isFusableChain(nodes) || countPartialSegments(nodes) > 16) {
             // Non-fusable chains, or more pinned slots than the generated
             // walkers support (see @GeneratePrismForward) — library composition
-            return composeOptics(nodes)({ forward: Token, backward: Token =>
+            return composeOptics(nodes, true, false)({ forward: Token, _ : Token =>
                 quote($forward($source))
             })
         }
-        let (allBindings, fwdIds, _) = emitLeafBindingsAndIds(nodes)
+        let (allBindings, fwdIds, _) = emitLeafBindingsAndIds(nodes, LeafWalk.Forward)
         let (gateBindings, gatedIds) = emitFwdGateBindings(nodes, fwdIds)
         let forwardEmission = emitPinnedPrismForward(nodes, gatedIds, source)
         quote(
@@ -428,11 +469,11 @@ private func countPartialSegments(nodes: Array<CompositionNode>): Int64 {
 
 private func emitFusedBackwardWalk(nodes: Array<CompositionNode>, source: Expr, target: Expr): Tokens {
     if (!isFusableChain(nodes)) {
-        return composeOptics(nodes)({ forward: Token, backward: Token =>
+        return composeOptics(nodes, false, true)({ _ : Token, backward: Token =>
             quote($evalBackwardCallexprId($backward, $source, $target))
         })
     }
-    let (allBindings, fwdIds, bwdIds) = emitLeafBindingsAndIds(nodes)
+    let (allBindings, fwdIds, bwdIds) = emitLeafBindingsAndIds(nodes, LeafWalk.Backward)
     let src = idTok("src")
     let fcs = idTok("fcs")
 
@@ -455,6 +496,31 @@ private func emitFusedBackwardWalk(nodes: Array<CompositionNode>, source: Expr, 
     )
 }
 
+/// Which total segments' forward probes (`__tI`) have a consumer in the
+/// fused backward walk: the next probe binding (`fwdI+1(__tI)`) or segment
+/// I+1's fold row — every row reads the value entering it except Coerce,
+/// whose backward is sourceless. The deepest segment never binds. Binding
+/// an unconsumed probe is dead work and trips the unused-variable warning.
+/// The mask is independent of the walk's `from` offset: entry J depends
+/// only on entries J+1.., so both the leaf binder and the recursive body
+/// builder can share it.
+private func backwardProbeMask(nodes: Array<CompositionNode>): Array<Bool> {
+    let n = nodes.size - 1
+    var mask = Array<Bool>(Int64(n), {_ => false})
+    var bindNext = false
+    var j = n - 1
+    while (j >= 0) {
+        let foldReads = j + 2 < nodes.size && match (nodes[j + 2]) {
+            case Coerce(_) => false
+            case _ => true
+        }
+        mask[j] = bindNext || foldReads
+        bindNext = mask[j]
+        j = j - 1
+    }
+    return mask
+}
+
 /// Emits the guarded forward walk plus right-to-left backward fold for segments
 /// `from..n-1`, consuming the value named `enterTok`. Derived backwards are all
 /// `(T_in, focus) -> T_in` with prism guards baked in, so a prism miss simply
@@ -474,18 +540,21 @@ private func emitFusedBackwardBody(
     var stmts = quote()
     var prev = enterTok
     var i = from
+    let bindProbe = backwardProbeMask(nodes)
     while (i < n) {
         // Partial segments (prisms and affines) need their forward
         // unwrapped in the backward walk too — a miss keeps the source as-is.
         if (isPartialProducing(nodes[i + 1])) { break }
-        let tId = Token(IDENTIFIER, "__t${Int64(i)}")
-        let binding = quote(let $tId = $(fwdIds[i])($prev))
-        stmts = quote(
-            $stmts
-            $binding
-        )
-        intermediates.add(tId)
-        prev = tId
+        if (i + 1 < n && bindProbe[i]) {
+            let tId = Token(IDENTIFIER, "__t${Int64(i)}")
+            let binding = quote(let $tId = $(fwdIds[i])($prev))
+            stmts = quote(
+                $stmts
+                $binding
+            )
+            intermediates.add(tId)
+            prev = tId
+        }
         i = i + 1
     }
     if (i >= n) {
@@ -495,14 +564,17 @@ private func emitFusedBackwardBody(
             $fold
         )
     }
-    // Segment i is either-producing: its payload binds t_i; a miss keeps the
-    // source as-is.
+    // Segment i is partial: its payload binds t_i; a miss keeps the source
+    // as-is. A TRAILING partial has no consumer for the payload (its
+    // backward consumes the value entering it) — bind nothing.
     let tId = Token(IDENTIFIER, "__t${Int64(i)}")
-    intermediates.add(tId)
+    let trailing: Bool = (i + 1 >= n)
+    if (!trailing) { intermediates.add(tId) }
+    let pattern: Tokens = if (trailing) { quote(Some(_)) } else { quote(Some($tId)) }
     let inner = emitFusedBackwardBody(nodes, fwdIds, bwdIds, src, fcs, i + 1, tId, intermediates)
     return quote(
         $stmts
-        if (let Some($tId) <- $(fwdIds[i])($prev)) {
+        if (let $pattern <- $(fwdIds[i])($prev)) {
             $inner
         } else {
             $src
@@ -525,21 +597,25 @@ private struct SegmentSplices {
     let opticsId: Token
     let fwdId: Token
     let bwdId: Token
-    // Optic segments anchor themselves: no incoming magical binding is emitted.
+    // Optic segments anchor themselves: no incoming magical binding is emitted,
+    // and their downcast registry is consumed only by a FOLLOWING segment —
+    // never by a tail.
     let bindsCurrMagical: Bool
+    let opticsIdUsedAtTail: Bool
     let downcastExpr: Tokens
     let fwdAccess: Tokens
     let bwdAccess: Tokens
     let nextMagicalExpr: Tokens
 
     init(currMagical: Token, opticsId: Token, fwdId: Token, bwdId: Token,
-         bindsCurrMagical: Bool, downcastExpr: Tokens, fwdAccess: Tokens,
-         bwdAccess: Tokens, nextMagicalExpr: Tokens) {
+         bindsCurrMagical: Bool, opticsIdUsedAtTail: Bool, downcastExpr: Tokens,
+         fwdAccess: Tokens, bwdAccess: Tokens, nextMagicalExpr: Tokens) {
         this.currMagical = currMagical
         this.opticsId = opticsId
         this.fwdId = fwdId
         this.bwdId = bwdId
         this.bindsCurrMagical = bindsCurrMagical
+        this.opticsIdUsedAtTail = opticsIdUsedAtTail
         this.downcastExpr = downcastExpr
         this.fwdAccess = fwdAccess
         this.bwdAccess = bwdAccess
@@ -559,15 +635,17 @@ private func derivedSplices(input: Token, index: UInt64): SegmentSplices {
     let accessForward  = Token(IDENTIFIER, "__${input.value}_impl_forward")
     let accessBackward = Token(IDENTIFIER, "__${input.value}_impl_backward")
     let accessMagic = Token(IDENTIFIER, "__${input.value}_optics")
-    SegmentSplices(currMagical, opticsId, fwdId, bwdId, true,
+    SegmentSplices(currMagical, opticsId, fwdId, bwdId, true, true,
         quote($currMagical.__downcast($currMagical)),
         quote($opticsId.$accessForward),
         quote($opticsId.$accessBackward),
         quote($currMagical.$accessMagic($currMagical)))
 }
 
-// START: plain registry + ungated forward/backward bindings.
-private func unwrapStart(splices: SegmentSplices): (Tokens) -> ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens {
+// START: plain registry + ungated forward/backward bindings. At the tail the
+// terminal continuation consumes only the halves it demands, and an Optic
+// segment's downcast registry has no consumer at all.
+private func unwrapStart(splices: SegmentSplices, tail: Bool, needF: Bool, needB: Bool): (Tokens) -> ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens {
     { currMagicalExpr: Tokens =>
         { cont: (Tokens, Token, Token, Token, UInt64) -> Tokens =>
             let prelude = if (splices.bindsCurrMagical) {
@@ -575,11 +653,22 @@ private func unwrapStart(splices: SegmentSplices): (Tokens) -> ((Tokens, Token, 
             } else {
                 quote()
             }
+            let opticsLet = if (tail && !splices.opticsIdUsedAtTail) {
+                quote()
+            } else {
+                quote(let $(splices.opticsId) = $(splices.downcastExpr))
+            }
+            let fwdLet = if (tail && !needF) { quote() } else {
+                quote(let $(splices.fwdId) = $(splices.fwdAccess))
+            }
+            let bwdLet = if (tail && !needB) { quote() } else {
+                quote(let $(splices.bwdId) = $(splices.bwdAccess))
+            }
             quote(
                 $prelude
-                let $(splices.opticsId) = $(splices.downcastExpr)
-                let $(splices.fwdId) = $(splices.fwdAccess)
-                let $(splices.bwdId) = $(splices.bwdAccess)
+                $opticsLet
+                $fwdLet
+                $bwdLet
                 $(cont(splices.nextMagicalExpr, splices.opticsId, splices.fwdId, splices.bwdId, 1))
             )
         }
@@ -587,7 +676,9 @@ private func unwrapStart(splices: SegmentSplices): (Tokens) -> ((Tokens, Token, 
 }
 
 // MID: upcast the expected registry, compose with the accumulated halves.
-private func unwrapMid(splices: SegmentSplices, currMagicalExpr: Tokens, expectOptics: Token, forward: Token, backward: Token, index: UInt64): ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens {
+// At the tail the upcast result and the half the terminal does not demand
+// are not emitted.
+private func unwrapMid(splices: SegmentSplices, currMagicalExpr: Tokens, expectOptics: Token, forward: Token, backward: Token, index: UInt64, tail: Bool, needF: Bool, needB: Bool): ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens {
     let newExpect = Token(IDENTIFIER, "__expect${index}")
     { cont: (Tokens, Token, Token, Token, UInt64) -> Tokens =>
         let prelude = if (splices.bindsCurrMagical) {
@@ -595,12 +686,23 @@ private func unwrapMid(splices: SegmentSplices, currMagicalExpr: Tokens, expectO
         } else {
             quote()
         }
+        let expectLet = if (tail) {
+            quote()
+        } else {
+            quote(let $newExpect = $opticsUpcastCallexprId($expectOptics, $(splices.opticsId)))
+        }
+        let fwdLet = if (tail && !needF) { quote() } else {
+            quote(let $(splices.fwdId)  = $composeForwardCallexprId($expectOptics, $(splices.opticsId))($forward, $(splices.fwdAccess), $backward, $(splices.bwdAccess)))
+        }
+        let bwdLet = if (tail && !needB) { quote() } else {
+            quote(let $(splices.bwdId) = $composeBackwardCallexprId($expectOptics, $(splices.opticsId))($forward, $(splices.fwdAccess), $backward, $(splices.bwdAccess)))
+        }
         quote(
             $prelude
             let $(splices.opticsId) = $(splices.downcastExpr)
-            let $newExpect = $opticsUpcastCallexprId($expectOptics, $(splices.opticsId))
-            let $(splices.fwdId)  = $composeForwardCallexprId($expectOptics, $(splices.opticsId))($forward, $(splices.fwdAccess), $backward, $(splices.bwdAccess))
-            let $(splices.bwdId) = $composeBackwardCallexprId($expectOptics, $(splices.opticsId))($forward, $(splices.fwdAccess), $backward, $(splices.bwdAccess))
+            $expectLet
+            $fwdLet
+            $bwdLet
             $(cont(splices.nextMagicalExpr, newExpect, splices.fwdId, splices.bwdId, index + 1))
         )
     }
@@ -611,6 +713,9 @@ private func unwrapMid(splices: SegmentSplices, currMagicalExpr: Tokens, expectO
 // (magical, expected-registry, forward, backward, index) state.
 private func wireSegment(
     first: Bool,
+    tail: Bool,
+    needF: Bool,
+    needB: Bool,
     magicCont: ((Tokens) -> Tokens) -> Tokens,
     currentCont: ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens,
     startSplices: SegmentSplices,
@@ -619,13 +724,13 @@ private func wireSegment(
     if (first) {
         { cont: (Tokens, Token, Token, Token, UInt64) -> Tokens =>
             magicCont { currMagicalExpr: Tokens =>
-                unwrapStart(startSplices)(currMagicalExpr)(cont)
+                unwrapStart(startSplices, tail, needF, needB)(currMagicalExpr)(cont)
             }
         }
     } else {
         { cont: (Tokens, Token, Token, Token, UInt64) -> Tokens =>
             currentCont { currMagicalExpr: Tokens, expectOptics: Token, forward: Token, backward: Token, index: UInt64 =>
-                unwrapMid(midSplices(index), currMagicalExpr, expectOptics, forward, backward, index)(cont)
+                unwrapMid(midSplices(index), currMagicalExpr, expectOptics, forward, backward, index, tail, needF, needB)(cont)
             }
         }
     }
@@ -641,7 +746,6 @@ private func unwrapType(input: RefExpr): ((Tokens) -> Tokens) -> Tokens {
 }
 
 private func unwrapTypeOf(input: Tokens): ((Tokens) -> Tokens) -> Tokens {
-    let magicId = Token(IDENTIFIER, "magicStart")
     { thisMagicCont: (Tokens) -> Tokens  =>
         let tokens = quote($magicCallexprId({ => $input}))
         quote(
@@ -652,7 +756,7 @@ private func unwrapTypeOf(input: Tokens): ((Tokens) -> Tokens) -> Tokens {
 
 private func opticSplices(input: Token, index: UInt64): SegmentSplices {
     let (currMagical, opticsId, fwdId, bwdId) = segmentIds(index)
-    SegmentSplices(currMagical, opticsId, fwdId, bwdId, false,
+    SegmentSplices(currMagical, opticsId, fwdId, bwdId, false, false,
         quote(magicFirstClassDowncast($input)),
         quote($forwardFieldId($input)),
         quote($backwardFieldId($input)),
@@ -662,7 +766,7 @@ private func opticSplices(input: Token, index: UInt64): SegmentSplices {
 private func coercionSplices(input: TypeNode, index: UInt64): SegmentSplices {
     let (currMagical, opticsId, fwdId, bwdId) = segmentIds(index)
     let nextMagicalExpr = quote($magicCallexprId<$input>())
-    SegmentSplices(currMagical, opticsId, fwdId, bwdId, true,
+    SegmentSplices(currMagical, opticsId, fwdId, bwdId, true, true,
         quote($downcastMethodCoerceId($currMagical, $nextMagicalExpr)),
         quote($opticsId.$coerceForwardId($currMagical, $nextMagicalExpr)),
         quote($opticsId.$coerceBackwardId($currMagical, $nextMagicalExpr)),
@@ -676,7 +780,7 @@ private func userDefinedSplices(name: Token, targs: ArrayList<TypeNode>, args: A
     let accessMagic = Token(IDENTIFIER, "__method_${name.value}_optics")
     let downcastName = Token(IDENTIFIER, "__downcast_method_${name.value}")
     let gen = generics(targs)
-    SegmentSplices(currMagical, opticsId, fwdId, bwdId, true,
+    SegmentSplices(currMagical, opticsId, fwdId, bwdId, true, true,
         quote($currMagical.$downcastName$gen($currMagical)),
         quote($opticsId.$accessForward$gen($currMagical, $(commaSeparated(args)))),
         quote($opticsId.$accessBackward$gen($currMagical, $(commaSeparated(args)))),

@@ -21,7 +21,8 @@ class CrossFileLaws {
 
     @TestCase
     func crossFileForward(): Unit {
-        @Assert(@f(probeInstance.f) == 1)
+        let got = @f(probeInstance.f)
+        @Assert(got == 1)
     }
 
     @TestCase

@@ -305,6 +305,14 @@ func deriveLensImpls(params: ArrayList<DerivableLens>): ArrayList<Decl> {
         let prev = argvars[i]
         argvars[i] = quote(focus)
 
+        // A single-member rebuild consumes only the focus: the source
+        // parameter is named _ so no unused-variable warning is emitted.
+        let srcParam: Tokens = if (params.size == 1) {
+            quote(_ : $sourceType)
+        } else {
+            quote(source: $sourceType)
+        }
+
         let res = ArrayList<Decl>()
         let forward: Decl = FuncDecl(quote(
             @Frozen
@@ -315,7 +323,7 @@ func deriveLensImpls(params: ArrayList<DerivableLens>): ArrayList<Decl> {
         res.add(forward)
         let backward: Decl = FuncDecl(quote(
             @Frozen
-            $mod func $funcBackwardId(source: $sourceType, focus: $focusType): $sourceType {
+            $mod func $funcBackwardId($srcParam, focus: $focusType): $sourceType {
                 $sourceType($(commaSeparated(argvars)))
             }
         ))
@@ -417,14 +425,6 @@ func deriveDowncastImpl(pctorId: Token, genHdr: Tokens): Decl {
 
 // ==================== Enum prism derivation ====================
 
-private func joinTokenValues(toks: ArrayList<Token>): String {
-    let sb = StringBuilder()
-    for (t in toks) {
-        sb.append(t.value)
-        sb.append(" ")
-    }
-    sb.toString()
-}
 
 private func tokensOf(toks: ArrayList<Token>): Tokens {
     Tokens(toks)
@@ -476,37 +476,54 @@ private struct EnumCaseOptic {
     let focusType: Tokens
     let fwdArms: Tokens
     let bwdArms: Tokens
+    // `payload: T` for cases with a payload, `_ : Unit` for payloadless ones
+    // (the rebuild never reads it).
+    let bwdPayloadParam: Tokens
 
-    init(caseId: Token, focusType: Tokens, fwdArms: Tokens, bwdArms: Tokens) {
+    init(caseId: Token, focusType: Tokens, fwdArms: Tokens, bwdArms: Tokens, bwdPayloadParam: Tokens) {
         this.caseId = caseId
         this.focusType = focusType
         this.fwdArms = fwdArms
         this.bwdArms = bwdArms
+        this.bwdPayloadParam = bwdPayloadParam
     }
 }
 
 // Payloadless case: Unit-focus prism — Some(()) when the source is this
 // case, None otherwise; the backward rebuilds the case. A `?.Case`
-// read therefore doubles as a match check.
+// read therefore doubles as a match check. Its backward ignores the Unit
+// payload, so the parameter is named _.
 //
 // Multi-payload case: prism whose focus is the tuple of payloads, so
 // `list?.Cons` focuses `(head, tail)`; the update value is a tuple literal.
 //
 // Single-payload case: the historical shape — focus is the payload itself.
-private func enumCaseOptic(c: Constructor, fullTypeId: Tokens): EnumCaseOptic {
+//
+// `singleCase` suppresses the `case _` fallback arms: for a one-case enum
+// the case arm already covers every value, and cjc flags the wildcard as
+// an unreachable pattern.
+private func enumCaseOptic(c: Constructor, singleCase: Bool): EnumCaseOptic {
     let segs = casePayloadSegments(c)
     let caseId = c.identifier
     let isEmpty = segs.size == 0 || (segs.size == 1 && segs[0].size == 0)
     if (isEmpty) {
-        let fwdArms = quote(
-            case $caseId => Some(())
-            case _ => None
-        )
-        let bwdArms = quote(
-            case $caseId => $caseId
-            case _ => source
-        )
-        return EnumCaseOptic(caseId, quote(Unit), fwdArms, bwdArms)
+        let fwdArms = if (singleCase) {
+            quote(case $caseId => Some(()))
+        } else {
+            quote(
+                case $caseId => Some(())
+                case _ => None
+            )
+        }
+        let bwdArms = if (singleCase) {
+            quote(case $caseId => $caseId)
+        } else {
+            quote(
+                case $caseId => $caseId
+                case _ => source
+            )
+        }
+        return EnumCaseOptic(caseId, quote(Unit), fwdArms, bwdArms, quote(_ : Unit))
     }
     if (segs.size > 1) {
         let payloadTypes = ArrayList<Tokens>()
@@ -522,31 +539,47 @@ private func enumCaseOptic(c: Constructor, fullTypeId: Tokens): EnumCaseOptic {
         let binderList = commaSeparated(binders)
         let tupleLit = quote(($binderList))
         let wildcards = ArrayList<Tokens>()
-        for (i in 0..segs.size) {
+        for (_ in 0..segs.size) {
             wildcards.add(quote(_))
         }
         let wildcardList = commaSeparated(wildcards)
-        let fwdArms = quote(
-            case $caseId($binderList) => Some<$focusTuple>($tupleLit)
-            case _ => None
-        )
-        let bwdArms = quote(
-            case $caseId($wildcardList) => match (payload) { case ($binderList) => $caseId($binderList) }
-            case _ => source
-        )
-        return EnumCaseOptic(caseId, focusTuple, fwdArms, bwdArms)
+        let fwdArms = if (singleCase) {
+            quote(case $caseId($binderList) => Some<$focusTuple>($tupleLit))
+        } else {
+            quote(
+                case $caseId($binderList) => Some<$focusTuple>($tupleLit)
+                case _ => None
+            )
+        }
+        let bwdArms = if (singleCase) {
+            quote(case $caseId($wildcardList) => match (payload) { case ($binderList) => $caseId($binderList) })
+        } else {
+            quote(
+                case $caseId($wildcardList) => match (payload) { case ($binderList) => $caseId($binderList) }
+                case _ => source
+            )
+        }
+        return EnumCaseOptic(caseId, focusTuple, fwdArms, bwdArms, quote(payload: $focusTuple))
     }
     let (payloadType, _) = parseTypeFragment(tokensOf(segs[0]))
     let binder = Token(IDENTIFIER, "__payload_${caseId.value}")
-    let fwdArms = quote(
-        case $caseId($binder) => Some<$payloadType>($binder)
-        case _ => None
-    )
-    let bwdArms = quote(
-        case $caseId(_) => $caseId(payload)
-        case _ => source
-    )
-    return EnumCaseOptic(caseId, quote($payloadType), fwdArms, bwdArms)
+    let fwdArms = if (singleCase) {
+        quote(case $caseId($binder) => Some<$payloadType>($binder))
+    } else {
+        quote(
+            case $caseId($binder) => Some<$payloadType>($binder)
+            case _ => None
+        )
+    }
+    let bwdArms = if (singleCase) {
+        quote(case $caseId(_) => $caseId(payload))
+    } else {
+        quote(
+            case $caseId(_) => $caseId(payload)
+            case _ => source
+        )
+    }
+    return EnumCaseOptic(caseId, quote($payloadType), fwdArms, bwdArms, quote(payload: $payloadType))
 }
 
 private func deriveEnumOptics(e: EnumDecl): Tokens {
@@ -557,8 +590,9 @@ private func deriveEnumOptics(e: EnumDecl): Tokens {
     let fullTypeId = if (let Some(t) <- gen) { quote($idTok<$t>) } else { quote($idTok) }
 
     let cases = ArrayList<EnumCaseOptic>()
+    let singleCase = e.constructors.size == 1
     for (c in e.constructors) {
-        cases.add(enumCaseOptic(c, fullTypeId))
+        cases.add(enumCaseOptic(c, singleCase))
     }
 
     let implDecls = ArrayList<Decl>()
@@ -580,7 +614,7 @@ private func deriveEnumOptics(e: EnumDecl): Tokens {
         )))
         implDecls.addContra(FuncDecl(quote(
             @Frozen
-            public func $bwdId(source: $fullTypeId, payload: $(desc.focusType)): $fullTypeId {
+            public func $bwdId(source: $fullTypeId, $(desc.bwdPayloadParam)): $fullTypeId {
                 match (source) {
                     $(desc.bwdArms)
                 }
@@ -598,7 +632,7 @@ private func deriveEnumOptics(e: EnumDecl): Tokens {
         )))
         implSigDecls.addContra(FuncDecl(quote(
             @Frozen
-            func $bwdId(source: $fullTypeId, payload: $(desc.focusType)): $fullTypeId
+            func $bwdId(source: $fullTypeId, $(desc.bwdPayloadParam)): $fullTypeId
         )))
         accessorSigDecls.addContra(FuncDecl(quote(
             @Frozen

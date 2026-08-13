@@ -3,7 +3,6 @@ package lucida.tests
 import std.unittest.*
 import std.unittest.testmacro.*
 import lucida.*
-import lucida.stdlib.*
 import lucida.macrodsl.*
 
 public struct GPair<T, U> {
@@ -87,7 +86,8 @@ class OpticChainForms {
     func firstClassFromDerived(): Unit {
         let b = UBox(3)
         let lens = @f(@typeof(b).uBoxLens())
-        @Assert(@f(b.@use(lens)) == 3)
+        let got = @f(b.@use(lens))
+        @Assert(got == 3)
         @Assert(b.v == 3)
     }
 
@@ -98,7 +98,8 @@ class OpticChainForms {
         let b = UBox(3)
         let lens = @f(@typeof(b).uBoxLens())
         let same = @f(@use(lens))
-        @Assert(@f(b.@use(same)) == 3)
+        let got2 = @f(b.@use(same))
+        @Assert(got2 == 3)
         @Assert(b.v == 3)
     }
 
@@ -160,25 +161,38 @@ class UserLensIsoPrismLaws {
     @TestCase
     func lensForward(): Unit {
         let b = UBox(3)
-        @Assert(@f(b.uBoxLens()) == 3)
+        let got3 = @f(b.uBoxLens())
+        @Assert(got3 == 3)
     }
 
     @TestCase
     func lensBackward(): Unit {
         let b = UBox(3)
-        @Assert(@f(b.uBoxLens() <- 5).v == 5)
+        let got4 = @f(b.uBoxLens() <- 5).v
+        @Assert(got4 == 5)
+    }
+
+    @TestCase
+    func chainMembersMinted(): Unit {
+        // @Optic mints the first-class chain member for mid-chain upcasts
+        // even when no chain here routes through it — keep them exercised.
+        let _ = RegistryMagical<UBox>().__method_uBoxLens_optics(RegistryMagical<UBox>())
+        let _ = RegistryMagical<ULen>().__method_uLenIso_optics(RegistryMagical<ULen>())
+        let _ = RegistryMagical<UMaybe>().__method_uJust_optics(RegistryMagical<UMaybe>())
     }
 
     @TestCase
     func isoForward(): Unit {
         let m = ULen(5)
-        @Assert(@f(m.uLenIso()) == 5)
+        let got5 = @f(m.uLenIso())
+        @Assert(got5 == 5)
     }
 
     @TestCase
     func isoBackward(): Unit {
         let m = ULen(5)
-        @Assert(@f(m.uLenIso() <- 9).m == 9)
+        let got6 = @f(m.uLenIso() <- 9).m
+        @Assert(got6 == 9)
     }
 
     @TestCase
@@ -227,19 +241,6 @@ class UserLensIsoPrismLaws {
         }
         @Assert(ok)
     }
-}
-
-func sameMaybe(a: Array<UMaybe>, b: Array<UMaybe>): Bool {
-    if (a.size != b.size) { return false }
-    for (i in 0..a.size) {
-        let (x, y) = (a[i], b[i])
-        let xe = match (x) { case UJust(v) => v case UNothing => -1 }
-        let ye = match (y) { case UJust(v) => v case UNothing => -1 }
-        let xs = match (x) { case UJust(_) => true case UNothing => false }
-        let ys = match (y) { case UJust(_) => true case UNothing => false }
-        if (xs != ys || xe != ye) { return false }
-    }
-    return true
 }
 
 @Test
@@ -328,7 +329,8 @@ class GenericUserOpticLaws {
     @TestCase
     func explicitGenericLensForwardBackward(): Unit {
         let gb = GBox<Int64>(5)
-        @Assert(@f(gb.guBoxLens()) == 5)
+        let got7 = @f(gb.guBoxLens())
+        @Assert(got7 == 5)
         let updated = @f(gb.guBoxLens() <- 9)
         @Assert(updated.v == 9)
     }
@@ -338,7 +340,8 @@ class GenericUserOpticLaws {
     @TestCase
     func explicitCarrierStringLensForwardBackward(): Unit {
         let gb = GBox<String>("x")
-        @Assert(@f(gb.guBoxLensStr()) == "x")
+        let got8 = @f(gb.guBoxLensStr())
+        @Assert(got8 == "x")
         let updated = @f(gb.guBoxLensStr() <- "y")
         @Assert(updated.v == "y")
     }
@@ -365,7 +368,8 @@ class GenericUserOpticLaws {
     @TestCase
     func paramOnlyInSource(): Unit {
         let gb = GBox<String>("x")
-        @Assert(@f(gb.guBoxTag()) == 1)
+        let got9 = @f(gb.guBoxTag())
+        @Assert(got9 == 1)
         let updated = @f(gb.guBoxTag() <- 7)
         @Assert(updated.v == "x")
     }
@@ -374,7 +378,8 @@ class GenericUserOpticLaws {
     @TestCase
     func nestedGenericLens(): Unit {
         let g = GBox<GBox<Int64>>(GBox(3))
-        @Assert(@f(g.guBoxNested()) == 3)
+        let got10 = @f(g.guBoxNested())
+        @Assert(got10 == 3)
         let updated = @f(g.guBoxNested() <- 4)
         @Assert(updated.v.v == 4)
     }
@@ -383,7 +388,8 @@ class GenericUserOpticLaws {
     @TestCase
     func multiParamExplicitCarrier(): Unit {
         let gp = GPair<Int64, String>(1, "a")
-        @Assert(@f(gp.gpairFirst()) == 1)
+        let got11 = @f(gp.gpairFirst())
+        @Assert(got11 == 1)
         let updated = @f(gp.gpairFirst() <- 2)
         @Assert(updated.first == 2)
         @Assert(updated.second == "a")
@@ -403,7 +409,8 @@ class GenericUserOpticLaws {
     @TestCase
     func paramOnlyInSourceSecondInstantiation(): Unit {
         let gb = GBox<Bool>(true)
-        @Assert(@f(gb.guBoxTag()) == 1)
+        let got12 = @f(gb.guBoxTag())
+        @Assert(got12 == 1)
     }
 
     // Manual-registry multi-arg call site (the salary_bump pattern): member

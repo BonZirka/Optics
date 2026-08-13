@@ -70,6 +70,17 @@ func bwdParamType(kind: Int64, iTk: Token, oTk: Token): Tokens {
     return quote(($iT, ($oT) -> $oT) -> $iT)                              // Setter
 }
 
+/// True when `name` appears as an identifier token anywhere in `body`.
+/// Row parameters (a1/a2/b1/b2) are never shadowed by row bodies, so a flat
+/// token-value scan is exact.
+func usesIdentifier(body: Tokens, name: String): Bool {
+    var found = false
+    for (t in body) {
+        if (t.kind == TokenKind.IDENTIFIER && t.value == name) { found = true }
+    }
+    return found
+}
+
 func isPartialKind(k: Int64): Bool {
     k == PRISM || k == AFFINE
 }
@@ -109,17 +120,14 @@ func allPairs(): ArrayList<(Int64, Int64)> {
 
 func emitForwardLambda(k1: Int64, k2: Int64): Tokens {
     let S = idTok("S")
-    let A = idTok("A")
     let B = idTok("B")
     let src = idTok("src")
     let prv = idTok("prv")
     let rsv = idTok("rsv")
-    // NOTE: S/A/B below are TYPE identifiers (uppercase)
+    // NOTE: S/B below are TYPE identifiers (uppercase)
     let a1 = idTok("a1")
     let a2 = idTok("a2")
     let b1 = idTok("b1")
-    let someB = quote(Some<$B>)
-    let none = quote(Option<$B>.None)
     if (!isPartialKind(k1) && !isPartialKind(k2) && k2 != SETTER && k1 != SETTER) {
         // total -> total
         return quote({ $src: $S => $a2($a1($src)) })
@@ -386,14 +394,24 @@ func emitBackwardClosure(k1: Int64, k2: Int64): Tokens {
 
 // ---- member emitters ----
 
+// The curried row lambda binds all four halves; rows that use a subset name
+// the rest _ so no unused-parameter warning is emitted.
+func rowLambdaParams(lam: Tokens, k1: Int64, k2: Int64, gS: Token, gA: Token, gB: Token): Tokens {
+    let a1t = fwdParamType(k1, gS, gA)
+    let a2t = fwdParamType(k2, gA, gB)
+    let b1t = bwdParamType(k1, gS, gA)
+    let b2t = bwdParamType(k2, gA, gB)
+    let p1 = if (usesIdentifier(lam, "a1")) { quote(a1: $a1t) } else { quote(_ : $a1t) }
+    let p2 = if (usesIdentifier(lam, "a2")) { quote(a2: $a2t) } else { quote(_ : $a2t) }
+    let p3 = if (usesIdentifier(lam, "b1")) { quote(b1: $b1t) } else { quote(_ : $b1t) }
+    let p4 = if (usesIdentifier(lam, "b2")) { quote(b2: $b2t) } else { quote(_ : $b2t) }
+    commaSeparated([p1, p2, p3, p4])
+}
+
 func emitComposeForward(k1: Int64, k2: Int64): Decl {
     let gS = idTok("S")
     let gA = idTok("A")
     let gB = idTok("B")
-    let a1 = idTok("a1")
-    let a2 = idTok("a2")
-    let b1 = idTok("b1")
-    let b2 = idTok("b2")
     let r1 = registryTok(k1)
     let r2 = registryTok(k2)
     let p1t = quote(_ : $r1<$gS>)
@@ -402,7 +420,7 @@ func emitComposeForward(k1: Int64, k2: Int64): Decl {
     FuncDecl(quote(
         @Frozen
         public static func composeForward<$gS, $gA, $gB>($p1t, $p2t) {
-            { $a1: $(fwdParamType(k1, gS, gA)), $a2: $(fwdParamType(k2, gA, gB)), $b1: $(bwdParamType(k1, gS, gA)), $b2: $(bwdParamType(k2, gA, gB)) =>
+            { $(rowLambdaParams(lam, k1, k2, gS, gA, gB)) =>
                 $lam
             }
         }
@@ -413,10 +431,6 @@ func emitComposeBackward(k1: Int64, k2: Int64): Decl {
     let gS = idTok("S")
     let gA = idTok("A")
     let gB = idTok("B")
-    let a1 = idTok("a1")
-    let a2 = idTok("a2")
-    let b1 = idTok("b1")
-    let b2 = idTok("b2")
     let r1 = registryTok(k1)
     let r2 = registryTok(k2)
     let p1t = quote(_ : $r1<$gS>)
@@ -425,7 +439,7 @@ func emitComposeBackward(k1: Int64, k2: Int64): Decl {
     FuncDecl(quote(
         @Frozen
         public static func composeBackward<$gS, $gA, $gB>($p1t, $p2t) {
-            { $a1: $(fwdParamType(k1, gS, gA)), $a2: $(fwdParamType(k2, gA, gB)), $b1: $(bwdParamType(k1, gS, gA)), $b2: $(bwdParamType(k2, gA, gB)) =>
+            { $(rowLambdaParams(lam, k1, k2, gS, gA, gB)) =>
                 $lam
             }
         }

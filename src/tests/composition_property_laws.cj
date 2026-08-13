@@ -42,12 +42,12 @@ func liftFwd(f: (Int64) -> Int64): (Int64) -> Option<Int64> {
 
 // A prism-rebuild backward (A) -> S unified into the (S, A) -> S form.
 func unifyPrismSet(b: (Int64) -> Int64): (Int64, Int64) -> Int64 {
-    { s: Int64, a: Int64 => b(a) }
+    { _ : Int64, a: Int64 => b(a) }
 }
 
 // A setter backward (S, (A) -> A) -> S unified with a constant modifier.
 func unifySetterSet(b: (Int64, (Int64) -> Int64) -> Int64): (Int64, Int64) -> Int64 {
-    { s: Int64, a: Int64 => b(s, { x: Int64 => a }) }
+    { s: Int64, a: Int64 => b(s, { _ : Int64 => a }) }
 }
 
 func lawGetSet(fwd: (Int64) -> Option<Int64>, set: (Int64, Int64) -> Int64, s: Int64): Bool {

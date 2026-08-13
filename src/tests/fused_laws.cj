@@ -255,7 +255,8 @@ class FusedPrismLaws {
     @TestCase
     func coerceTailForward(): Unit {
         let mb = MeterBox(Meters(7))
-        @Assert(@f(mb.m.coerce<Int64>()) == 7)
+        let got = @f(mb.m.coerce<Int64>())
+        @Assert(got == 7)
     }
 
     @TestCase
@@ -269,7 +270,8 @@ class FusedPrismLaws {
     @TestCase
     func coerceMiddleChainForward(): Unit {
         let h = WBox(W1(Nested(3)))
-        @Assert(@f(h.w.coerce<Nested>().n) == 3)
+        let got2 = @f(h.w.coerce<Nested>().n)
+        @Assert(got2 == 3)
     }
 
     @TestCase
@@ -353,7 +355,6 @@ class FusedPrismLaws {
                 case Rect(b) => ok = (b.w == 7)
                 case _ => ()
             }
-            case _ => ()
         }
         @Assert(ok)
     }
@@ -369,7 +370,6 @@ class FusedPrismLaws {
                 case Dot(v) => ok = (v == 3)
                 case _ => ()
             }
-            case _ => ()
         }
         @Assert(ok)
     }
@@ -411,11 +411,8 @@ class FusedPrismLaws {
                         case V4(v) => ok = (v == 9)
                         case _ => ()
                     }
-                    case _ => ()
                 }
-                case _ => ()
             }
-            case _ => ()
         }
         @Assert(ok)
     }
@@ -432,11 +429,8 @@ class FusedPrismLaws {
                         case N4(v) => ok = (v == 5)
                         case _ => ()
                     }
-                    case _ => ()
                 }
-                case _ => ()
             }
-            case _ => ()
         }
         @Assert(ok)
     }
@@ -574,8 +568,10 @@ class FusedLensLaws {
     @TestCase
     func deepLensChainForward(): Unit {
         let o = Order(1, Customer("Ada", Address(City("Atlanta", 30301))))
-        @Assert(@f(o.customer.address.city.name) == "Atlanta")
-        @Assert(@f(o.customer.address.city.zip) == 30301)
+        let got = @f(o.customer.address.city.name)
+        @Assert(got == "Atlanta")
+        let got2 = @f(o.customer.address.city.zip)
+        @Assert(got2 == 30301)
     }
 
     @TestCase
@@ -598,7 +594,8 @@ class FusedLensLaws {
     @TestCase
     func unfusedForward(): Unit {
         let o = Order(1, Customer("Ada", Address(City("Atlanta", 30301))))
-        @Assert(@f[unfuse](o.customer.address.city.name) == "Atlanta")
+        let got3 = @f[unfuse](o.customer.address.city.name)
+        @Assert(got3 == "Atlanta")
     }
 
     @TestCase
