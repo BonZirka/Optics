@@ -334,7 +334,7 @@ class TupleFirstClassLaws {
     source: Point
     focus: (Int64, Int64)
     kind: Iso
-    forward: { (src.x, src.y) }
+    forward: { (source.x, source.y) }
     backward: { Point(focus[0], focus[1]) }
 ]
 struct pointCoords {}

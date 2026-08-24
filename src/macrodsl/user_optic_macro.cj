@@ -96,11 +96,11 @@ private func parseOpticArgs(value: Tokens): ArrayList<(Token, Tokens)> {
     }
     let out = ArrayList<(Token, Tokens)>()
     for (p in fd.funcParams) {
-        if (p.identifier.value == "src" || p.identifier.value == "focus" || p.identifier.value == "_src") {
+        if (p.identifier.value == "source" || p.identifier.value == "focus" || p.identifier.value == "_source") {
             throw DiagReportException(
                 "@Optic: arg name '${p.identifier.value}' is reserved",
                 p.toTokens(),
-                hint: "src/_src/focus are fixed slots of the generated lambdas"
+                hint: "source/_source/focus are fixed slots of the generated lambdas"
             )
         }
         out.add((p.identifier, p.paramType.toTokens()))
@@ -123,14 +123,14 @@ private func stripOuterBraces(field: String, value: Tokens): Tokens {
     return Tokens(inner)
 }
 
-/// Sourceless backwards (Prism/Iso) have no `src` slot. Scan only at brace
-/// depth 0 of the body so nested lambdas that shadow `src` don't false-positive.
-private func rejectSrcInSourcelessBackward(body: Tokens, kindTok: Token): Unit {
-    if (referencesAtDepth0(body, "src")) {
+/// Sourceless backwards (Prism/Iso) have no `source` slot. Scan only at brace
+/// depth 0 of the body so nested lambdas that shadow `source` don't false-positive.
+private func rejectSourceInSourcelessBackward(body: Tokens, kindTok: Token): Unit {
+    if (referencesAtDepth0(body, "source")) {
         throw DiagReportException(
-            "@Optic: backward of kind '${kindTok.value}' has no src slot",
+            "@Optic: backward of kind '${kindTok.value}' has no source slot",
             body,
-            hint: "Lens/Affine backwards receive src; Prism/Iso rebuild from focus"
+            hint: "Lens/Affine backwards receive source; Prism/Iso rebuild from focus"
         )
     }
 }
@@ -149,6 +149,21 @@ private func referencesAtDepth0(body: Tokens, name: String): Bool {
                 if (depth == 0 && t.value == name) { return true }
             case _ => ()
         }
+    }
+    return false
+}
+
+/// True when `name` appears as a bare identifier anywhere in `body` — the
+/// right predicate for naming the generated src/focus slots: a use inside
+/// an `if` block or `match` arm is as much a use as one at the top level.
+/// (Nested lambdas that rebind the name only cause over-naming, which is
+/// harmless; the depth-0 variant is reserved for src-rejection, where
+/// shadowing semantics matter.)
+private func referencesAtAnyDepth(body: Tokens, name: String): Bool {
+    let toks = ArrayList<Token>()
+    body |> forEach { t: Token => toks.add(t) }
+    for (t in toks) {
+        if (t.kind == TokenKind.IDENTIFIER && t.value == name) { return true }
     }
     return false
 }
@@ -218,21 +233,21 @@ private func emitUserOptic(
     // Bind a slot only when the body uses it; otherwise name the parameter _
     // so no unused-variable warning is emitted for user bodies like
     // `forward: { 1 }` or single-field `backward: { GBox(focus) }`.
-    let fwdParam: Tokens = if (referencesAtDepth0(forwardBody, "src")) {
-        quote(src: $source)
+    let fwdParam: Tokens = if (referencesAtAnyDepth(forwardBody, "source")) {
+        quote(source: $source)
     } else {
         quote(_ : $source)
     }
     let fwdLambda = quote({ $fwdParam => $forwardBody })
     let bwdLambda = match (kindTok.value) {
         case "Lens" | "Affine" =>
-            let usesSrc = referencesAtDepth0(backwardBody, "src")
-            let usesFocus = referencesAtDepth0(backwardBody, "focus")
-            let srcP: Tokens = if (usesSrc) { quote(src: $source) } else { quote(_ : $source) }
+            let usesSrc = referencesAtAnyDepth(backwardBody, "source")
+            let usesFocus = referencesAtAnyDepth(backwardBody, "focus")
+            let srcP: Tokens = if (usesSrc) { quote(source: $source) } else { quote(_ : $source) }
             let fcsP: Tokens = if (usesFocus) { quote(focus: $focus) } else { quote(_ : $focus) }
             quote({ $srcP, $fcsP => $backwardBody })
         case _ =>
-            let fcsP: Tokens = if (referencesAtDepth0(backwardBody, "focus")) {
+            let fcsP: Tokens = if (referencesAtAnyDepth(backwardBody, "focus")) {
                 quote(focus: $focus)
             } else {
                 quote(_ : $focus)
@@ -240,19 +255,50 @@ private func emitUserOptic(
             quote({ $fcsP => $backwardBody })
     }
 
+    // Cross-package visibility: cjc only imports extension members that
+    // come through interface conformance — a plain `extend` block's members
+    // stay package-local (same shape @DeriveOptics emits). Each optic gets
+    // three sealed interfaces named after the carrier: impl members conformed
+    // by the kind registry, optics and downcast members conformed by
+    // RegistryMagical (split so neither conforming type faces members it
+    // does not own).
+    let implIfaceId = Token(IDENTIFIER, "__${name.value}_optics_impl")
+    let accIfaceId = Token(IDENTIFIER, "__${name.value}_suboptics_accessors")
+    let downIfaceId = Token(IDENTIFIER, "__${name.value}_downcast")
+
     return quote(
-        extend $genHdr $registryId<$source> {
+        sealed interface $implIfaceId$genHdr {
+            @Frozen
+            func $fwdId($sigTail): $fwdType
+            @Frozen
+            func $bwdId($sigTail): $bwdType
+        }
+        sealed interface $accIfaceId$genHdr {
+            @Frozen
+            func $opticsId(_: $registryMainId<$source>): $registryMainId<$focus>
+        }
+        sealed interface $downIfaceId$genHdr {
+            @Frozen
+            func $downcastId(_: $registryMainId<$source>): $registryId<$source>
+        }
+        extend $genHdr $registryId<$source> <: $implIfaceId$genHdr {
+            @Frozen
             public func $fwdId($sigTail): $fwdType {
                 $fwdLambda
             }
+            @Frozen
             public func $bwdId($sigTail): $bwdType {
                 $bwdLambda
             }
         }
-        extend $genHdr $registryMainId<$source> {
+        extend $genHdr $registryMainId<$source> <: $accIfaceId$genHdr {
+            @Frozen
             public func $opticsId(_: $registryMainId<$source>): $registryMainId<$focus> {
                 $registryMainId<$focus>()
             }
+        }
+        extend $genHdr $registryMainId<$source> <: $downIfaceId$genHdr {
+            @Frozen
             public func $downcastId(_: $registryMainId<$source>): $registryId<$source> {
                 $registryId<$source>()
             }
@@ -310,7 +356,7 @@ public macro Optic(attr: Tokens, input: Tokens): Tokens {
         }
 
         if (kindTok.value == "Prism" || kindTok.value == "Iso") {
-            rejectSrcInSourcelessBackward(backward, kindTok)
+            rejectSourceInSourcelessBackward(backward, kindTok)
         }
 
         let generated = emitUserOptic(carrier, kindTok, source, focus, args, forward, backward)

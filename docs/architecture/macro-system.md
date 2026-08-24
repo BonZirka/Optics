@@ -271,10 +271,10 @@ walk uses:
 ```cangjie
 extend RegistryLenses<UBox> {
     public func __method_uBoxLens_impl_forward(_: RegistryMagical<UBox>): (UBox) -> Int64 {
-        { src: UBox => src.v }
+        { source: UBox => source.v }
     }
     public func __method_uBoxLens_impl_backward(_: RegistryMagical<UBox>): (UBox, Int64) -> UBox {
-        { src: UBox, focus: Int64 => UBox(focus) }
+        { source: UBox, focus: Int64 => UBox(focus) }
     }
 }
 
@@ -298,10 +298,10 @@ reason the operator marks work the way they do:
 
 | Kind | forward type | backward type | backward slots |
 |---|---|---|---|
-| `Lens` | `(S) -> F` | `(S, F) -> S` | `src`, `focus` |
+| `Lens` | `(S) -> F` | `(S, F) -> S` | `source`, `focus` |
 | `Iso` | `(S) -> F` | `(F) -> S` | `focus` alone |
 | `Prism` | `(S) -> Option<F>` | `(F) -> S` | `focus` alone |
-| `Affine` | `(S) -> Option<F>` | `(S, F) -> S` | `src`, `focus` |
+| `Affine` | `(S) -> Option<F>` | `(S, F) -> S` | `source`, `focus` |
 
 A `.`-marked chain segment requires a total forward `(S) -> F`; a `?.`-marked
 one requires `Option`. Because the *type* of the emitted forward already
@@ -315,15 +315,15 @@ The backward column is the introduction's rebuild arrow made literal:
 `Lens` and `Affine` rebuild from source plus focus (an affine's miss keeps
 the source), while `Iso` and `Prism` rebuild from the focus alone. The macro
 enforces the distinction at declaration time: a `Prism` or `Iso` backward
-whose body mentions `src` at the top level (nested lambdas may shadow it
+whose body mentions `source` at the top level (nested lambdas may shadow it
 freely — the scan tracks brace depth) is rejected, because the emitted lambda
 simply has no such slot.
 
 ### Fixed slots, reserved names
 
-The bodies are spliced into lambdas with fixed parameter names — `src` and
+The bodies are spliced into lambdas with fixed parameter names — `source` and
 `focus`, plus any names from `args:`. Those slots are therefore not the
-user's to choose: an arg named `src`, `_src` or `focus` is rejected, since it
+user's to choose: an arg named `source`, `_source` or `focus` is rejected, since it
 would collide with (or shadow) the slots the emission introduces. Parsing the
 `args:` list reuses the compiler's own function-parameter parser on a
 synthesized declaration — a small trick that buys exact Cangjie parameter
@@ -538,7 +538,7 @@ shadowing window there is empty.
 Two more names are reserved by parsing rather than emission. `coerce` is a
 fixed chain segment — any `coerce<T>()` call in a chain becomes a coercion
 node, so a user method optic named `coerce` cannot be called in a chain. And
-`@Optic` reserves `src`, `focus` and `_src` as arg names, because they
+`@Optic` reserves `source`, `focus` and `_source` as arg names, because they
 are the slots of the generated lambdas.
 
 The single sustainable answer is the one already in force: keep generated

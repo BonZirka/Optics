@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-29 — breaking: `@Optic` body slot `src` renamed to `source`
+
+Bodies in `@Optic[...]` declarations now name the source slot `source`,
+matching the `source:` field spelling (`forward: { source.v }`). The
+reserved arg names are `source`, `_source` and `focus`.
+
+Migration: replace `src` with `source` inside `@Optic` bodies
+(`sed -i 's/\bsrc\b/source/g'` per optic file is safe — the slot is the
+only bare `src` in a body).
+
 ## 2026-09-25 — breaking: macro names shortened
 
 - `@Lucida(...)` → `@f(...)`

@@ -16,8 +16,8 @@ public struct GPair<T, U> {
     focus: T
     kind: Affine
     args: (n: Int64)
-    forward: { if (let Some(f) <- src.get(n)) { Some(f) } else { None } }
-    backward: { let a = src.clone(); a[n] = focus; a }
+    forward: { if (let Some(f) <- source.get(n)) { Some(f) } else { None } }
+    backward: { let a = source.clone(); a[n] = focus; a }
 ]
 struct at2<T> {}
 
@@ -29,7 +29,7 @@ public struct UBox {
     source: UBox
     focus: Int64
     kind: Lens
-    forward: { src.v }
+    forward: { source.v }
     backward: { UBox(focus) }
 ]
 struct uBoxLens {}
@@ -42,7 +42,7 @@ public struct ULen {
     source: ULen
     focus: Int64
     kind: Iso
-    forward: { src.m }
+    forward: { source.m }
     backward: { ULen(focus) }
 ]
 struct uLenIso {}
@@ -56,27 +56,27 @@ public enum UMaybe {
     source: UMaybe
     focus: Int64
     kind: Prism
-    forward: { match (src) { case UJust(v) => Some(v) case _ => None } }
+    forward: { match (source) { case UJust(v) => Some(v) case _ => None } }
     backward: { UJust(focus) }
 ]
 struct uJust {}
 
-@Optic[source: GBox<T>, focus: T, kind: Lens, forward: { src.v }, backward: { GBox(focus) }]
+@Optic[source: GBox<T>, focus: T, kind: Lens, forward: { source.v }, backward: { GBox(focus) }]
 struct guBoxLens<T> {}
 
-@Optic[source: GBox<T>, focus: T, kind: Lens, forward: { src.v }, backward: { GBox(focus) }]
+@Optic[source: GBox<T>, focus: T, kind: Lens, forward: { source.v }, backward: { GBox(focus) }]
 struct guBoxLensStr<T> {}
 
-@Optic[source: GBox<T>, focus: T, kind: Affine, forward: { Some(src.v) }, backward: { GBox(focus) }]
+@Optic[source: GBox<T>, focus: T, kind: Affine, forward: { Some(source.v) }, backward: { GBox(focus) }]
 struct guBoxAffine<T> {}
 
-@Optic[source: GBox<T>, focus: Int64, kind: Lens, forward: { 1 }, backward: { src }]
+@Optic[source: GBox<T>, focus: Int64, kind: Lens, forward: { 1 }, backward: { source }]
 struct guBoxTag<T> {}
 
-@Optic[source: GBox<GBox<T>>, focus: T, kind: Lens, forward: { src.v.v }, backward: { GBox(GBox(focus)) }]
+@Optic[source: GBox<GBox<T>>, focus: T, kind: Lens, forward: { source.v.v }, backward: { GBox(GBox(focus)) }]
 struct guBoxNested<T> {}
 
-@Optic[source: GPair<T, U>, focus: T, kind: Lens, forward: { src.first }, backward: { GPair(focus, src.second) }]
+@Optic[source: GPair<T, U>, focus: T, kind: Lens, forward: { source.first }, backward: { GPair(focus, source.second) }]
 struct gpairFirst<T, U> {}
 
 @Test

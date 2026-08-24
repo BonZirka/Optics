@@ -119,14 +119,14 @@ are checked as strictly as their presence.
   parameter syntax, as in `(n: Int64, tag: Bool)`. Fix: check the
   spelling.
 - **A reserved arg name** —
-  `@Optic: arg name 'src' is reserved`
-  (hint: `src/_src/focus are fixed slots of the generated lambdas`).
-  The message names `focus` or `_src` the same way. Fix: rename the arg.
+  `@Optic: arg name 'source' is reserved`
+  (hint: `source/_source/focus are fixed slots of the generated lambdas`).
+  The message names `focus` or `_source` the same way. Fix: rename the arg.
 - **`src` in a sourceless backward** —
-  `@Optic: backward of kind 'Prism' has no src slot`
-  (hint: `Lens/Affine backwards receive src; Prism/Iso rebuild from focus`).
+  `@Optic: backward of kind 'Prism' has no source slot`
+  (hint: `Lens/Affine backwards receive source; Prism/Iso rebuild from focus`).
   Fires for `Iso` too: those backwards rebuild from `focus` alone, so
-  there is no `src` slot to name. Fix: rebuild from `focus` (a `src`
+  there is no `source` slot to name. Fix: rebuild from `focus` (a `source`
   inside a nested lambda is left alone).
 
 ## Chain diagnostics

@@ -28,25 +28,25 @@ focus.
 Inside the bodies, a few names are not yours to choose — they are the slots
 of the lambdas the declaration compiles to:
 
-- `src` names the source value. Every `forward` receives it, and so does the
+- `source` names the source value. Every `forward` receives it, and so does the
   `backward` of a `Lens` or `Affine`.
 - `focus` names the new focus — the last slot of a `backward`, and the only
   one for the kinds that rebuild from the part alone.
 - `args:` names join them, in scope in both bodies. An arg cannot be called
-  `src`, `_src` or `focus` — those slots are fixed (`@Optic: arg name 'src' is reserved`).
+  `source`, `_source` or `focus` — those slots are fixed (`@Optic: arg name 'source' is reserved`).
 
 The kind decides each body's shape:
 
 | Kind | `forward:` computes | `backward:` receives |
 |---|---|---|
-| `Lens` | the focus, plain — total | `src`, then `focus` |
+| `Lens` | the focus, plain — total | `source`, then `focus` |
 | `Iso` | the focus, plain — total | `focus` alone |
 | `Prism` | `Option<A>` — `Some(payload)` on a match, `None` on a miss | `focus` alone |
-| `Affine` | `Option<A>` — partial, like a prism | `src`, then `focus` |
+| `Affine` | `Option<A>` — partial, like a prism | `source`, then `focus` |
 
 The backward column is the introduction's rebuild arrow: a `Prism` or `Iso`
-rebuilds the whole from the part alone, so its backward has no `src` slot,
-and a body that mentions one is rejected — `@Optic: backward of kind 'Prism' has no src slot` (hint: `Lens/Affine backwards receive src; Prism/Iso rebuild from focus`).
+rebuilds the whole from the part alone, so its backward has no `source` slot,
+and a body that mentions one is rejected — `@Optic: backward of kind 'Prism' has no source slot` (hint: `Lens/Affine backwards receive source; Prism/Iso rebuild from focus`).
 The generated members are public whatever the carrier's own visibility — the
 carrier only names the optic.
 
@@ -66,16 +66,16 @@ public struct UBox {
     source: UBox
     focus: Int64
     kind: Lens
-    forward: { src.v }
+    forward: { source.v }
     backward: { UBox(focus) }
 ]
 struct uBoxLens {}
 ```
 
-`uBoxLens` focuses the `v` of a `UBox` — `src.v` forward, total because a
+`uBoxLens` focuses the `v` of a `UBox` — `source.v` forward, total because a
 `UBox` always has its `v`, the [lenses](lenses.md) bargain. The backward
 builds a new `UBox` around the new focus; the lens backward ignores its
-`src` slot — for a one-field whole, the focus is all there is (a multi-field
+`source` slot — for a one-field whole, the focus is all there is (a multi-field
 struct would rebuild its other fields from `src`). `.` marks the calls:
 
 ```cangjie
@@ -216,7 +216,7 @@ The type parameters live on the carrier — that generic list is the only
 source of them:
 
 ```cangjie
-@Optic[source: GBox<T>, focus: T, kind: Lens, forward: { src.v }, backward: { GBox(focus) }]
+@Optic[source: GBox<T>, focus: T, kind: Lens, forward: { source.v }, backward: { GBox(focus) }]
 struct guBoxLens<T> {}
 ```
 

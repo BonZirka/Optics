@@ -327,7 +327,7 @@ immediately-invoked lambda, and the user's expressions enter as thunks beside
 them, not statements among them — but it is real, and it is the visible seam
 of the no-gensym model: the prefix is a convention, and a convention has
 edges. (Two reservations are made by parsing rather than prefixing: `coerce`, by
-the chain grammar, and `src`/`focus`/`_src` as arg names, because they are the
+the chain grammar, and `source`/`focus`/`_source` as arg names, because they are the
 slots of generated lambdas — [both prices](#what-coerce-costs) are paid for
 the same reason.)
 
