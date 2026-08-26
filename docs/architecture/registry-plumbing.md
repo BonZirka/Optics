@@ -113,31 +113,23 @@ Who emits what:
 |---|---|---|---|
 | `@DeriveOptics`, struct or class | `__downcast` | `RegistryMagical<T>` | `RegistryLenses<T>` |
 | `@DeriveOptics`, enum | `__downcast` | `RegistryMagical<T>` | `RegistryAffines<T>` |
-| `@Optic` | `__downcast_method_<name>` | `RegistryMagical<S>` | the declared kind's registry |
-| stdlib (`at`, `selectFirst`) | `__downcast_method_at`, `__downcast_method_selectFirst` | `RegistryMagical<Array<T>>` | `RegistryAffines<Array<T>>` |
+| `@Optic` (including the stdlib's `at`, `selectFirst`) | `__downcast_method_<name>` | `RegistryMagical<S>` | the declared kind's registry |
 | the runtime, for `coerce<T>()` | `__downcast_method_coerce` (free function) | takes two `RegistryMagical` | `RegistryIsos<T>` |
 
-The per-type downcasts all follow one shape; the stdlib's pair
-(`impls.cj`) shows the full interface-and-extend ceremony, typed for arrays
-rather than a user type:
+The per-type downcasts all follow one shape. The stdlib optics are declared
+as ordinary `@Optic` carriers (`impls.cj`), so the ceremony is generated:
+for an optic named `at` on `Array<T>` the expansion emits
 
 ```cangjie
-sealed interface __Stdlib_downcast<T> {
-    // Array<T>.at(n)
+sealed interface __at_downcast<T> {
     @Frozen
     func __downcast_method_at(_: RegistryMagical <Array<T>>): RegistryAffines<Array<T>>
-    @Frozen
-    func __downcast_method_selectFirst(_: RegistryMagical <Array<T>>): RegistryAffines<Array<T>>
 }
 
-extend <T> RegistryMagical<Array<T>> <: __Stdlib_downcast<T> {
+extend <T> RegistryMagical<Array<T>> <: __at_downcast<T> {
     @Frozen
     public func __downcast_method_at(_: RegistryMagical <Array<T>>): RegistryAffines<Array<T>> {
-        RegistryAffines()
-    }
-    @Frozen
-    public func __downcast_method_selectFirst(_: RegistryMagical <Array<T>>): RegistryAffines<Array<T>> {
-        RegistryAffines()
+        RegistryAffines<Array<T>>()
     }
 }
 ```

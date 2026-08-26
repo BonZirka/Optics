@@ -75,10 +75,10 @@ import lucida.macrodsl.*
 struct BadOptic3 { public BadOptic3(public let v: Int64) { } }
 EOF
 
-probe "optic src in sourceless backward" "has no src slot" <<'EOF'
+probe "optic source in sourceless backward" "has no source slot" <<'EOF'
 package lucida.tests
 import lucida.macrodsl.*
-@Optic[source: Int64, focus: Int64, kind: Prism, forward: { Right(src) }, backward: { src }]
+@Optic[source: Int64, focus: Int64, kind: Prism, forward: { Some(source) }, backward: { source }]
 struct BadOptic4 {}
 EOF
 
@@ -89,7 +89,7 @@ import lucida.macrodsl.*
 public struct DotBox {
     public DotBox(public let v: Int64) { }
 }
-@Optic[source: DotBox, focus: Int64, kind: Prism, forward: { Right(src.v) }, backward: { DotBox(focus) }]
+@Optic[source: DotBox, focus: Int64, kind: Prism, forward: { Some(source.v) }, backward: { DotBox(focus) }]
 struct dotPartial {}
 func z1(): Unit { let _ = @f(DotBox(1).dotPartial()) }
 EOF
