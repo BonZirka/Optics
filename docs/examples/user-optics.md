@@ -50,6 +50,35 @@ and a body that mentions one is rejected — `@Optic: backward of kind 'Prism' h
 The generated members are public whatever the carrier's own visibility — the
 carrier only names the optic.
 
+### Naming the slots
+
+When a body needs its own `source` or `focus` — a local, a field, anything —
+write it with a leading parameter list and the names bind positionally to
+the kind's slots instead:
+
+```cangjie
+@Optic[
+    source: UBox
+    focus: Int64
+    kind: Lens
+    forward: { s => s.v }
+    backward: { s, d => UBox(s.v + d) }
+]
+struct uRenLens {}
+```
+
+- `forward:` takes one name — the source: `{ s => ... }`.
+- `backward:` takes two for `Lens`/`Affine` (source, then focus), one for
+  `Prism`/`Iso` (the focus): `{ d => UJust(d) }`.
+- `_` skips a slot: `forward: { _ => 42 }`, `backward: { _, d => ... }`.
+
+A param-form body does not have `source`/`focus` in scope at all — that is
+the point: the body's own names cannot collide with the slots. Bare bodies
+keep the fixed names. Arity is checked at declaration time
+(`@Optic: forward binds 2 names but this kind has 1 slots`, hint: `Use _ to
+skip a slot`), and two names on a sourceless backward still report
+`has no source slot`.
+
 ## A lens, a prism, an affine
 
 Three of the four kinds, one declaration each, each with the behavior the

@@ -329,6 +329,13 @@ would collide with (or shadow) the slots the emission introduces. Parsing the
 synthesized declaration — a small trick that buys exact Cangjie parameter
 syntax (modifiers, types, defaults' grammar) without reimplementing it.
 
+The fixed names are only the default: a body written with a leading
+parameter list (`forward: { s => ... }`, `backward: { s, d => ... }`) binds
+its names to the kind's slots positionally — `_` skips one — and the fixed
+`source`/`focus` are not in scope in that body. Arity is checked against the
+kind (1 for every forward; 2 for sourceful backwards, 1 for sourceless), so
+miscounts get bespoke diagnostics instead of confusing compile errors.
+
 ### Generic carriers
 
 Type parameters come from the carrier's generic list, and threading them hit

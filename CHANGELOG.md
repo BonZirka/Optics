@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-09-29 — additive: `@Optics({ ... })` namespaces for user optics
+
+A namespace collects several optics in one declaration; kind attributes
+(`@Lens[...]`, `@Prism[...]`, `@Affine[...]`, `@Iso[...]`) replace the
+`kind:` field and validate before the namespace sees them (macros expand
+bottom-up and leave a `@__OpticDecl[kind: K, ...]` marker for `@Optics` to
+read):
+
+    @Optics({
+        @Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
+        struct slen {}
+
+        @Lens[source: Array<Int64>, ...]
+        struct slen {}
+    })
+
+Same-named optics over **different source types** are the point: each name
+gets one pair of unified interfaces (`__<name>_impl`, `__<name>_accessors`)
+with one conformance per declaration, so the per-optic carrier/interface
+redefinition that blocked same-package overloading disappears. Same-named
+optics must still differ in source type, share the `args:` list, and agree
+on kind per source — violations get bespoke diagnostics. Standalone
+`@Optic[...]` declarations are unchanged.
+
+## 2026-09-29 — additive: `@Optic` bodies may rename the slots
+
+A body written with a leading parameter list binds its names to the kind's
+slots positionally — `forward: { s => s.v }`, `backward: { s, d => ... }`,
+one name for a Prism/Iso backward — and `_` skips a slot. Bare bodies keep
+the fixed `source`/`focus` names; nothing breaks.
+
 ## 2026-09-29 — breaking: `@Optic` body slot `src` renamed to `source`
 
 Bodies in `@Optic[...]` declarations now name the source slot `source`,

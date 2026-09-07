@@ -82,6 +82,20 @@ import lucida.macrodsl.*
 struct BadOptic4 {}
 EOF
 
+probe "optic rename arity forward" "binds 2 names but this kind has 1 slots" <<'EOF'
+package lucida.tests
+import lucida.macrodsl.*
+@Optic[source: Int64, focus: Int64, kind: Lens, forward: { a, b => a }, backward: { a, b => a }]
+struct BadOpticRen1 {}
+EOF
+
+probe "optic rename arity sourceless backward" "has no source slot" <<'EOF'
+package lucida.tests
+import lucida.macrodsl.*
+@Optic[source: Int64, focus: Int64, kind: Prism, forward: { s => Some(s) }, backward: { s, d => d }]
+struct BadOpticRen2 {}
+EOF
+
 probe "optic dot on partial"      "on a partial optic (Prism/Affine)" <<'EOF'
 package lucida.tests
 import lucida.*
@@ -180,6 +194,28 @@ func z(): Unit {
     let rd = @f(mb.m.coerce())
     let _ = rd
 }
+EOF
+
+probe "namespace duplicate same-name optic" "declared more than once" <<'EOF'
+package lucida.tests
+import lucida.*
+import lucida.macrodsl.*
+@Optics({
+    @Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
+    struct dup {}
+    @Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
+    struct dup {}
+})
+func z8(): Unit { }
+EOF
+
+probe "namespace kind macro outside @Optics" "must be used inside an @Optics block" <<'EOF'
+package lucida.tests
+import lucida.*
+import lucida.macrodsl.*
+@Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
+struct stray {}
+func z9(): Unit { }
 EOF
 
 echo "diagnostics gate: $PASS passed, $FAIL failed"

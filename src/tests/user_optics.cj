@@ -79,6 +79,23 @@ struct guBoxNested<T> {}
 @Optic[source: GPair<T, U>, focus: T, kind: Lens, forward: { source.first }, backward: { GPair(focus, source.second) }]
 struct gpairFirst<T, U> {}
 
+// ===== renamed slots (spec docs/superpowers/specs/2026-09-29-optic-slot-renames-design.md) =====
+
+@Optic[source: UBox, focus: Int64, kind: Lens, forward: { s => s.v }, backward: { s, d => UBox(s.v + d) }]
+struct uRenLens {}
+
+@Optic[source: UMaybe, focus: Int64, kind: Prism, forward: { m => match (m) { case UJust(v) => Some(v) case _ => None } }, backward: { d => UJust(d) }]
+struct uRenPrism {}
+
+@Optic[source: UMaybe, focus: Int64, kind: Affine, forward: { m => match (m) { case UJust(v) => Some(v) case _ => None } }, backward: { m, d => match (m) { case UJust(_) => UJust(d) case _ => m } }]
+struct uRenAffine {}
+
+@Optic[source: UBox, focus: Int64, kind: Lens, forward: { _ => 42 }, backward: { _, d => UBox(d) }]
+struct uRenSkip {}
+
+@Optic[source: UBox, focus: Int64, kind: Lens, forward: { s => let source = 3; s.v + source }, backward: { s, d => UBox(s.v + d) }]
+struct uRenShadow {}
+
 @Test
 class OpticChainForms {
     // A first-class optic can be built from a derived one and applied mid-chain.
@@ -422,5 +439,61 @@ class GenericUserOpticLaws {
         let gp = GPair<Int64, String>(1, "a")
         let focused = @f(gp.mfirst<Int64, String>())
         @Assert(focused.first == 1 && focused.second == "a")
+    }
+}
+
+@Test
+class OpticSlotRenames {
+    @TestCase
+    func renamedLensRoundTrip(): Unit {
+        let b = UBox(3)
+        let got = @f(b.uRenLens())
+        @Assert(got == 3)
+        let updated = @f(b.uRenLens() <- 5)
+        @Assert(updated.v == 8)
+    }
+
+    @TestCase
+    func renamedPrismSourcelessBackward(): Unit {
+        let m = UMaybe.UJust(4)
+        let got = @f(m?.uRenPrism())
+        @Assert(got == 4)
+        let updated = @f(m?.uRenPrism() <- 7)
+        var ok = false
+        match (updated) {
+            case UJust(v) => ok = (v == 7)
+            case _ => ()
+        }
+        @Assert(ok)
+    }
+
+    @TestCase
+    func renamedAffineBackwardMissKeepsSource(): Unit {
+        let n = UMaybe.UNothing
+        let updated = @f(n?.uRenAffine() <- 7)
+        var ok = false
+        match (updated) {
+            case UNothing => ok = true
+            case _ => ()
+        }
+        @Assert(ok)
+    }
+
+    @TestCase
+    func skippedSlot(): Unit {
+        let b = UBox(3)
+        let got = @f(b.uRenSkip())
+        @Assert(got == 42)
+        let updated = @f(b.uRenSkip() <- 5)
+        @Assert(updated.v == 5)
+    }
+
+    @TestCase
+    func renameEscapesSlotShadowing(): Unit {
+        let b = UBox(3)
+        let got = @f(b.uRenShadow())
+        @Assert(got == 6)
+        let updated = @f(b.uRenShadow() <- 4)
+        @Assert(updated.v == 7)
     }
 }
