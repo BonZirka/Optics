@@ -340,6 +340,7 @@ public macro Optic(attr: Tokens, input: Tokens): Tokens {
             $generated
         )
     } catch (e: DiagReportException) {
+        println("@ODIAG: ${e.message}")
         diagReport(DiagReportLevel.ERROR, e.tokens, e.message, e.hint)
         quote($input)
     }
@@ -347,15 +348,13 @@ public macro Optic(attr: Tokens, input: Tokens): Tokens {
 
 /// Builds the forward member body (lambda) for a user optic of the given kind.
 /// Shared by the standalone @Optic emission and the @Optics namespace emission.
-func buildUserFwdLambda(kind: String, source: Tokens, _: Tokens, forwardBody: Tokens): Tokens {
+func buildUserFwdLambda(_: String, source: Tokens, _: Tokens, forwardBody: Tokens): Tokens {
 // Bind a slot only when the body uses it; otherwise name the parameter _
 // so no unused-variable warning is emitted for user bodies like
 // `forward: { 1 }` or single-field `backward: { GBox(focus) }`.
 // Param-form bodies (`{ s => ... }`, `{ s, f => ... }`) bind their names
 // positionally to the kind's slots and replace the fixed slots entirely;
 // bare bodies keep fixed slots with auto-`_` naming for unused ones.
-let isSourceful = kind == "Lens" || kind == "Affine"
-let bwdSlotCount: Int64 = if (isSourceful) { 2 } else { 1 }
 let (fwdParam, fwdRest): (Tokens, Tokens) = match (parseSlotRenames(forwardBody)) {
     case Some((names, rest)) =>
         if (names.size != 1) {
@@ -637,6 +636,7 @@ public macro Optics(input: Tokens): Tokens {
         }
         return emitOpticsNamespace(optics)
     } catch (e: DiagReportException) {
+        println("@NSDIAG: ${e.message}")
         diagReport(DiagReportLevel.ERROR, e.tokens, e.message, e.hint)
         return quote($input)
     }

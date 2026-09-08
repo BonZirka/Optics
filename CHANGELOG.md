@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-09-29 — additive: `;`-separated optic chains in blocks
+
+Block entries are now arbitrary optic chains separated by `;` —
+`@f(o.{ .i.a; .n } <- (7, 8))` writes through `o.i.a` and `o.n` in one
+fused shell (per-chain fused walks threaded through the owner), and the
+read form evaluates each chain's fused forward at the owner and returns
+the tuple. Each chain must start at a plain field access, and the
+starting fields must be pairwise distinct (bespoke diagnostic) so two
+chains never write the same field twice. The old space-separated form
+now parses as one chain, so multi-field blocks must use `;`.
+
+## 2026-09-29 — additive: tuple access splitting in blocks `@f(tup.{ ._0 ._4 ._9 })`
+
+Blocks compose with the generated tuple lenses (arities 2..16): the block
+entries `._i` are the tuple's element optics, so a read returns the focused
+sub-tuple and a write rebuilds the 10-tuple with only the listed elements
+replaced.
+
+## 2026-09-29 — additive: sibling-block reads `@f(s.{ .f1 .f2 })`
+
+The block form now also reads: without `<-` it evaluates each listed
+field's forward at the anchor chain's owner and returns a tuple of the
+reads (a bare value for a single field — Cangjie has no 1-tuples).
+`@f(o.{ .i .n })` is one fused walk to the owner plus per-field accessor
+calls.
+
+## 2026-09-29 — additive: sibling-block updates `@f(s.{ .f1 .f2 } <- (v1, v2))`
+
+A brace block after a chain anchor lists lens fields on the chain's owner
+value; the `<-` target is a tuple spread across them in order. The emission
+is one fused walk: the anchor chain is probed once, the block's backwards
+apply sequentially on the threaded owner, and the anchor fold wraps the
+result — so `@f(o.i.{ .a .b } <- (5, 6))` is a single traversal. Only plain
+lens fields are allowed inside the block (no `?.`, no nested paths, no
+calls); with a single field the target need not be a tuple. Block updates
+require a fusible value anchor; `@use(...)` anchors and `[unfuse]` are not
+supported.
+
 ## 2026-09-29 — additive: `@Optics({ ... })` namespaces for user optics
 
 A namespace collects several optics in one declaration; kind attributes

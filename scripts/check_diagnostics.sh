@@ -218,6 +218,45 @@ struct stray {}
 func z9(): Unit { }
 EOF
 
+probe "block update arity mismatch" "requires a tuple target" <<'EOF'
+package lucida.tests
+import lucida.*
+import lucida.macrodsl.*
+@DeriveOptics
+public struct BlkAB2 { public BlkAB2(public let a: Int64, public let b: Int64) { } }
+func z10(): Unit {
+    let x = BlkAB2(1, 2)
+    let upd = @f(x.{ .a; .b } <- 5)
+    let _ = upd
+}
+EOF
+
+probe "block update partial field" "expected a block chain starting with '.'" <<'EOF'
+package lucida.tests
+import lucida.*
+import lucida.macrodsl.*
+@DeriveOptics
+public struct BlkAB3 { public BlkAB3(public let a: Int64, public let b: Int64) { } }
+func z11(): Unit {
+    let x = BlkAB3(1, 2)
+    let upd = @f(x.{ ?.a } <- 5)
+    let _ = upd
+}
+EOF
+
+probe "block chains duplicate start" "two block chains start at field" <<'EOF'
+package lucida.tests
+import lucida.*
+import lucida.macrodsl.*
+@DeriveOptics
+public struct BlkDup { public BlkDup(public let a: Int64, public let b: Int64) { } }
+func z12(): Unit {
+    let x = BlkDup(1, 2)
+    let upd = @f(x.{ .a; .a } <- (5, 6))
+    let _ = upd
+}
+EOF
+
 echo "diagnostics gate: $PASS passed, $FAIL failed"
 if [ "$FAIL" -ne 0 ]; then exit 1; fi
 exit 0

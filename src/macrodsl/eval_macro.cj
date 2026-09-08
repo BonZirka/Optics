@@ -2,6 +2,7 @@ macro package lucida.macrodsl
 
 import std.ast.*
 import std.collection.*
+import std.env.*
 
 public macro f(input: Tokens): Tokens {
     lucidaDispatch(false, input)
@@ -17,6 +18,7 @@ private func lucidaDispatch(unfuse: Bool, input: Tokens): Tokens {
             evalOptics(parseOpticalExpression(input), unfuse)
         }
     } catch (e: DiagReportException) {
+        println("@FDIAG: ${e.message}")
         diagReport(
             DiagReportLevel.ERROR,
             e.tokens,
@@ -47,6 +49,10 @@ private func isFusible(nodes: Array<CompositionNode>): Bool {
             case Derived(_, _) => ()
             case UserDefined(_, _, _, _) => ()
             case Coerce(_) => ()
+            // A first-class optic may END a chain — its forward/backward are
+            // pinned from the optic object's getters; a following segment
+            // would need a magical built from a runtime value.
+            case Optic(_) => ()
             case _ => return false
         }
     }
@@ -72,6 +78,27 @@ private func evalOptics(expr: OpticalExpr, unfuse: Bool): Tokens {
                     quote($evalBackwardCallexprId($backward, $source, $target))
                 })
             }
+        case SiblingBackward(source, anchorNodes, chains, targets) =>
+            if (anchorNodes.size > 1 && !isFusible(anchorNodes)) {
+                throw DiagReportException(
+                    "${mainMacroName}: update blocks require a fusible anchor chain",
+                    source.toTokens(),
+                    hint: "Anchor the block on a value: s.{ .a .b } <- (x, y)")
+            }
+            try {
+                emitBlockBackwardWalk(source, anchorNodes, chains, targets)
+            } catch (e: Exception) {
+                println("@BLK-ERR: ${e.toString()}")
+                throw e
+            }
+        case SiblingForward(source, anchorNodes, chains) =>
+            if (anchorNodes.size > 1 && !isFusible(anchorNodes)) {
+                throw DiagReportException(
+                    "${mainMacroName}: blocks require a fusible anchor chain",
+                    source.toTokens(),
+                    hint: "Anchor the block on a value: s.{ .a .b }")
+            }
+            emitBlockForwardWalk(source, anchorNodes, chains)
         case FirstClassOptics(_) =>
             composeOptics(nodes, true, true)({ forward: Token, backward: Token =>
                 quote($constructFirstClassCallexprId($forward, $backward))
@@ -184,6 +211,10 @@ private func isFusableChain(nodes: Array<CompositionNode>): Bool {
             case Derived(_, _) => ()
             case UserDefined(_, _, _, _) => ()
             case Coerce(_) => ()
+            // A first-class optic may END a chain — its forward/backward are
+            // pinned from the optic object's getters; a following segment
+            // would need a magical built from a runtime value.
+            case Optic(_) => ()
             case _ => return false
         }
     }
@@ -209,7 +240,7 @@ enum LeafWalk {
     | Backward
 }
 
-private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>, walk: LeafWalk): (Tokens, ArrayList<Token>, ArrayList<Token>) {
+private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>, walk: LeafWalk, forceForwardAll!: Bool = false): (Tokens, ArrayList<Token>, ArrayList<Token>) {
     let startNode = nodes[0]
     let startMagicalExpr: Tokens = match (startNode) {
         case TypeOf(input) => quote($magicCallexprId({ => $input }))
@@ -228,7 +259,9 @@ private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>, walk: LeafWal
         // probe binding (see backwardProbeMask) — anything else is dead.
         let bindFwd: Bool = match (walk) {
             case Forward => true
-            case Backward => isPartialProducing(nodes[i]) || backwardProbeMask(nodes)[idx]
+            // A sibling-block tail consumes the owner probe, so every anchor
+            // segment's forward probe is live (forceForwardAll).
+            case Backward => forceForwardAll || isPartialProducing(nodes[i]) || backwardProbeMask(nodes)[idx]
         }
         let bindBwd: Bool = match (walk) {
             case Backward => true
@@ -253,6 +286,34 @@ private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>, walk: LeafWal
                 fwdIds.add(Token(IDENTIFIER, "__fwd${idx}"))
                 bwdIds.add(Token(IDENTIFIER, "__bwd${idx}"))
                 prevMagical = quote($magicCallexprId<$t>())
+            case Optic(optTok) =>
+                // Tail-only: the first-class optic's forward/backward are
+                // pinned straight from the optic object — no registry, no
+                // magical threading. Its backward is a total (S, F) -> S
+                // call on the value entering the segment.
+                let fwdId = Token(IDENTIFIER, "__fwd${idx}")
+                let bwdId = Token(IDENTIFIER, "__bwd${idx}")
+                if (i != n - 1) {
+                    throw DiagReportException(
+                        "${mainMacroName}: a first-class optic can only end a chain",
+                        optTok.toTokens())
+                }
+                let fcGetters = Token(IDENTIFIER, "__FirstClassGetters")
+                let fwdGetter = Token(IDENTIFIER, "forward")
+                let bwdGetter = Token(IDENTIFIER, "backward")
+                let fwdB = if (bindFwd) {
+                    quote(let $fwdId = $fcGetters.$fwdGetter($optTok))
+                } else {
+                    quote()
+                }
+                let bwdB = if (bindBwd) {
+                    quote(let $bwdId = $fcGetters.$bwdGetter($optTok))
+                } else {
+                    quote()
+                }
+                bindings.add(quote($fwdB $bwdB))
+                fwdIds.add(Token(IDENTIFIER, "__fwd${idx}"))
+                bwdIds.add(Token(IDENTIFIER, "__bwd${idx}"))
             case _ => throw DiagReportException(
                 "${mainMacroName}: internal: unsupported segment in fused emission",
                 quote()
@@ -446,11 +507,18 @@ private func emitFwdGateBindings(nodes: Array<CompositionNode>, fwdIds: ArrayLis
         let idx: Int64 = Int64(i - 1)
         let opticsId = Token(IDENTIFIER, "__optics${idx}")
         let fwdId = fwdIds[idx]
-        let gate = if (isPartialProducing(nodes[i])) { fwdApplyPartialCallexprId } else { fwdApplyTotalCallexprId }
         let gid = Token(IDENTIFIER, "__gfwd${idx}")
+        // A first-class tail has no registry — its forward is already a
+        // plain function, so it passes ungated.
+        let binding: Tokens = match (nodes[i]) {
+            case Optic(_) => quote(let $gid = $fwdId)
+            case _ =>
+                let gate = if (isPartialProducing(nodes[i])) { fwdApplyPartialCallexprId } else { fwdApplyTotalCallexprId }
+                quote(let $gid = $gate($opticsId, $fwdId))
+        }
         bindings = quote(
             $bindings
-            let $gid = $gate($opticsId, $fwdId)
+            $binding
         )
         gatedIds.add(gid)
     }
@@ -465,6 +533,119 @@ private func countPartialSegments(nodes: Array<CompositionNode>): Int64 {
         }
     }
     return count
+}
+
+private func emitBlockForwardWalk(source: Expr, anchorNodes: Array<CompositionNode>, chains: Array<Array<CompositionNode>>): Tokens {
+    let ownerId = idTok("__blockOwner")
+    let anchorCount = anchorNodes.size - 1
+    let ownerBinding: Tokens = if (anchorCount >= 1) {
+        quote(let $ownerId = { => $(emitFusedForwardWalk(anchorNodes, source)) }())
+    } else {
+        quote(let $ownerId = $source)
+    }
+    var readStmts = quote()
+    let tup = ArrayList<Token>()
+    tup.add(Token(TokenKind.LPAREN, "("))
+    for (j in 0..chains.size) {
+        if (j > 0) { tup.add(Token(TokenKind.COMMA, ",")) }
+        let valId = Token(IDENTIFIER, "__val${j}")
+        tup.add(valId)
+        var arr = ArrayList<CompositionNode>()
+        arr.add(TypeOf(quote($ownerId)))
+        for (nd in chains[j]) { arr.add(nd) }
+        // The walk emits bindings + a final value expression — IIFE-wrap it
+        // so it can serve as a single initializer.
+        readStmts = quote(
+            $readStmts
+            let $valId = { =>
+                $(emitFusedForwardWalk(arr.toArray(), RefExpr(quote($ownerId))))
+            }()
+        )
+    }
+    tup.add(Token(TokenKind.RPAREN, ")"))
+    let result: Tokens = if (chains.size == 1) {
+        quote($(Token(IDENTIFIER, "__val0")))
+    } else {
+        quote($(Tokens(tup)))
+    }
+    return quote(
+        $ownerBinding
+        $readStmts
+        $result
+    )
+}
+
+/// Emits the fused backward for a sibling-block update:
+/// `@f(anchor.a.{ .f1 .f2 } <- (v1, v2))`. The anchor chain is walked once
+/// (forward probes bound via forceForwardAll, right-to-left fold reused from
+/// buildBackwardWalk); the block's lens fields all live on the chain's owner
+/// value, so their backwards apply sequentially on the threaded owner. Only
+/// lens (total) fields may appear in the block — their backwards are total
+/// `(T, focus) -> T` calls, so no guards are needed.
+private func emitBlockBackwardWalk(
+    source: Expr,
+    anchorNodes: Array<CompositionNode>,
+    chains: Array<Array<CompositionNode>>,
+    targets: Array<Expr>
+): Tokens {
+    let (anchorBindings, fwdIds, bwdIds) = emitLeafBindingsAndIds(anchorNodes, LeafWalk.Backward, forceForwardAll: true)
+    let src = idTok("src")
+    let anchorCount = anchorNodes.size - 1
+    // Owner value inside the fold: the last anchor probe, or the source
+    // itself when the block sits directly on the anchor.
+    let ownerTok: Token = if (anchorCount >= 1) {
+        Token(IDENTIFIER, "__t${anchorCount - 1}")
+    } else {
+        src
+    }
+    // Values entering anchor segments: [src, t0, ..., t_{anchorCount-2}].
+    let intermediates = ArrayList<Token>()
+    intermediates.add(src)
+    for (j in 0..anchorCount - 1) {
+        intermediates.add(Token(IDENTIFIER, "__t${j}"))
+    }
+    // Anchor-chain forward probes, bound inside the fold.
+    var probeStmts = quote()
+    var probePrev = src
+    for (j in 0..anchorCount) {
+        let tId = Token(IDENTIFIER, "__t${j}")
+        let stmt = quote(let $tId = $(fwdIds[j])($probePrev))
+        probeStmts = quote(
+            $probeStmts
+            $stmt
+        )
+        probePrev = tId
+    }
+    // Threaded per-chain fused backwards: each chain applies to the value
+    // the previous chain produced (start fields are distinct, so the order
+    // of application is immaterial for disjoint writes). The walk emits
+    // bindings + a final value expression — IIFE-wrap it so it can serve as
+    // a single initializer.
+    var stepStmts = quote()
+    var prevTok = ownerTok
+    for (j in 0..chains.size) {
+        let stepId = Token(IDENTIFIER, "__step${j}")
+        var arr = ArrayList<CompositionNode>()
+        arr.add(TypeOf(quote($prevTok)))
+        for (nd in chains[j]) { arr.add(nd) }
+        stepStmts = quote(
+            $stepStmts
+            let $stepId = { =>
+                $(emitFusedBackwardWalk(arr.toArray(), RefExpr(quote($prevTok)), targets[j]))
+            }()
+        )
+        prevTok = stepId
+    }
+    let anchorFold = buildBackwardWalk(anchorNodes, intermediates.toArray(), bwdIds, prevTok)
+    return quote(
+        { =>
+            $anchorBindings
+            let $src = $source
+            $probeStmts
+            $stepStmts
+            $anchorFold
+        }()
+    )
 }
 
 private func emitFusedBackwardWalk(nodes: Array<CompositionNode>, source: Expr, target: Expr): Tokens {

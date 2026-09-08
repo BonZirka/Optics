@@ -25,6 +25,7 @@ public macro DeriveOptics(input: Tokens): Tokens {
             $result
         ) 
     } catch(e: DiagReportException) {
+        println("@DDIAG: ${e.message}")
         diagReport(
             DiagReportLevel.ERROR,
             e.tokens,
