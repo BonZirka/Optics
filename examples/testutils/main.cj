@@ -43,8 +43,6 @@ public macro GenerateStructSetting(input: Tokens): Tokens {
 }
 
 private func generateStructSetting(current: UInt64, max: UInt64, initVar: Tokens, cont: (Tokens) -> Tokens): Tokens {
-    let structNamePrefix = "Struct_"
-    let structName = Token(IDENTIFIER, "${structNamePrefix}${current}")
     if (current >= max) {
         quote(
             $(cont(initVar)).y = "New"
@@ -57,8 +55,6 @@ private func generateStructSetting(current: UInt64, max: UInt64, initVar: Tokens
 }
 
 private func generateLucidaCall(current: UInt64, max: UInt64, initVar: Tokens, cont: (Tokens) -> Tokens): Tokens {
-    let structNamePrefix = "Struct_"
-    let structName = Token(IDENTIFIER, "${structNamePrefix}${current}")
     if (current >= max) {
         quote(
             @f($(cont(initVar)).y <- "New")

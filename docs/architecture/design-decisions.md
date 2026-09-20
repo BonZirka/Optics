@@ -434,6 +434,18 @@ helper's existence is the lesson's monument.
   interface-and-extend ceremony per type
   ([registry plumbing](registry-plumbing.md#the-downcast)), mechanical but
   unplanned; the list grows when a chain needs it to.
+- **`lucida.stdx`.** Segments over types Lucida does not own would live in
+  their own package, `lucida.stdx`, declaring one `@Optic` carrier per stdx
+  type: `ArrayList.at`/`selectFirst` beside the `Array` pair, `Option`'s
+  unwrapping, and a `serialization<T>()` carrier over
+  `stdx.serialization.DataModel` — the adapter
+  [the benchmark declares by hand today](../benchmarks.md#benchexamples--update-through-serialization-adapters)
+  and a user would otherwise write by hand. The package is deliberately not
+  written yet: depending on stdx would make every consumer of Lucida inherit
+  the dependency, and the stdlib optics are cheap to declare at a call site
+  with `@Optic` when a project wants them. It becomes worth shipping when
+  those declarations stop being one-liners — which is a judgement about how
+  often the same carrier gets retyped, not a technical blocker.
 
 ## Where to go next
 

@@ -2,7 +2,6 @@ macro package lucida.macrodsl
 
 import std.ast.*
 import std.collection.*
-import std.env.*
 
 public macro f(input: Tokens): Tokens {
     lucidaDispatch(false, input)

@@ -15,7 +15,7 @@ column is relative to the case named in `@Configure[baseline: ...]`.
 - 13th Gen Intel(R) Core(TM) i7-13700 (24 CPUs), release build (`-O2`)
 - Cangjie Compiler 1.2.0-alpha.20260710020028 (cjnative)
 - `lucida` ships as a static library built with thin LTO
-  (`--experimental --lto=thin`)
+  (`[profile.build.lto] level = "thin"`)
 
 Numbers below are medians of multiple runs; single-run comparisons proved
 unreliable (see the LTO table — run-to-run and build-to-build layout noise is
@@ -74,19 +74,31 @@ to in-place mutation is the immutable-update cost itself: 10 allocations.
 
 ## `bench/examples` — update through serialization adapters
 
-`BenchBumpSerialized`: the value lives as serialized `DataModel`; the baseline
-deserializes, rebuilds, and re-serializes by hand, the optic case expresses the
-same update as a `@f[unfuse]` chain over the serialization adapter.
+`BenchBumpEncoded`: the value lives in an encoded `Wire` (a small
+hand-rolled format, declared in the benchmark file — the point is that the
+update crosses an encode/decode boundary, not how the boundary is built);
+the baseline decodes, rebuilds, and re-encodes by hand, the optic case
+expresses the same update as a `@f[unfuse]` chain over the `serialization<T>()`
+adapter.
 
-| Case            | What it does                                        | Median    | Ratio    |
-|-----------------|-----------------------------------------------------|-----------|----------|
-| baseline        | hand-written deserialize / rebuild / serialize      | 3.071 us  | 100%     |
-| opticsBaseline  | `@f[unfuse]` over the serialization adapter    | 4.554 us  | +48%     |
+The adapter is declared by hand as a first-class optic rather than an `@Optic`
+carrier, which is what keeps the chain on the library-composition path.
 
-The adapter path is 1.5× the hand-written version; absolute cost is dominated
-by (de)serialization, and the chain is deliberately unfused — user-defined
-adapter optics like this are exactly what the library-composition fallback
-exists for.
+**No numbers recorded yet.** The format changed when stdx was dropped, so
+the previous medians and ratio are gone rather than marked stale — a
+different implementation has a different cost and the old figures are not
+comparable. Re-measure on the [environment](#environment) above before
+quoting anything. What the earlier run established, and what a re-run
+should confirm, is the shape rather than the magnitude: the adapter path
+costs more than the hand-written rebuild, and the cost is dominated by
+(de)serialization rather than by the chain.
+
+The chain is deliberately unfused — user-declared adapter optics like this are
+exactly what the library-composition fallback exists for. A
+`lucida.stdx` package declaring this carrier (and the `ArrayList`/`Option`
+segments) is [future work](architecture/design-decisions.md#open-problems);
+until then the benchmark keeps its own copy, which is also why it needs no
+dependency beyond the standard library.
 
 ## Reading the numbers
 

@@ -5,13 +5,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 : "${CANGJIE_HOME:?CANGJIE_HOME must point to the Cangjie toolchain directory (the one containing envsetup.sh)}"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
-source "$CANGJIE_HOME/envsetup.sh"
-export CANGJIE_STDX_PATH="${CANGJIE_STDX_PATH:-$(dirname "$CANGJIE_HOME")/linux_x86_64_cjnative/dynamic/stdx}"
-export LD_LIBRARY_PATH="$CANGJIE_HOME/runtime/lib/linux_x86_64_cjnative:$CANGJIE_STDX_PATH:$PWD/target/release/lucida:${LD_LIBRARY_PATH}"
+
+CJ_RUNTIME=$(ls -d "$CANGJIE_HOME"/runtime/lib/*_cjnative | head -1)
+export LD_LIBRARY_PATH="$CJ_RUNTIME:$PWD/target/release/lucida${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export DYLD_FALLBACK_LIBRARY_PATH="$CJ_RUNTIME:$PWD/target/release/lucida${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 
 echo "== building benchmark binaries =="
-( cd examples && cjpm test -i --no-run )
+( cd examples && cjpm test -i --rel --no-run )
 
 BIN=examples/target/release/unittest_bin
 for bench in general depth examples; do

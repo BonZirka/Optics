@@ -41,22 +41,3 @@ public struct TheSmallOne {
         public let b: String
     ) { }
 }
-
-let example = { =>
-    let middle = TheMiddleOne(
-        "Middle Name",
-        42,
-        "Middle Description",
-        TheSmallOne("Inner A", "Inner B"),
-        ["tag1", "tag2", "tag3"]
-    )
-    return TheBigOne(
-        "Very Long String",
-        128423,
-        middle,
-        [middle],
-        [middle],
-        [middle],
-        "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8"
-    )
-}()

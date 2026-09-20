@@ -23,18 +23,18 @@ The pain arrives when the part you want isn't reachable by a chain of fields:
 Here is the second one, hand-written:
 
 ```cangjie
-let deserialized = Department.deserialize(serialized)
+let decoded = Department.decode(encoded)
 let updated = Department(
-    deserialized.name,
-    deserialized.employees,
+    decoded.name,
+    decoded.employees,
     Info(
-        deserialized.information.capitalization,
+        decoded.information.capitalization,
         Address(
-            deserialized.information.address.country,
+            decoded.information.address.country,
             "Melbourne"            // the one change
         )
     )
-).serialize()
+).encode()
 ```
 
 One new value — `"Melbourne"`. Everything else is re-read, restated at every
@@ -44,14 +44,14 @@ twice.
 The same change, as an optic, is one expression:
 
 ```cangjie
-let updated = @f(serialized.serialization<Department>()
+let updated = @f(encoded.serialization<Department>()
     .information.address.city <- "Melbourne")
 ```
 
 (a segment like `serialization<T>()` is hand-declared, not built in;
 [user optics](examples/user-optics.md) shows how)
 
-Focus `serialized.serialization<Department>()`, walk to `.information.address.city`,
+Focus `encoded.serialization<Department>()`, walk to `.information.address.city`,
 set it to `"Melbourne"`: the decode, the per-layer rebuild, and the re-encode
 are all the optic's job. And as you'll see at the end, optics take you from one
 shape to another, *and back*.

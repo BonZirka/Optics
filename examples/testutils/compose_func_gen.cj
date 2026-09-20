@@ -1,8 +1,6 @@
 macro package optics_experiments.testutils
 
 import std.ast.*
-import std.collection.*
-import std.convert.*
 
 /**
  * input - number literal

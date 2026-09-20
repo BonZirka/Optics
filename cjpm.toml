@@ -1,6 +1,6 @@
 [package]
   cjc-version = "0.57.3"
-  compile-option = "--lto=thin"
+  compile-option = ""
   description = "lucida: optics core, composition table and stdlib"
   link-option = ""
   name = "lucida"
@@ -11,3 +11,13 @@
   version = "1.0.0"
   license = ["MIT"]
   package-configuration = {}
+
+[profile.build]
+  performance_analysis = true
+
+[profile.build.lto]
+  level = "thin"
+
+[profile.customized-option]
+  rel = "-O2"
+  dbg = "-O0 -g --debug-macro -Woff unused"
