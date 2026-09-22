@@ -67,4 +67,4 @@ scripts/bench.sh          benchmark runner (results: docs/benchmarks.md)
 ```
 
 Imports: `import lucida.*` for the optics API, `import lucida.macrodsl.*`
-for the macros, `import lucida.stdlib.*` for the standard optic library.
+for the macros, `import lucida_stdlib.*` for the standard optic library.

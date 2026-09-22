@@ -1,4 +1,4 @@
-package lucida.stdlib
+package lucida_stdlib
 
 import lucida.*
 import lucida.macrodsl.*

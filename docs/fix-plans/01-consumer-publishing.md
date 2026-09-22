@@ -1,16 +1,13 @@
 # 01 — consumer publishing: tests as dependency
 
-## Symptom
-- cjpm auto-discovers `src/tests` as sub-package `lucida.tests` and compiles
-  it for every consumer; under some flag sets it fails with
-  `N errors generated, 0 error printed`.
-
-## Fix
-1. Verify whether `cjpm.toml`'s `package-configuration` (or moving the suite
-   to a workspace member outside `src/`) stops the consumer from compiling
-   `lucida.tests`. The consumer-facing compile commands are visible via
-   `cjpm build --verbose`; the failing unit prints
-   `Compiling package lucida.tests ... 2 errors generated, 0 error printed`.
+## Status
+RESOLVED (992f006). The repo is a cjpm workspace: members `core` (lucida),
+`stdlib` (module `lucida_stdlib`), `tests`. Consumers depend on the member
+dirs directly and the tests member is never pulled. Two cjpm constraints
+shaped the result: member names cannot contain dots, and workspace member
+builds under [profile.build.lto] emit raw bitcode with no archives (the
+LTO profile was dropped from members; consumers opt in via their own
+[profile.build.lto] per a956ce6).
 
 ## Verification
 `rm -rf target` in a fresh consumer (see

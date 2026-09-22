@@ -1,0 +1,23 @@
+[package]
+  cjc-version = "0.57.3"
+  compile-option = ""
+  description = "lucida: optics core, composition table and macro DSL"
+  link-option = ""
+  name = "lucida"
+  output-type = "static"
+  override-compile-option = ""
+  src-dir = "src"
+  target-dir = ""
+  version = "1.0.0"
+  license = ["MIT"]
+  package-configuration = {}
+
+[dependencies]
+
+[profile.build]
+  performance_analysis = true
+
+
+[profile.customized-option]
+  rel = "-O2"
+  dbg = "-O0 -g --debug-macro -Woff unused"

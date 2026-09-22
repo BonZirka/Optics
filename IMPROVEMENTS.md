@@ -5,12 +5,10 @@ update against this library from outside). Ordered by friction caused.
 
 ## Publishing / toolchain
 
-1. **`lucida.tests` compiles for every consumer.** cjpm auto-discovers
-   `src/tests` as a sub-package, so a dependent build compiles the whole
-   test suite as a staticlib. Under some flag combinations this fails with
-   `N errors generated, 0 error printed` — no positions, no text. Move the
-   suite out of the published package (or find the cjpm exclusion) and
-   chase the silent-error path with cjc.
+1. RESOLVED (992f006): the repo is a cjpm workspace — members `core`
+   (lucida), `lucida_stdlib`, `tests`. Consumers depend on `core` and opt
+   into `lucida_stdlib`; the suite is never compiled for them. Member
+   names must be bare identifiers (cjpm rejects dots).
 2. **Swallowed macro diagnostics.** `diagReport` output is lost when the
    failing macro echoes its input or when the error surfaces from a
    dependency compile. Every debugging session this session started with

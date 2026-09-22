@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 
 PASS=0
 FAIL=0
-PROBE_FILE="src/tests/zz_diag_tmp.cj"
+PROBE_FILE="tests/src/zz_diag_tmp.cj"
 
 probe() {
     local name="$1" expected="$2"
@@ -29,14 +29,14 @@ probe() {
 }
 
 probe "empty @f()"            "expects at least one argument" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 func z(): Unit { let _ = @f() }
 EOF
 
 probe "generic where-clause"       "generic constraints" <<'EOF'
-package lucida.tests
+package tests
 import lucida.macrodsl.*
 @DeriveOptics
 public struct BadWhere<T> where T <: ToString {
@@ -45,56 +45,56 @@ public struct BadWhere<T> where T <: ToString {
 EOF
 
 probe "unknown chain start"        "Unknown expression" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 func z(): Unit { let _ = @f(3 + 4) }
 EOF
 
 probe "optic unknown field"       "unexpected token in fields" <<'EOF'
-package lucida.tests
+package tests
 import lucida.macrodsl.*
 @Optic[kolor: red]
 struct BadOptic1 {}
 EOF
 
 probe "optic bad kind"            "unknown kind" <<'EOF'
-package lucida.tests
+package tests
 import lucida.macrodsl.*
 @Optic[source: Int64, focus: Int64, kind: Setter]
 struct BadOptic2 {}
 EOF
 
 probe "optic non-empty carrier"   "carrier struct must be empty" <<'EOF'
-package lucida.tests
+package tests
 import lucida.macrodsl.*
 @Optic[source: Int64, focus: Int64, kind: Iso, forward: { src }, backward: { focus }]
 struct BadOptic3 { public BadOptic3(public let v: Int64) { } }
 EOF
 
 probe "optic source in sourceless backward" "has no source slot" <<'EOF'
-package lucida.tests
+package tests
 import lucida.macrodsl.*
 @Optic[source: Int64, focus: Int64, kind: Prism, forward: { Some(source) }, backward: { source }]
 struct BadOptic4 {}
 EOF
 
 probe "optic rename arity forward" "binds 2 names but this kind has 1 slots" <<'EOF'
-package lucida.tests
+package tests
 import lucida.macrodsl.*
 @Optic[source: Int64, focus: Int64, kind: Lens, forward: { a, b => a }, backward: { a, b => a }]
 struct BadOpticRen1 {}
 EOF
 
 probe "optic rename arity sourceless backward" "has no source slot" <<'EOF'
-package lucida.tests
+package tests
 import lucida.macrodsl.*
 @Optic[source: Int64, focus: Int64, kind: Prism, forward: { s => Some(s) }, backward: { s, d => d }]
 struct BadOpticRen2 {}
 EOF
 
 probe "optic dot on partial"      "on a partial optic (Prism/Affine)" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 public struct DotBox {
@@ -106,7 +106,7 @@ func z1(): Unit { let _ = @f(DotBox(1).dotPartial()) }
 EOF
 
 probe "optic question-dot on total" "on a total optic (Lens/Iso)" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 public struct DotBox2 {
@@ -118,7 +118,7 @@ func z2(): Unit { let _ = @f(DotBox2(1)?.qdotTotal()) }
 EOF
 
 probe "optic dot-write on prism"  "rebuild the source unconditionally on miss" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 public struct DotBox3 {
@@ -134,7 +134,7 @@ func z3(): Unit {
 EOF
 
 probe "optic question-dot on coerce" "on a total optic (coerce)" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 func z4(): Unit {
@@ -145,7 +145,7 @@ func z4(): Unit {
 EOF
 
 probe "optic dot mid-chain on derived prism" "on a partial optic (Prism/Affine)" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 func z5(): Unit {
@@ -156,7 +156,7 @@ func z5(): Unit {
 EOF
 
 probe "optic question-dot on derived lens" "on a total optic (Lens/Iso)" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 func z6(): Unit {
@@ -167,7 +167,7 @@ func z6(): Unit {
 EOF
 
 probe "optic where clause" "generic constraints ('where' clauses) are not supported" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 public struct WBox2<T> {
@@ -183,7 +183,7 @@ func z7(): Unit {
 EOF
 
 probe "coerce without type argument" "expects exactly one type argument" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 func z(): Unit {
@@ -194,7 +194,7 @@ func z(): Unit {
 EOF
 
 probe "namespace duplicate same-name optic" "declared more than once" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 @Optics({
@@ -207,7 +207,7 @@ func z8(): Unit { }
 EOF
 
 probe "namespace kind macro outside @Optics" "must be used inside an @Optics block" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 @Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
@@ -216,7 +216,7 @@ func z9(): Unit { }
 EOF
 
 probe "block update arity mismatch" "requires a tuple target" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 @DeriveOptics
@@ -229,7 +229,7 @@ func z10(): Unit {
 EOF
 
 probe "block update partial field" "expected a block chain starting with '.'" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 @DeriveOptics
@@ -242,7 +242,7 @@ func z11(): Unit {
 EOF
 
 probe "block chains duplicate start" "two block chains start at field" <<'EOF'
-package lucida.tests
+package tests
 import lucida.*
 import lucida.macrodsl.*
 @DeriveOptics

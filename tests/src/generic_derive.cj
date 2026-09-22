@@ -1,4 +1,4 @@
-package lucida.tests
+package tests
 
 import std.unittest.*
 import std.unittest.testmacro.*

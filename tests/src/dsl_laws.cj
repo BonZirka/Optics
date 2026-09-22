@@ -1,10 +1,10 @@
-package lucida.tests
+package tests
 
 import std.collection.*
 import std.unittest.*
 import std.unittest.testmacro.*
 import lucida.*
-import lucida.stdlib.*
+import lucida_stdlib.*
 import lucida.macrodsl.*
 
 // ===== Fixtures: a realistic nested aggregate =====

@@ -1,5 +1,6 @@
 [dependencies]
-  lucida = { path = ".." }
+  lucida = { path = "../core" }
+  lucida_stdlib = { path = "../stdlib" }
 
 [package]
   cjc-version = "0.57.3"

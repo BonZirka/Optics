@@ -1,22 +1,18 @@
-[package]
-  cjc-version = "0.57.3"
+[workspace]
+  members = ["core", "stdlib", "tests"]
+  build-members = []
+  test-members = []
   compile-option = ""
-  description = "lucida: optics core, composition table and stdlib"
-  link-option = ""
-  name = "lucida"
-  output-type = "static"
   override-compile-option = ""
-  src-dir = "src"
+  link-option = ""
   target-dir = ""
-  version = "1.0.0"
-  license = ["MIT"]
-  package-configuration = {}
+  script-dir = ""
+
+[dependencies]
 
 [profile.build]
   performance_analysis = true
 
-[profile.build.lto]
-  level = "thin"
 
 [profile.customized-option]
   rel = "-O2"

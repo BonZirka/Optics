@@ -4,7 +4,7 @@ import std.deriving.*
 
 import lucida.macrodsl.*
 import lucida.*
-import lucida.stdlib.*
+import lucida_stdlib.*
 
 @Derive[ToString]
 @DeriveOptics
