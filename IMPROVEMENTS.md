@@ -9,7 +9,8 @@ update against this library from outside). Ordered by friction caused.
    (lucida), `lucida_stdlib`, `tests`. Consumers depend on `core` and opt
    into `lucida_stdlib`; the suite is never compiled for them. Member
    names must be bare identifiers (cjpm rejects dots).
-2. **Swallowed macro diagnostics.** `diagReport` output is lost when the
+2. RESOLVED (reportCaughtDiag + LUCIDA_VERBOSE_DIAGS=1, see
+   docs/fix-plans/02). Was: `diagReport` output is lost when the
    failing macro echoes its input or when the error surfaces from a
    dependency compile. Every debugging session this session started with
    re-adding `println` to the macro catches. Root-cause the printer path
@@ -18,17 +19,20 @@ update against this library from outside). Ordered by friction caused.
 
 ## Composition machinery
 
-3. **Forward-only reads through `composeOptics` cannot infer
+3. RESOLVED (superseded by the 04 chain split, see docs/fix-plans/03).
+   Was: forward-only reads through `composeOptics` cannot infer
    `composeBackward`'s generics** when a first-class optic's halves come
    from `__FirstClassGetters` (dynamic getters). The write instantiation
    infers, the read one does not. Fix: skip backward wiring when
    `needB=false`, or pin the getters as typed segment bindings (the fused
    tail-Optic treatment in 030e423).
-4. **Mid-chain first-class optics are tail-only in fused walks.** A
+4. RESOLVED (chain split at the Optic, see docs/fix-plans/04). Was:
+   mid-chain first-class optics are tail-only in fused walks. A
    following segment would need a magical built from a runtime value
    (`magic({ => __tI })` inside the fold). Lifting the restriction makes
    `a.b.@use(lens).c` fuse like any other chain.
-5. **Chains with 3+ affine segments trip the cjc curried-lambda issue**
+5. RESOLVED (emitLensRunLambda self-reference, see docs/fix-plans/05).
+   Was: chains with 3+ affine segments trip the cjc curried-lambda issue
    (`parameters of this lambda expression must have type annotations`) in
    the fused walk's expect-upcast lambdas. Same family as the
    `emitLensRunLambda` identity-lambda workaround in

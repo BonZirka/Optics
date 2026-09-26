@@ -1,4 +1,4 @@
-# 04 — lift the tail-only restriction on first-class optics
+# 04 — lift the tail-only restriction on first-class optics (RESOLVED)
 
 ## Symptom
 `a.b.@use(lens).c` is rejected: "a first-class optic can only end a
@@ -23,3 +23,17 @@ Concretely:
 ## Verification
 `@f(o.i.@use(lens).n)` and the block form `@f(o.{ .i.@use(lens).k; .n })`
 compile and pass; scripts/check.sh green.
+
+## Status
+RESOLVED. Both fused walks split the chain at the first mid-chain Optic:
+the head (anchor + preceding segments) fuses as usual, the optic's
+forward output is bound to a value, and the rest re-anchors on it via a
+synthetic TypeOf anchor — recursively, so chains with several spliced
+optics split into a nest of walks. On writes the optic's backward
+rebuilds the head's owner from the rest's result before the head fold.
+The rest walk is IIFE-wrapped at its splice point (its output begins
+with bindings — the same initializer trap the block emitters hit).
+The tail-only diagnostic in emitLeafBindingsAndIds stays as a safety
+net; it is unreachable through the walks. Verified by midChainFirstClass
+(read, write, and the block-entry form) and the full gate: 212 tests,
+22 probes, zero warnings.

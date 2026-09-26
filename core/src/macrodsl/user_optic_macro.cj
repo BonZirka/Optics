@@ -341,7 +341,7 @@ public macro Optic(attr: Tokens, input: Tokens): Tokens {
         )
     } catch (e: DiagReportException) {
         println("@ODIAG: ${e.message}")
-        diagReport(DiagReportLevel.ERROR, e.tokens, e.message, e.hint)
+        reportCaughtDiag(e.tokens, e.message, e.hint)
         quote($input)
     }
 }
@@ -637,7 +637,7 @@ public macro Optics(input: Tokens): Tokens {
         return emitOpticsNamespace(optics)
     } catch (e: DiagReportException) {
         println("@NSDIAG: ${e.message}")
-        diagReport(DiagReportLevel.ERROR, e.tokens, e.message, e.hint)
+        reportCaughtDiag(e.tokens, e.message, e.hint)
         return quote($input)
     }
 }

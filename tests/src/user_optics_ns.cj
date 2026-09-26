@@ -155,6 +155,36 @@ class BlockChains {
     }
 
     @TestCase
+    func midChainFirstClass(): Unit {
+        let o = BlkOuter(BlkInner(1, 2), 3)
+        let iLens: Lens<BlkOuter, BlkInner> = @f(@typeof(o).i)
+        let got = @f(o.@use(iLens).a)
+        @Assert(got == 1)
+        let upd = @f(o.@use(iLens).a <- 7)
+        @Assert(upd.i.a == 7)
+        @Assert(upd.n == 3)
+        let aLens: Lens<BlkInner, Int64> = @f(@typeof(o.i).a)
+        let got2 = @f(o.{ .i.@use(aLens); .n })
+        @Assert(got2[0] == 1)
+        @Assert(got2[1] == 3)
+    }
+
+    @TestCase
+    func unfusedAndMintedOpticChains(): Unit {
+        let o = BlkOuter(BlkInner(1, 2), 3)
+        let iLens: Lens<BlkOuter, BlkInner> = @f(@typeof(o).i)
+        let got = @f[unfuse](o.@use(iLens).a)
+        @Assert(got == 1)
+        let upd = @f[unfuse](o.@use(iLens).a <- 7)
+        @Assert(upd.i.a == 7)
+        // a sourceless chain MINTS a composed optic value, not a read
+        let minted: Lens<BlkOuter, Int64> = @f(@use(iLens).a)
+        @Assert(@f(o.@use(minted)) == 1)
+        let mintedUpd: Setter<BlkOuter, Int64> = @f(@use(iLens).a <- 9)
+        @Assert(mintedUpd.modifyId(o).i.a == 9)
+    }
+
+    @TestCase
     func chainWriteAndRead(): Unit {
         let o = BlkOuter(BlkInner(1, 2), 3)
         let updated = @f(o.{ .i.a; .n } <- (7, 8))

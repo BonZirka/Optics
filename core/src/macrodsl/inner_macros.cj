@@ -21,12 +21,7 @@ public macro ty(input: Tokens): Tokens {
             input
         )
     } catch (e: DiagReportException) {
-        diagReport(
-            DiagReportLevel.ERROR,
-            e.tokens,
-            e.message,
-            e.hint
-        )
+        reportCaughtDiag(e.tokens, e.message, e.hint)
         quote($input)
     }
 }
@@ -41,12 +36,7 @@ public macro typeof(input: Tokens): Tokens {
             input
         )
     } catch (e: DiagReportException) {
-        diagReport(
-            DiagReportLevel.ERROR,
-            e.tokens,
-            e.message,
-            e.hint
-        )
+        reportCaughtDiag(e.tokens, e.message, e.hint)
         quote($input)
     }
 }
@@ -75,12 +65,7 @@ public macro use(input: Tokens): Tokens {
             input
         )
     } catch (e: DiagReportException) {
-        diagReport(
-            DiagReportLevel.ERROR,
-            e.tokens,
-            e.message,
-            e.hint
-        )
+        reportCaughtDiag(e.tokens, e.message, e.hint)
         quote($input)
     }
 }

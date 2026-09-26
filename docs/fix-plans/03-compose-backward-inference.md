@@ -1,4 +1,4 @@
-# 03 — composeBackward inference failure on forward-only reads
+# 03 — composeBackward inference failure on forward-only reads (RESOLVED)
 
 ## Symptom
 `unable to infer generic argument of this function` at
@@ -24,3 +24,15 @@ In src/tests/user_optics_ns.cj, re-add firstClassMidChain (the exact
 test body is in git history, commit 579a90a): a block read
 `@f(o.{ .i.@use(lens); .n })` must compile and pass. Then the full gate
 (scripts/check.sh) — 210+ tests, 22 probes, zero warnings.
+
+## Status
+RESOLVED — by fix-plan 04 rather than by the needB refactor. Every chain
+containing an Optic now takes the fused split (04), so the failing
+composeOptics instantiation is unreachable from reads: the original
+block-read fallback, regular mid-chain reads/writes, and unfused
+chains all verified. The unfused path itself (composeOptics with
+getter halves) compiles and infers for (Optic, Derived) pairs —
+probed by unfusedAndMintedOpticChains: unfused read/write through a
+spliced optic, plus the sourceless mint semantics (a sourceless chain
+mints a composed optic value; a sourceless write mints a Setter).
+The needB-wiring refactor was unnecessary and was not done.

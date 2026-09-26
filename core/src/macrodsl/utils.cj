@@ -1,6 +1,7 @@
 macro package lucida.macrodsl
 
 import std.ast.*
+import std.env.*
 import std.collection.*
 
 class DiagReportException <: Exception {
@@ -194,4 +195,18 @@ func emitCoerceLeafBindings(
         $forward
         $backward
     )
+}
+// Re-emit a caught macro failure so it is always visible. diagReport is
+// the compiler-facing channel; LUCIDA_VERBOSE_DIAGS=1 additionally
+// printlns the message, which survives the paths where diagReport output
+// is swallowed (echoed inputs, dependency compiles).
+func reportCaughtDiag(tokens: Tokens, message: String, hint: String): Unit {
+    if (let Some(_) <- getVariable("LUCIDA_VERBOSE_DIAGS")) {
+        if (hint == "") {
+            println("@MACRO-DIAG: ${message}")
+        } else {
+            println("@MACRO-DIAG: ${message} | hint: ${hint}")
+        }
+    }
+    diagReport(DiagReportLevel.ERROR, tokens, message, hint)
 }

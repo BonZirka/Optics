@@ -18,12 +18,10 @@ private func lucidaDispatch(unfuse: Bool, input: Tokens): Tokens {
         }
     } catch (e: DiagReportException) {
         println("@FDIAG: ${e.message}")
-        diagReport(
-            DiagReportLevel.ERROR,
-            e.tokens,
-            e.message,
-            e.hint
-        )
+        reportCaughtDiag(e.tokens, e.message, e.hint)
+        quote($input)
+    } catch (e: Exception) {
+        reportCaughtDiag(input, "evaluation failed: ${e.message}", "an uncaught non-diagnostic exception; see docs/fix-plans/02")
         quote($input)
     }
 }
@@ -48,9 +46,10 @@ private func isFusible(nodes: Array<CompositionNode>): Bool {
             case Derived(_, _) => ()
             case UserDefined(_, _, _, _) => ()
             case Coerce(_) => ()
-            // A first-class optic may END a chain — its forward/backward are
-            // pinned from the optic object's getters; a following segment
-            // would need a magical built from a runtime value.
+            // A first-class optic is allowed anywhere: emitFusedBackwardWalk
+            // and emitFusedForwardWalk split the chain at it and re-anchor
+            // the rest on its focus (its own tail handling remains for the
+            // last segment).
             case Optic(_) => ()
             case _ => return false
         }
@@ -210,9 +209,10 @@ private func isFusableChain(nodes: Array<CompositionNode>): Bool {
             case Derived(_, _) => ()
             case UserDefined(_, _, _, _) => ()
             case Coerce(_) => ()
-            // A first-class optic may END a chain — its forward/backward are
-            // pinned from the optic object's getters; a following segment
-            // would need a magical built from a runtime value.
+            // A first-class optic is allowed anywhere: emitFusedBackwardWalk
+            // and emitFusedForwardWalk split the chain at it and re-anchor
+            // the rest on its focus (its own tail handling remains for the
+            // last segment).
             case Optic(_) => ()
             case _ => return false
         }
@@ -244,7 +244,14 @@ private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>, walk: LeafWal
     let startMagicalExpr: Tokens = match (startNode) {
         case TypeOf(input) => quote($magicCallexprId({ => $input }))
         case Type(input) => quote($magicCallexprId<$input>())
-        case _ => throw DiagReportException("internal: unsupported start anchor for fused emission", quote())
+        case Optic(input) => throw DiagReportException(
+            "internal: an @use optic cannot start a fused chain", input.toTokens())
+        case Coerce(t) => throw DiagReportException(
+            "internal: a coerce cannot start a fused chain", t.toTokens())
+        case UserDefined(name, _, _, _) => throw DiagReportException(
+            "internal: a user optic cannot start a fused chain", name.toTokens())
+        case Derived(input, _) => throw DiagReportException(
+            "internal: a derived field cannot start a fused chain", input.toTokens())
     }
     let bindings = ArrayList<Tokens>()
     let fwdIds = ArrayList<Token>()
@@ -353,8 +360,13 @@ private func emitLensRunLambda(fwdIds: ArrayList<Token>, from: Int64, upto: Int6
         prev = tId
         i = i + 1
     }
+    // The same self-reference as the identity case: in generic curried
+    // positions cjc cannot infer the parameter type of a lambda whose body
+    // merely consumes it (3+ affine chains hit this at the inter-prism
+    // runs), but re-binding the parameter gives it the context it needs.
     return quote(
         { $paramTok =>
+            let _ = $paramTok
             $body
             $prev
         }
@@ -450,6 +462,46 @@ private func buildBackwardWalk(
 }
 
 private func emitFusedForwardWalk(nodes: Array<CompositionNode>, source: Expr): Tokens {
+    // Split at the first mid-chain first-class optic: the optic's forward
+    // output becomes a plain value the rest of the chain re-anchors on
+    // (recursively), and — on writes — the optic's backward rebuilds the
+    // head's owner from the rest's result. The head itself is optic-free
+    // and fuses as usual.
+    var opticPos = -1
+    var opticTokOpt: ?Token = None
+    for (i in 1..nodes.size) {
+        match (nodes[i]) {
+            case Optic(t) => if (opticPos < 0) { opticPos = i; opticTokOpt = t }
+            case _ => ()
+        }
+    }
+    if (opticPos >= 0 && opticPos < nodes.size - 1) {
+        let opticTok: Token = opticTokOpt ?? Token(IDENTIFIER, "__unknown_optic")
+        let head = ArrayList<CompositionNode>()
+        for (i in 0..opticPos) { head.add(nodes[i]) }
+        let rest = ArrayList<CompositionNode>()
+        for (i in opticPos + 1..nodes.size) { rest.add(nodes[i]) }
+        let getters = Token(IDENTIFIER, "__FirstClassGetters")
+        let fwdG = Token(IDENTIFIER, "forward")
+        let focusTok = Token(IDENTIFIER, "__focus")
+        let ownerTok = idTok("__opticOwner")
+        let restNodes = ArrayList<CompositionNode>()
+        restNodes.add(TypeOf(quote($focusTok)))
+        for (nd in rest) { restNodes.add(nd) }
+        let headSrc: Expr = source
+        return quote(
+            { =>
+                let $ownerTok = $(if (head.size > 1) {
+                    quote({ => $(emitFusedForwardWalk(head.toArray(), headSrc)) }())
+                } else {
+                    quote($source)
+                })
+                let __fwdOptic = $getters.$fwdG($opticTok)
+                let $focusTok = __fwdOptic($ownerTok)
+                $(emitFusedForwardWalk(restNodes.toArray(), RefExpr(quote($focusTok))))
+            }()
+        )
+    }
     if (countPartialSegments(nodes) == 0) {
         // All-plain chain (pure lens, or lens/iso mixes): direct nested calls.
         // The READ walk runs through gated copies of the segment forwards so
@@ -648,6 +700,73 @@ private func emitBlockBackwardWalk(
 }
 
 private func emitFusedBackwardWalk(nodes: Array<CompositionNode>, source: Expr, target: Expr): Tokens {
+    // Split at the first mid-chain first-class optic (see the forward walk):
+    // the rest re-anchors on the optic's focus, and the optic's backward
+    // rebuilds the head's owner from the rest's result before the head fold.
+    var opticPos = -1
+    var opticTokOpt: ?Token = None
+    for (i in 1..nodes.size) {
+        match (nodes[i]) {
+            case Optic(t) => if (opticPos < 0) { opticPos = i; opticTokOpt = t }
+            case _ => ()
+        }
+    }
+    if (opticPos >= 0 && opticPos < nodes.size - 1) {
+        let opticTok: Token = opticTokOpt ?? Token(IDENTIFIER, "__unknown_optic")
+        let head = ArrayList<CompositionNode>()
+        for (i in 0..opticPos) { head.add(nodes[i]) }
+        let rest = ArrayList<CompositionNode>()
+        for (i in opticPos + 1..nodes.size) { rest.add(nodes[i]) }
+        let (headBindings, headFwd, headBwd) = emitLeafBindingsAndIds(head.toArray(), LeafWalk.Backward, forceForwardAll: true)
+        let src = idTok("src")
+        let anchorCount = head.size - 1
+        let ownerTok: Token = if (anchorCount >= 1) {
+            Token(IDENTIFIER, "__t${anchorCount - 1}")
+        } else {
+            src
+        }
+        let intermediates = ArrayList<Token>()
+        intermediates.add(src)
+        for (j in 0..anchorCount - 1) {
+            intermediates.add(Token(IDENTIFIER, "__t${j}"))
+        }
+        var probeStmts = quote()
+        var probePrev = src
+        for (j in 0..anchorCount) {
+            let tId = Token(IDENTIFIER, "__t${j}")
+            probeStmts = quote(
+                $probeStmts
+                let $tId = $(headFwd[j])($probePrev)
+            )
+            probePrev = tId
+        }
+        let focusTok = Token(IDENTIFIER, "__focus")
+        let restTok = Token(IDENTIFIER, "__rest")
+        let updTok = Token(IDENTIFIER, "__upd")
+        let getters = Token(IDENTIFIER, "__FirstClassGetters")
+        let fwdG = Token(IDENTIFIER, "forward")
+        let bwdG = Token(IDENTIFIER, "backward")
+        let restNodes = ArrayList<CompositionNode>()
+        restNodes.add(TypeOf(quote($focusTok)))
+        for (nd in rest) { restNodes.add(nd) }
+        let restWalk = emitFusedBackwardWalk(restNodes.toArray(), RefExpr(quote($focusTok)), target)
+        let headFold = buildBackwardWalk(head.toArray(), intermediates.toArray(), headBwd, updTok)
+        return quote(
+            { =>
+                $headBindings
+                let $src = $source
+                $probeStmts
+                let __bwdOptic = $getters.$bwdG($opticTok)
+                let __fwdOptic = $getters.$fwdG($opticTok)
+                let $focusTok = __fwdOptic($ownerTok)
+                let $restTok = { =>
+                    $restWalk
+                }()
+                let $updTok = __bwdOptic($ownerTok, $restTok)
+                $headFold
+            }()
+        )
+    }
     if (!isFusableChain(nodes)) {
         return composeOptics(nodes, false, true)({ _ : Token, backward: Token =>
             quote($evalBackwardCallexprId($backward, $source, $target))

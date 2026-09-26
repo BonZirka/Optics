@@ -30,8 +30,16 @@ func parseAsUInt64<T>(input: T): UInt64 where T <: ToTokens {
  * growing buffer quadratic-plus in practice (see docs/compiler-issues.md).
  */
 public macro GenerateTupleExtendsLenses(input: Tokens): Tokens {
-    let n = parseAsUInt64(input)
-    generateTupleExtends(n)
+    try {
+        let n = parseAsUInt64(input)
+        generateTupleExtends(n)
+    } catch (e: DiagReportException) {
+        reportCaughtDiag(e.tokens, e.message, e.hint)
+        quote($input)
+    } catch (e: Exception) {
+        reportCaughtDiag(input, "GenerateTupleExtendsLenses: ${e.message}", "pass an integer literal, e.g. @GenerateTupleExtendsLenses(16)")
+        quote($input)
+    }
 }
 
 // Levels are < 1024 and sizes are < 1024, so the composite memo key is

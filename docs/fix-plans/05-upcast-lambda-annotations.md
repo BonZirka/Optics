@@ -1,4 +1,4 @@
-# 05 — 3+ affine chains trip the curried-lambda annotation issue
+# 05 — 3+ affine chains trip the curried-lambda annotation issue (RESOLVED)
 
 ## Symptom
 Chains with 3+ affine segments fail with
@@ -22,3 +22,13 @@ point.
 A 3-affine chain (`a?.at(1).b?.at(0).c?.at(2).d <- v`) compiles and
 passes; add it to src/tests + one check_diagnostics.sh probe guarding
 the old failure.
+
+## Status
+RESOLVED. The failing lambdas were the inter-"prism" runs in
+emitLensRunLambda — isPartialProducing counts affines as prisms, so 3+
+affines create the failing shape. The fix extends the identity-case
+self-reference (`let _ = param`) to the non-identity runs: re-binding
+the parameter gives cjc the inference context the curried position
+lacks. Verified with a 3-affine chain probe
+(`departments?.at(0).teams?.at(0).members?.at(0).name`) in the showcase
+and the full gate (211 tests, 22 probes, zero warnings).
