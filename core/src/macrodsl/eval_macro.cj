@@ -22,6 +22,7 @@ private func lucidaDispatch(unfuse: Bool, input: Tokens): Tokens {
         quote($input)
     } catch (e: Exception) {
         reportCaughtDiag(input, "evaluation failed: ${e.message}", "an uncaught non-diagnostic exception; see docs/fix-plans/02")
+        println("@STACK: ${e.getStackTrace()}")
         quote($input)
     }
 }
@@ -586,65 +587,106 @@ private func countPartialSegments(nodes: Array<CompositionNode>): Int64 {
     return count
 }
 
-private func emitBlockForwardWalk(source: Expr, anchorNodes: Array<CompositionNode>, chains: Array<Array<CompositionNode>>): Tokens {
+private func emitBlockForwardWalk(source: Expr, anchorNodes: Array<CompositionNode>, spec: BlockSpec): Tokens {
     let ownerId = idTok("__blockOwner")
     let anchorCount = anchorNodes.size - 1
-    let ownerBinding: Tokens = if (anchorCount >= 1) {
+    let partialTail = isPartialProducing(anchorNodes[anchorCount])
+    let ownerBinding: Tokens = if (partialTail) {
+        if (anchorCount >= 1) {
+            quote(let __anchorOpt = { => $(emitFusedForwardWalk(anchorNodes, source)) }())
+        } else {
+            quote(let __anchorOpt = Some($source))
+        }
+    } else if (anchorCount >= 1) {
         quote(let $ownerId = { => $(emitFusedForwardWalk(anchorNodes, source)) }())
     } else {
         quote(let $ownerId = $source)
     }
+    // The entries: leaf chains read from the owner; nested entries traverse
+    // their shared prefix ONCE and read the inner block at the prefix's
+    // focus (the read result nests accordingly).
     var readStmts = quote()
     let tup = ArrayList<Token>()
     tup.add(Token(TokenKind.LPAREN, "("))
-    for (j in 0..chains.size) {
+    for (j in 0..spec.entries.size) {
+        let e = spec.entries[j]
         if (j > 0) { tup.add(Token(TokenKind.COMMA, ",")) }
         let valId = Token(IDENTIFIER, "__val${j}")
         tup.add(valId)
-        var arr = ArrayList<CompositionNode>()
-        arr.add(TypeOf(quote($ownerId)))
-        for (nd in chains[j]) { arr.add(nd) }
-        // The walk emits bindings + a final value expression — IIFE-wrap it
-        // so it can serve as a single initializer.
-        readStmts = quote(
-            $readStmts
-            let $valId = { =>
-                $(emitFusedForwardWalk(arr.toArray(), RefExpr(quote($ownerId))))
-            }()
-        )
+        match (e.inner) {
+            case Some(inner) =>
+                let focusTok = Token(IDENTIFIER, "__pf${j}")
+                var pArr = ArrayList<CompositionNode>()
+                pArr.add(TypeOf(quote($ownerId)))
+                for (nd in e.prefix) { pArr.add(nd) }
+                readStmts = quote(
+                    $readStmts
+                    let $focusTok = { =>
+                        $(emitFusedForwardWalk(pArr.toArray(), RefExpr(quote($ownerId))))
+                    }()
+                    let $valId = $(emitBlockForwardWalk(RefExpr(quote($focusTok)), [TypeOf(quote($focusTok))], inner))
+                )
+            case None =>
+                var arr = ArrayList<CompositionNode>()
+                arr.add(TypeOf(quote($ownerId)))
+                for (nd in e.prefix) { arr.add(nd) }
+                readStmts = quote(
+                    $readStmts
+                    let $valId = { =>
+                        $(emitFusedForwardWalk(arr.toArray(), RefExpr(quote($ownerId))))
+                    }()
+                )
+        }
     }
     tup.add(Token(TokenKind.RPAREN, ")"))
-    let result: Tokens = if (chains.size == 1) {
+    let result: Tokens = if (spec.entries.size == 1) {
         quote($(Token(IDENTIFIER, "__val0")))
     } else {
         quote($(Tokens(tup)))
     }
+    if (partialTail) {
+        // The anchor's focus exists only on a hit: the reads apply inside
+        // the Some-guard and the whole read is an Option of the tuple.
+        // Option.map handles the miss without a None literal (whose type
+        // argument is not knowable at macro time).
+        return quote(
+            { =>
+                $ownerBinding
+                __anchorOpt.map({ $ownerId =>
+                    $readStmts
+                    $result
+                })
+            }()
+        )
+    }
     return quote(
-        $ownerBinding
-        $readStmts
-        $result
+        { =>
+            $ownerBinding
+            $readStmts
+            $result
+        }()
     )
 }
 
-/// Emits the fused backward for a sibling-block update:
-/// `@f(anchor.a.{ .f1 .f2 } <- (v1, v2))`. The anchor chain is walked once
-/// (forward probes bound via forceForwardAll, right-to-left fold reused from
-/// buildBackwardWalk); the block's lens fields all live on the chain's owner
-/// value, so their backwards apply sequentially on the threaded owner. Only
-/// lens (total) fields may appear in the block — their backwards are total
-/// `(T, focus) -> T` calls, so no guards are needed.
 private func emitBlockBackwardWalk(
     source: Expr,
     anchorNodes: Array<CompositionNode>,
-    chains: Array<Array<CompositionNode>>,
+    spec: BlockSpec,
     targets: Array<Expr>
 ): Tokens {
     let (anchorBindings, fwdIds, bwdIds) = emitLeafBindingsAndIds(anchorNodes, LeafWalk.Backward, forceForwardAll: true)
     let src = idTok("src")
     let anchorCount = anchorNodes.size - 1
-    // Owner value inside the fold: the last anchor probe, or the source
-    // itself when the block sits directly on the anchor.
-    let ownerTok: Token = if (anchorCount >= 1) {
+    // A partial anchor tail (an affine or prism segment) makes the owner
+    // exist only on a forward hit: the last probe becomes a Some-guard, the
+    // block applies on the hit and the write is an identity on the miss.
+    let partialTail = isPartialProducing(anchorNodes[anchorCount])
+    // Owner value inside the shell: the last anchor probe, or the source
+    // itself when the block sits directly on the anchor. For a partial tail
+    // the owner is the guard's unwrapped probe.
+    let ownerTok: Token = if (partialTail) {
+        Token(IDENTIFIER, "__owner")
+    } else if (anchorCount >= 1) {
         Token(IDENTIFIER, "__t${anchorCount - 1}")
     } else {
         src
@@ -655,39 +697,133 @@ private func emitBlockBackwardWalk(
     for (j in 0..anchorCount - 1) {
         intermediates.add(Token(IDENTIFIER, "__t${j}"))
     }
-    // Anchor-chain forward probes, bound inside the fold.
+    // Anchor-chain forward probes, bound inside the shell. For a partial
+    // tail the last segment's probe IS the guard.
     var probeStmts = quote()
     var probePrev = src
-    for (j in 0..anchorCount) {
+    let probeCount = if (partialTail) { anchorCount - 1 } else { anchorCount }
+    for (j in 0..probeCount) {
         let tId = Token(IDENTIFIER, "__t${j}")
-        let stmt = quote(let $tId = $(fwdIds[j])($probePrev))
         probeStmts = quote(
             $probeStmts
-            $stmt
+            let $tId = $(fwdIds[j])($probePrev)
         )
         probePrev = tId
     }
-    // Threaded per-chain fused backwards: each chain applies to the value
-    // the previous chain produced (start fields are distinct, so the order
-    // of application is immaterial for disjoint writes). The walk emits
-    // bindings + a final value expression — IIFE-wrap it so it can serve as
-    // a single initializer.
+    // Threaded entries: a leaf applies its chain's fused backward to the
+    // threaded value; a nested entry traverses its shared prefix ONCE
+    // (bindings, probes and focus inside this shell), emits the inner block
+    // on the prefix's focus, and folds the prefix's backwards over the
+    // inner block's combined result — one traversal per prefix, so target
+    // effects appear exactly once.
     var stepStmts = quote()
     var prevTok = ownerTok
-    for (j in 0..chains.size) {
+    for (j in 0..spec.entries.size) {
+        let e = spec.entries[j]
         let stepId = Token(IDENTIFIER, "__step${j}")
-        var arr = ArrayList<CompositionNode>()
-        arr.add(TypeOf(quote($prevTok)))
-        for (nd in chains[j]) { arr.add(nd) }
-        stepStmts = quote(
-            $stepStmts
-            let $stepId = { =>
-                $(emitFusedBackwardWalk(arr.toArray(), RefExpr(quote($prevTok)), targets[j]))
-            }()
-        )
+        match (e.inner) {
+            case Some(inner) =>
+                let prefix = e.prefix
+                for (nd in prefix) {
+                    if (isPartialProducing(nd)) {
+                        throw DiagReportException(
+                            "${mainMacroName}: the shared prefix of a nested block must be total (no '?.')",
+                            source.toTokens())
+                    }
+                }
+                // The prefix continues from the threaded value: a synthetic
+                // TypeOf anchor lets its bindings use the fused machinery.
+                var pNodes = ArrayList<CompositionNode>()
+                pNodes.add(TypeOf(quote($prevTok)))
+                for (nd in prefix) { pNodes.add(nd) }
+                let (pBind, pFwd, pBwd) = emitLeafBindingsAndIds(pNodes.toArray(), LeafWalk.Backward, forceForwardAll: true)
+                let pCount = prefix.size
+                var pProbes = quote()
+                var pPrev = prevTok
+                for (q in 0..pCount) {
+                    let tId = Token(IDENTIFIER, "__p${j}_${q}")
+                    pProbes = quote(
+                        $pProbes
+                        let $tId = $(pFwd[q])($pPrev)
+                    )
+                    pPrev = tId
+                }
+                // The prefix's focus is its last probe; the inner block
+                // operates on it. The parent's target element is bound once
+                // and destructured across the inner entries.
+                let innerTok = Token(IDENTIFIER, "__inner${j}")
+                let subTok = Token(IDENTIFIER, "__sub${j}")
+                let childTargets = ArrayList<Expr>()
+                var destructure = quote()
+                if (inner.entries.size == 1) {
+                    let bId = Token(IDENTIFIER, "__s${j}_0")
+                    childTargets.add(RefExpr(quote($bId)))
+                    destructure = quote(let $bId = $subTok)
+                } else {
+                    let pat = ArrayList<Token>()
+                    pat.add(Token(TokenKind.LPAREN, "("))
+                    for (q in 0..inner.entries.size) {
+                        if (q > 0) { pat.add(Token(TokenKind.COMMA, ",")) }
+                        let bId = Token(IDENTIFIER, "__s${j}_${q}")
+                        pat.add(bId)
+                        childTargets.add(RefExpr(quote($bId)))
+                    }
+                    pat.add(Token(TokenKind.RPAREN, ")"))
+                    let patToks = Tokens(pat)
+                    destructure = quote(let $patToks = $subTok)
+                }
+                let childSrc = RefExpr(quote($pPrev))
+                let childAnchor = [TypeOf(quote($pPrev))]
+                let innerWalk = emitBlockBackwardWalk(childSrc, childAnchor, inner, childTargets.toArray())
+                let pInter = ArrayList<Token>()
+                pInter.add(prevTok)
+                for (q in 0..pCount - 1) {
+                    pInter.add(Token(IDENTIFIER, "__p${j}_${q}"))
+                }
+                let prefixFold = buildBackwardWalk(pNodes.toArray(), pInter.toArray(), pBwd, innerTok)
+                // IIFE-wrapped: the prefix's and the inner block's bindings
+                // must not collide with the sibling steps' ids in this shell.
+                stepStmts = quote(
+                    $stepStmts
+                    let $stepId = { =>
+                        let $subTok = $(targets[j])
+                        $destructure
+                        $pBind
+                        $pProbes
+                        let $innerTok = $innerWalk
+                        $prefixFold
+                    }()
+                )
+            case None =>
+                let tExpr = targets[j]
+                var arr = ArrayList<CompositionNode>()
+                arr.add(TypeOf(quote($prevTok)))
+                for (nd in e.prefix) { arr.add(nd) }
+                stepStmts = quote(
+                    $stepStmts
+                    let $stepId = { =>
+                        $(emitFusedBackwardWalk(arr.toArray(), RefExpr(quote($prevTok)), tExpr))
+                    }()
+                )
+        }
         prevTok = stepId
     }
     let anchorFold = buildBackwardWalk(anchorNodes, intermediates.toArray(), bwdIds, prevTok)
+    if (partialTail) {
+        return quote(
+            { =>
+                $anchorBindings
+                let $src = $source
+                $probeStmts
+                if (let Some(__owner) <- $(fwdIds[anchorCount - 1])($probePrev)) {
+                    $stepStmts
+                    $anchorFold
+                } else {
+                    $src
+                }
+            }()
+        )
+    }
     return quote(
         { =>
             $anchorBindings

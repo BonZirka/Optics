@@ -241,7 +241,7 @@ func z11(): Unit {
 }
 EOF
 
-probe "block chains duplicate start" "two block chains start at field" <<'EOF'
+probe "block chains conflicting overlap" "block chains conflict on a shared prefix" <<'EOF'
 package tests
 import lucida.*
 import lucida.macrodsl.*

@@ -3,6 +3,32 @@ macro package lucida.macrodsl
 import std.ast.*
 import std.collection.*
 
+/// One entry of a sibling block: a prefix chain from the block's anchor to
+/// the entry's focus, optionally a nested block operating on that focus, and
+/// (for writes) the target of its leaf chains (resolved at parse time; a
+/// nested entry's target is the sub-tuple expression, destructured at
+/// runtime so its effects run exactly once).
+class BlockEntry {
+    let prefix: Array<CompositionNode>
+    var inner: ?BlockSpec
+    var target: ?Expr
+
+    init(prefix: Array<CompositionNode>, inner!: ?BlockSpec = None, target!: ?Expr = None) {
+        this.prefix = prefix
+        this.inner = inner
+        this.target = target
+    }
+}
+
+/// The contents of a `{ ... }` block.
+class BlockSpec {
+    let entries: Array<BlockEntry>
+
+    init(entries: Array<BlockEntry>) {
+        this.entries = entries
+    }
+}
+
 enum OpticalExpr {
     /**
      * Refers to the cases:
@@ -30,7 +56,7 @@ enum OpticalExpr {
      * chain's owner value; the tuple target is spread across them and the
      * fields' backwards apply in order on the threaded owner.
      */
-    | SiblingBackward(Expr, Array<CompositionNode>, Array<Array<CompositionNode>>, Array<Expr>)
+    | SiblingBackward(Expr, Array<CompositionNode>, BlockSpec, Array<Expr>)
     /**
      * Refers to the case:
      *  @f(s.{ .field1 .field2 })
@@ -38,7 +64,7 @@ enum OpticalExpr {
      * A sibling-block read: the block lists lens fields on the anchor
      * chain's owner value; the result is a tuple of their forwards.
      */
-    | SiblingForward(Expr, Array<CompositionNode>, Array<Array<CompositionNode>>)
+    | SiblingForward(Expr, Array<CompositionNode>, BlockSpec)
     /**
      * Refers to the cases:
      *  @f(@ty(String).x.y)
@@ -83,24 +109,25 @@ func parseModifier(attr: Tokens): Bool {
 // decompose the leading member access (or @use call) into an optional base
 // expression — the chain's source anchor — plus the composition nodes. None
 // means the chain is first-class (no source at the call site).
-private func scanBlockChains(toks: Tokens, blockOpen: Int64, input: Tokens): ArrayList<Array<CompositionNode>> {
-    // Split the block content on top-level ';' — each entry is an optic chain
-    // that must START at a plain field access (DOT IDENT); start fields must
-    // be pairwise distinct so two chains never write the same field twice.
-    let chains = ArrayList<Array<CompositionNode>>()
-    let starts = ArrayList<String>()
-    var k = blockOpen + 1
+private func scanBlockSpec(toks: Tokens, startIdx: Int64, input: Tokens): BlockSpec {
+    // Collect entries separated by top-level ';'. An entry may end in a
+    // nested `.{ ... }` block: its prefix chain is SHARED (traversed once)
+    // and the inner block operates on the prefix's focus.
+    let entries = ArrayList<BlockEntry>()
+    let leafPaths = ArrayList<Array<CompositionNode>>()
+    var k = startIdx
     var depth: Int64 = 0
     var entry = ArrayList<Token>()
     var expectField = true
-    while (k < toks.size && toks[k].kind != TokenKind.RCURL) {
+    while (k < toks.size) {
+        if (depth == 0 && toks[k].kind == TokenKind.RCURL) { break }
         let t = toks[k]
         if (t.kind == TokenKind.NL) { k += 1; continue }
         if (depth == 0 && t.value == ";") {
             if (entry.size == 0) {
                 throw DiagReportException("${mainMacroName}: empty block chain", t.toTokens())
             }
-            chains.add(parseBlockChain(entry, starts, input))
+            appendBlockEntry(entry, entries, leafPaths, input)
             entry = ArrayList<Token>()
             expectField = true
             k += 1
@@ -142,16 +169,116 @@ private func scanBlockChains(toks: Tokens, blockOpen: Int64, input: Tokens): Arr
         k += 1
     }
     if (entry.size > 0) {
-        chains.add(parseBlockChain(entry, starts, input))
+        appendBlockEntry(entry, entries, leafPaths, input)
     }
-    if (chains.size == 0) {
+    if (entries.size == 0) {
         throw DiagReportException(
             "${mainMacroName}: the block lists no chains", input)
     }
-    return chains
+    return BlockSpec(entries.toArray())
 }
 
-private func parseBlockChain(entry: ArrayList<Token>, starts: ArrayList<String>, input: Tokens): Array<CompositionNode> {
+/// Appends one entry: a plain chain, or a chain with a nested block whose
+/// prefix is shared (traversed once) and whose inner entries' leaf paths
+/// join the duplicate-accident check.
+private func appendBlockEntry(entry: ArrayList<Token>, entries: ArrayList<BlockEntry>, leafPaths: ArrayList<Array<CompositionNode>>, input: Tokens): Unit {
+    var dotIdx = -1
+    var openIdx = -1
+    var depth: Int64 = 0
+    var i: Int64 = 0
+    while (i < entry.size) {
+        let t = entry[i]
+        match (t.kind) {
+            case TokenKind.LPAREN | TokenKind.LCURL | TokenKind.LSQUARE => depth += 1
+            case TokenKind.RPAREN | TokenKind.RCURL | TokenKind.RSQUARE => depth -= 1
+            case _ => ()
+        }
+        if (depth == 0 && t.kind == TokenKind.DOT && i + 1 < entry.size && entry[i + 1].kind == TokenKind.LCURL) {
+            dotIdx = i
+            openIdx = i + 1
+            break
+        }
+        i += 1
+    }
+    if (dotIdx < 0) {
+        let nodes = parseBlockChain(entry, input)
+        for (prev in leafPaths) {
+            if (blockChainsConflict(prev, nodes)) {
+                throw DiagReportException(
+                    "${mainMacroName}: block chains conflict on a shared prefix",
+                    input,
+                    hint: "Two leaf chains writing the identical path would overwrite each other; diverge them or drop one")
+            }
+        }
+        entries.add(BlockEntry(nodes))
+        leafPaths.add(nodes)
+        return
+    }
+    let prefixToks = ArrayList<Token>()
+    for (j in 0..dotIdx) { prefixToks.add(entry[j]) }
+    let prefix = parseBlockChain(prefixToks, input)
+    var innerDepth: Int64 = 0
+    var k2 = openIdx + 1
+    var innerEnd = entry.size
+    while (k2 < entry.size) {
+        if (entry[k2].kind == TokenKind.LCURL) { innerDepth += 1 }
+        if (entry[k2].kind == TokenKind.RCURL) {
+            if (innerDepth == 0) { innerEnd = k2; break }
+            innerDepth -= 1
+        }
+        k2 += 1
+    }
+    let innerToks = Tokens()
+    for (j in openIdx + 1..innerEnd) { innerToks.append(entry[j]) }
+    let inner = scanBlockSpec(innerToks, 0, input)
+    for (leaf in collectLeafPaths(inner)) {
+        for (prev in leafPaths) {
+            if (blockChainsConflict(prev, leaf)) {
+                throw DiagReportException(
+                    "${mainMacroName}: block chains conflict on a shared prefix",
+                    input,
+                    hint: "Two leaf chains writing the identical path would overwrite each other; diverge them or drop one")
+            }
+        }
+        leafPaths.add(leaf)
+    }
+    entries.add(BlockEntry(prefix, inner: Some(inner)))
+}
+
+/// The full chains of a spec's leaf entries (recursively through nesting).
+private func collectLeafPaths(spec: BlockSpec): ArrayList<Array<CompositionNode>> {
+    let out = ArrayList<Array<CompositionNode>>()
+    for (e in spec.entries) {
+        match (e.inner) {
+            case Some(inner) =>
+                for (leaf in collectLeafPaths(inner)) {
+                    let full = ArrayList<CompositionNode>()
+                    for (nd in e.prefix) { full.add(nd) }
+                    for (nd in leaf) { full.add(nd) }
+                    out.add(full.toArray())
+                }
+            case None => out.add(e.prefix)
+        }
+    }
+    return out
+}
+
+/// Two leaf chains conflict iff identical — the same field written twice.
+/// Everything else composes through the threading; quirks from unlawful
+/// optics are accepted by design (see docs/fix-plans/06).
+private func blockChainsConflict(a: Array<CompositionNode>, b: Array<CompositionNode>): Bool {
+    if (a.size != b.size) { return false }
+    for (i in 0..a.size) {
+        match ((a[i], b[i])) {
+            case (Derived(fa, _), Derived(fb, _)) =>
+                if (fa.value != fb.value) { return false }
+            case _ => ()
+        }
+    }
+    return true
+}
+
+private func parseBlockChain(entry: ArrayList<Token>, input: Tokens): Array<CompositionNode> {
     // The entry sans its leading dot parses as one expression whose leftmost
     // identifier is the starting field.
     let exprs = try {
@@ -172,15 +299,7 @@ private func parseBlockChain(entry: ArrayList<Token>, starts: ArrayList<String>,
     if (let Some(b) <- base) {
         let re = b as RefExpr
         if (let Some(fieldRef) <- re) {
-            for (s in starts) {
-                if (s == fieldRef.identifier.value) {
-                    throw DiagReportException(
-                        "${mainMacroName}: two block chains start at field '${s}'",
-                        fieldRef.identifier.toTokens(),
-                        hint: "Starting fields must be distinct so chains never write the same field twice")
-                }
-            }
-            starts.add(fieldRef.identifier.value)
+
             var arr = ArrayList<CompositionNode>()
             arr.add(Derived(fieldRef.identifier, Lens))
             // classifyLead's node list carries the auto-derived TypeOf head
@@ -196,12 +315,59 @@ private func parseBlockChain(entry: ArrayList<Token>, starts: ArrayList<String>,
 }
 
 private func blockEnd(toks: Tokens, blockOpen: Int64): Int64 {
-    // The first non-NL token after the block's closing brace.
+    // The first non-NL token after the block's MATCHING closing brace
+    // (inner blocks may nest inside the entries).
+    var depth: Int64 = 0
     var k = blockOpen + 1
-    while (k < toks.size && toks[k].kind != TokenKind.RCURL) { k += 1 }
-    k += 1
+    while (k < toks.size) {
+        match (toks[k].kind) {
+            case TokenKind.LPAREN | TokenKind.LCURL | TokenKind.LSQUARE => depth += 1
+            case TokenKind.RPAREN | TokenKind.RCURL | TokenKind.RSQUARE => depth -= 1
+            case _ => ()
+        }
+        if (depth < 0) {
+            k += 1
+            break
+        }
+        k += 1
+    }
     while (k < toks.size && toks[k].kind == TokenKind.NL) { k += 1 }
     return k
+}
+
+private func leafCount(spec: BlockSpec): Int64 {
+    var n: Int64 = 0
+    for (e in spec.entries) {
+        match (e.inner) {
+            case Some(inner) => n += leafCount(inner)
+            case None => n += 1
+        }
+    }
+    return n
+}
+
+private func resolveSpecTargets(spec: BlockSpec, tl: TupleLiteral): Unit {
+    if (tl.elements.size != spec.entries.size) {
+        throw DiagReportException(
+            "${mainMacroName}: the nested entry's target has ${tl.elements.size} values but its block lists ${spec.entries.size} entries",
+            tl.toTokens())
+    }
+    for (i in 0..spec.entries.size) {
+        let e = spec.entries[i]
+        let elem = tl.elements[i]
+        match (e.inner) {
+            case Some(inner) =>
+                // A literal sub-tuple resolves recursively; an opaque
+                // sub-tuple expression (e.g. a call) is left whole — the
+                // emitter destructures it at runtime, so its effects run
+                // exactly once and cjc checks the arity at the destructure.
+                match (elem) {
+                    case tl2: TupleLiteral => resolveSpecTargets(inner, tl2)
+                    case _ => ()
+                }
+            case None => e.target = Some(elem)
+        }
+    }
 }
 
 private func parseBlockAnchor(toks: Tokens, blockIdx: Int64, input: Tokens): (Expr, Array<CompositionNode>) {
@@ -232,14 +398,14 @@ private func parseBlockAnchor(toks: Tokens, blockIdx: Int64, input: Tokens): (Ex
 }
 
 private func parseSiblingForward(input: Tokens, blockIdx: Int64, blockOpen: Int64): OpticalExpr {
-    let chains = scanBlockChains(input, blockOpen, input)
+    let spec = scanBlockSpec(input, blockOpen + 1, input)
     let k = blockEnd(input, blockOpen)
     if (k < input.size) {
         throw DiagReportException(
             "${mainMacroName}: unexpected content after the block", input[k].toTokens())
     }
     let (src, anchorNodes) = parseBlockAnchor(input, blockIdx, input)
-    return SiblingForward(src, anchorNodes, chains.toArray())
+    return SiblingForward(src, anchorNodes, spec)
 }
 
 private func parseSiblingBackward(
@@ -249,7 +415,7 @@ private func parseSiblingBackward(
     blockOpen: Int64,
     input: Tokens
 ): OpticalExpr {
-    let chains = scanBlockChains(leftTokens, blockOpen, input)
+    let spec = scanBlockSpec(leftTokens, blockOpen + 1, input)
     let k = blockEnd(leftTokens, blockOpen)
     if (k < leftTokens.size) {
         throw DiagReportException(
@@ -263,20 +429,26 @@ private func parseSiblingBackward(
     let targetExpr = rightExprs[0]
     var targets = ArrayList<Expr>()
     targets.add(targetExpr)
-    if (chains.size >= 2) {
+    println("@SPEC: entries=${spec.entries.size} leaves=${leafCount(spec)}")
+    if (spec.entries.size >= 2) {
         let tl = targetExpr as TupleLiteral ?? throw DiagReportException(
-            "${mainMacroName}: updating ${chains.size} chains requires a tuple target",
+            "${mainMacroName}: updating ${spec.entries.size} entries requires a tuple target",
             targetExpr.toTokens(),
             hint: "e.g. <- (v1, v2)")
-        if (tl.elements.size != chains.size) {
+        if (tl.elements.size != spec.entries.size) {
             throw DiagReportException(
-                "${mainMacroName}: tuple target has ${tl.elements.size} elements but the block lists ${chains.size} chains",
+                "${mainMacroName}: tuple target has ${tl.elements.size} elements but the block lists ${spec.entries.size} entries",
                 targetExpr.toTokens())
         }
+        // Resolve each entry's target: a flat entry takes its element; a
+        // nested entry's element is a sub-tuple whose elements resolve the
+        // inner entries recursively (destructured at runtime, so their
+        // effects run exactly once).
+        resolveSpecTargets(spec, tl)
         targets = tl.elements
     }
     let (src, anchorNodes) = parseBlockAnchor(leftTokens, blockIdx, input)
-    return SiblingBackward(src, anchorNodes, chains.toArray(), targets.toArray())
+    return SiblingBackward(src, anchorNodes, spec, targets.toArray())
 }
 
 private func classifyLead(lead: Expr, input: Tokens): (?Expr, Array<CompositionNode>) {

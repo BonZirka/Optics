@@ -4,6 +4,7 @@ import std.unittest.*
 import std.unittest.testmacro.*
 import lucida.*
 import lucida.macrodsl.*
+import lucida_stdlib.*
 
 // Same-named optics over different source types, collected in one namespace.
 @Optics({
@@ -48,6 +49,37 @@ class OpticsNamespace {
             case None => @Assert(true)
         }
     }
+}
+
+@DeriveOptics
+public struct BlkWithArray {
+    public BlkWithArray(public let items: Array<BlkInner>, public let n: Int64) { }
+}
+
+// The single-traversal requirement: an effect in a block's target must
+// appear exactly once, whatever the block shape.
+var effectCount = 0
+
+func effectPair(): (Int64, Int64) {
+    effectCount += 1
+    return (42, 43)
+}
+
+var fwdRuns = 0
+
+func effectN(): Int64 {
+    effectCount += 1
+    return effectCount
+}
+
+// a user optic whose forward carries an effect (counted) — the shared
+// prefix of a nested block must traverse it exactly once
+@Optic[source: BlkInner, focus: BlkInner, kind: Lens, forward: { fwdRuns += 1; source }, backward: { g, f => f }]
+public struct selfLens {}
+
+@DeriveOptics
+public struct TupleBox {
+    public TupleBox(public let tb: (Int64, Int64), public let n: Int64) { }
 }
 
 @DeriveOptics
@@ -152,6 +184,117 @@ class BlockChains {
         let updated = @f(o.{ .i.bLens() } <- 9)
         @Assert(updated.i.b == 9)
         @Assert(updated.i.a == 1)
+    }
+
+    @TestCase
+    func nestedBlocks(): Unit {
+        let box = TupleBox((1, 2), 3)
+        let upd = @f(box.{ .tb.{ ._0; ._1 }; .n } <- ((20, 21), 22))
+        @Assert(upd.tb[0] == 20)
+        @Assert(upd.tb[1] == 21)
+        @Assert(upd.n == 22)
+        let read = @f(box.{ .tb.{ ._0; ._1 }; .n })
+        @Assert(read[0][0] == 1)
+        @Assert(read[0][1] == 2)
+        @Assert(read[1] == 3)
+    }
+
+    @TestCase
+    func blockTargetEffectsRunOnce(): Unit {
+        effectCount = 0
+        let box = TupleBox((1, 2), 3)
+        let upd = @f(box.{ .tb.{ ._0; ._1 }; .n } <- (effectPair(), 7))
+        @Assert(upd.tb[0] == 42)
+        @Assert(upd.tb[1] == 43)
+        @Assert(upd.n == 7)
+        @Assert(effectCount == 1)
+    }
+
+    @TestCase
+    func nestedBlockEffectsEachOnce(): Unit {
+        effectCount = 0
+        let box = TupleBox((1, 2), 3)
+        let upd = @f(box.{ .tb.{ ._0; ._1 }; .n } <- ((effectN(), effectN()), 9))
+        @Assert(upd.tb[0] == 1)
+        @Assert(upd.tb[1] == 2)
+        @Assert(upd.n == 9)
+        @Assert(effectCount == 2)
+    }
+
+    @TestCase
+    func flatBlockEffectsEachOnce(): Unit {
+        effectCount = 0
+        let box = TupleBox((1, 2), 3)
+        let upd = @f(box.{ .tb._0; .n } <- (effectN(), effectN()))
+        @Assert(upd.tb[0] == 1)
+        @Assert(upd.n == 2)
+        @Assert(effectCount == 2)
+    }
+
+    @TestCase
+    func nestedSharedPrefixTraversalOnce(): Unit {
+        fwdRuns = 0
+        let o = BlkOuter(BlkInner(1, 2), 3)
+        let upd = @f(o.i.selfLens().{ .a; .b } <- (5, 6))
+        @Assert(upd.i.a == 5)
+        @Assert(upd.i.b == 6)
+        @Assert(fwdRuns == 1)
+        let read = @f(upd.i.selfLens().{ .a; .b })
+        @Assert(read[0] == 5)
+        @Assert(read[1] == 6)
+        @Assert(fwdRuns == 2)
+    }
+
+    @TestCase
+    func flatAndNestedSharedPrefixCompose(): Unit {
+        let o = BlkOuter(BlkInner(1, 2), 3)
+        let upd = @f(o.{ .i.a; .i.{ .b } } <- (7, 8))
+        @Assert(upd.i.a == 7)
+        @Assert(upd.i.b == 8)
+        let got = @f(o.{ .i.a; .i.{ .b } })
+        @Assert(got[0] == 1)
+        @Assert(got[1] == 2)
+    }
+
+
+    @TestCase
+    func nestedTupleTargets(): Unit {
+        // a tuple focus is an ordinary focus: the target element can be a
+        // tuple literal — ((1, 2), 3) spreads across the entries
+        let box = TupleBox((1, 2), 3)
+        let upd = @f(box.{ .tb; .n } <- ((5, 6), 7))
+        @Assert(upd.tb[0] == 5)
+        @Assert(upd.tb[1] == 6)
+        @Assert(upd.n == 7)
+        // and the block can anchor ON the tuple to spread across its parts
+        let parts = @f(box.tb.{ ._0; ._1 } <- (8, 9))
+        @Assert(parts.tb[0] == 8)
+        @Assert(parts.tb[1] == 9)
+        // 06C: disjoint sub-paths from one start field in ONE block
+        let spread = @f(box.{ .tb._0; .tb._1; .n } <- (10, 11, 12))
+        @Assert(spread.tb[0] == 10)
+        @Assert(spread.tb[1] == 11)
+        @Assert(spread.n == 12)
+    }
+
+    @TestCase
+    func partialAnchorBlock(): Unit {
+        let w = BlkWithArray([BlkInner(1, 2), BlkInner(3, 4)], 9)
+        let upd = @f(w.items?.at(1).{ .a; .b } <- (7, 8))
+        @Assert(upd.items[1].a == 7)
+        @Assert(upd.items[1].b == 8)
+        @Assert(upd.items[0].a == 1)
+        let miss = @f(w.items?.at(9).{ .a; .b } <- (7, 8))
+        @Assert(miss.items[1].a == 3)
+        let read = @f(w.items?.at(0).{ .a; .b })
+        if (let Some(t) <- read) {
+            @Assert(t[0] == 1)
+            @Assert(t[1] == 2)
+        } else {
+            @Assert(false)
+        }
+        let missRead = @f(w.items?.at(9).{ .a; .b })
+        @Assert(missRead.isNone())
     }
 
     @TestCase
