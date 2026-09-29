@@ -24,7 +24,7 @@ reports only `macro evaluation has failed`).
 3. Optional: a debug env switch (LUCIDA_VERBOSE_DIAGS=1) that printlns
    every caught message — the session's workaround, kept out of default
    output. The instrumented catch sites: eval_macro.cj (lucidaDispatch),
-   user_optic_macro.cj (@Optic, @Optics), derive_macro.cj (@DeriveOptics).
+   user_optic_macro.cj (@Optic), derive_macro.cj (@DeriveOptics).
 
 ## Verification
 scripts/check_diagnostics.sh stays green AND a deliberately broken chain

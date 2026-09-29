@@ -6,20 +6,38 @@ import lucida.*
 import lucida.macrodsl.*
 import lucida_stdlib.*
 
-// Same-named optics over different source types, collected in one namespace.
-@Optics({
-    @Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
-    struct slen {}
+// Same-named optics over different source types. Each declaration's generated
+// interfaces are mangled from its own signature, so reusing `slen` needs no
+// namespace to keep them apart.
+@Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
+struct slen {}
 
-    @Lens[source: Array<Int64>, focus: Int64, forward: { source[0] }, backward: { let a = source.clone(); a[0] = focus; a }]
-    struct slen {}
+@Lens[source: Array<Int64>, focus: Int64, forward: { source[0] }, backward: { let a = source.clone(); a[0] = focus; a }]
+struct slen {}
 
-    @Prism[source: Array<Int64>, focus: Int64, forward: { source.get(0) }, backward: { [focus] }]
-    struct spar {}
-})
+@Prism[source: Array<Int64>, focus: Int64, forward: { source.get(0) }, backward: { [focus] }]
+struct spar {}
+
+// A third source type reusing the name `slen`, including a tuple source so the
+// mangle has to escape `(`, `)`, `,` and the whitespace around them.
+@Lens[source: (Int64, Int64), focus: Int64,
+    forward: { let (a, _) = source; a },
+    backward: { let (_, b) = source; (focus, b) }]
+struct slen {}
 
 @Test
-class OpticsNamespace {
+class UserOpticSameName {
+    @TestCase
+    func tupleSourceSharesName(): Unit {
+        let t = (5, 6)
+        @Assert(@f(t.slen()) == 5)
+        @Assert(@f(t.slen() <- 7) == (7, 6))
+        // and the earlier `slen` declarations still dispatch by source type
+        let s = "abc"
+        @Assert(@f(s.slen()) == 3)
+        let arr = [1, 2, 3]
+        @Assert(@f(arr.slen()) == 1)
+    }
     @TestCase
     func sameNameDifferentSources(): Unit {
         let s = "abc"
@@ -35,7 +53,7 @@ class OpticsNamespace {
     }
 
     @TestCase
-    func prismInNamespace(): Unit {
+    func prismAlias(): Unit {
         let m = [9, 8]
         match (@f(m?.spar())) {
             case Some(v) => @Assert(v == 9)
@@ -74,7 +92,7 @@ func effectN(): Int64 {
 
 // a user optic whose forward carries an effect (counted) — the shared
 // prefix of a nested block must traverse it exactly once
-@Optic[source: BlkInner, focus: BlkInner, kind: Lens, forward: { fwdRuns += 1; source }, backward: { g, f => f }]
+@Optic[source: BlkInner, focus: BlkInner, kind: Lens, forward: { fwdRuns += 1; source }, backward: { _, f => f }]
 public struct selfLens {}
 
 @DeriveOptics

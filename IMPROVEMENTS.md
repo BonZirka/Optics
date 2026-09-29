@@ -45,10 +45,30 @@ update against this library from outside). Ordered by friction caused.
    the pinned-prism machinery would allow blocks after any partial chain,
    which is the natural use case (update several fields of a found
    element).
-7. **Namespace collisions across blocks.** Two `@Optics` blocks reusing an
-   optic name in one package still collide on the unified interface names.
-   A namespace qualifier (or content-addressed interface names) would lift
-   this.
+7. RESOLVED (content-addressed interface names; the `@Optics` block is gone).
+   Was: two `@Optics` blocks reusing an optic name in one package collided on
+   the unified interface names. Each declaration now mangles its three
+   generated interfaces from its own signature (kind, source, focus, args),
+   keeping alphanumeric bytes verbatim and escaping `_` as `_u` and every other
+   byte as `_xHH` — so `(T) -> Bool` becomes
+   `_x28T_x29_x20_x2d_x3e_x20Bool` and can never collide across declarations.
+   Member names (`__method_<name>_impl_forward`) stay keyed to the optic name,
+   since a chain resolves them by name alone; two same-named optics must
+   therefore still differ in source type, or their dispatch members on
+   `RegistryMagical<Source>` collide. The empty carrier struct is no longer
+   re-emitted either — it carried no members and nothing referenced it as a
+   type, so it was a second collision point once interfaces were separated.
+
+   Consequence: same name, different `args:` now compiles. `@Optics` used to
+   reject it ("optics named 'x' declare different args"); with the namespace
+   gone, separate macro invocations share no state, so nothing compares a
+   declaration against one expanded earlier. Sound over different sources — the
+   members sit on different registries — but a mismatched `args:` goes
+   unwarned. A package-level opt-in registry of `(name, source) -> args` would
+   restore the check if it is ever worth the macro-state machinery. The
+   same-`source:`/different-`kind:` case still fails, but on a cjc return-type
+   clash on `__downcast_method_<name>` instead of a bespoke message. Both
+   degraded cases are pinned by probes in `scripts/check_diagnostics.sh`.
 
 ## Consumers
 

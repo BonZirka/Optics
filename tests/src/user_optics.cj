@@ -11,10 +11,9 @@ public struct GPair<T, U> {
 
 // ===== User-declared optics (see 2026-09-09-user-declared-optics-design.md) =====
 
-@Optic[
+@Affine[
     source: Array<T>
     focus: T
-    kind: Affine
     args: (n: Int64)
     forward: { if (let Some(f) <- source.get(n)) { Some(f) } else { None } }
     backward: { let a = source.clone(); a[n] = focus; a }
@@ -25,10 +24,9 @@ public struct UBox {
     public UBox(public let v: Int64) { }
 }
 
-@Optic[
+@Lens[
     source: UBox
     focus: Int64
-    kind: Lens
     forward: { source.v }
     backward: { UBox(focus) }
 ]
@@ -38,10 +36,9 @@ public struct ULen {
     public ULen(public let m: Int64) { }
 }
 
-@Optic[
+@Iso[
     source: ULen
     focus: Int64
-    kind: Iso
     forward: { source.m }
     backward: { ULen(focus) }
 ]
@@ -52,48 +49,47 @@ public enum UMaybe {
     | UNothing
 }
 
-@Optic[
+@Prism[
     source: UMaybe
     focus: Int64
-    kind: Prism
     forward: { match (source) { case UJust(v) => Some(v) case _ => None } }
     backward: { UJust(focus) }
 ]
 struct uJust {}
 
-@Optic[source: GBox<T>, focus: T, kind: Lens, forward: { source.v }, backward: { GBox(focus) }]
+@Lens[source: GBox<T>, focus: T, , forward: { source.v }, backward: { GBox(focus) }]
 struct guBoxLens<T> {}
 
-@Optic[source: GBox<T>, focus: T, kind: Lens, forward: { source.v }, backward: { GBox(focus) }]
+@Lens[source: GBox<T>, focus: T, , forward: { source.v }, backward: { GBox(focus) }]
 struct guBoxLensStr<T> {}
 
-@Optic[source: GBox<T>, focus: T, kind: Affine, forward: { Some(source.v) }, backward: { GBox(focus) }]
+@Affine[source: GBox<T>, focus: T, , forward: { Some(source.v) }, backward: { GBox(focus) }]
 struct guBoxAffine<T> {}
 
-@Optic[source: GBox<T>, focus: Int64, kind: Lens, forward: { 1 }, backward: { source }]
+@Lens[source: GBox<T>, focus: Int64, , forward: { 1 }, backward: { source }]
 struct guBoxTag<T> {}
 
-@Optic[source: GBox<GBox<T>>, focus: T, kind: Lens, forward: { source.v.v }, backward: { GBox(GBox(focus)) }]
+@Lens[source: GBox<GBox<T>>, focus: T, , forward: { source.v.v }, backward: { GBox(GBox(focus)) }]
 struct guBoxNested<T> {}
 
-@Optic[source: GPair<T, U>, focus: T, kind: Lens, forward: { source.first }, backward: { GPair(focus, source.second) }]
+@Lens[source: GPair<T, U>, focus: T, , forward: { source.first }, backward: { GPair(focus, source.second) }]
 struct gpairFirst<T, U> {}
 
 // ===== renamed slots (spec docs/superpowers/specs/2026-09-29-optic-slot-renames-design.md) =====
 
-@Optic[source: UBox, focus: Int64, kind: Lens, forward: { s => s.v }, backward: { s, d => UBox(s.v + d) }]
+@Lens[source: UBox, focus: Int64, , forward: { s => s.v }, backward: { s, d => UBox(s.v + d) }]
 struct uRenLens {}
 
-@Optic[source: UMaybe, focus: Int64, kind: Prism, forward: { m => match (m) { case UJust(v) => Some(v) case _ => None } }, backward: { d => UJust(d) }]
+@Prism[source: UMaybe, focus: Int64, , forward: { m => match (m) { case UJust(v) => Some(v) case _ => None } }, backward: { d => UJust(d) }]
 struct uRenPrism {}
 
-@Optic[source: UMaybe, focus: Int64, kind: Affine, forward: { m => match (m) { case UJust(v) => Some(v) case _ => None } }, backward: { m, d => match (m) { case UJust(_) => UJust(d) case _ => m } }]
+@Affine[source: UMaybe, focus: Int64, , forward: { m => match (m) { case UJust(v) => Some(v) case _ => None } }, backward: { m, d => match (m) { case UJust(_) => UJust(d) case _ => m } }]
 struct uRenAffine {}
 
-@Optic[source: UBox, focus: Int64, kind: Lens, forward: { _ => 42 }, backward: { _, d => UBox(d) }]
+@Lens[source: UBox, focus: Int64, , forward: { _ => 42 }, backward: { _, d => UBox(d) }]
 struct uRenSkip {}
 
-@Optic[source: UBox, focus: Int64, kind: Lens, forward: { s => let source = 3; s.v + source }, backward: { s, d => UBox(s.v + d) }]
+@Lens[source: UBox, focus: Int64, , forward: { s => let source = 3; s.v + source }, backward: { s, d => UBox(s.v + d) }]
 struct uRenShadow {}
 
 @Test

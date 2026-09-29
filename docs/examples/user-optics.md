@@ -15,9 +15,10 @@ All the code below is from the suite's user-optics fixtures.
 ## Anatomy
 
 The declaration hangs a bracket of fields on an empty carrier struct — the
-struct itself is only a nameplate. `source:` names the type the optic walks
-from; `focus:` the part it reaches; `kind:` the guarantee — `Lens`, `Prism`,
-`Affine` or `Iso`, the [introduction](../introduction-to-optics.md)'s cast
+struct itself is only a nameplate, and is not emitted. `source:` names the
+type the optic walks from; `focus:` the part it reaches; `kind:` the
+guarantee — `Lens`, `Prism`, `Affine` or `Iso`, the
+[introduction](../introduction-to-optics.md)'s cast
 minus the setter, which is not declarable here. On the deriving page the
 kinds arrived implicitly, as whatever the derive emitted per field or case;
 here the name is explicit. `args:` optionally declares value parameters,
@@ -49,6 +50,59 @@ rebuilds the whole from the part alone, so its backward has no `source` slot,
 and a body that mentions one is rejected — `@Optic: backward of kind 'Prism' has no source slot` (hint: `Lens/Affine backwards receive source; Prism/Iso rebuild from focus`).
 The generated members are public whatever the carrier's own visibility — the
 carrier only names the optic.
+
+Diagnostics name the macro you actually wrote, so a bad `@Prism` field reports
+`@Prism: ...` rather than `@Optic: ...`. Since the aliases fix the kind, they
+reject a `kind:` field outright (`@Lens: takes no 'kind' field`) — use
+`@Optic[kind: ...]` when you want to spell the kind yourself.
+
+## Shorthand: `@Lens`, `@Prism`, `@Affine`, `@Iso`
+
+Most declarations want one kind and nothing else, so each kind has its own
+macro that supplies it. These are exactly equivalent to the long form with
+`kind:` filled in:
+
+```cangjie
+@Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
+struct slen {}
+```
+
+is the same as the `@Optic[source: String, focus: Int64, kind: Lens, ...]`
+above. The remaining fields are identical, and `@Optic` stays available for the
+cases where spelling the kind out is clearer. The rest of this page uses the
+long form so each example states its own guarantees; the alias is a shorthand,
+not a different feature.
+
+## Reusing a name
+
+Two declarations may share an optic name as long as their `source:` types
+differ. The generated interfaces are named from the whole signature — kind,
+source, focus and args — so each declaration gets its own, and a chain picks
+the right one from the type it starts on:
+
+```cangjie
+@Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
+struct first {}
+
+@Lens[source: Array<Int64>, focus: Int64, forward: { source[0] }, backward: { ... }]
+struct first {}
+```
+
+`"abc".first()` and `[1, 2, 3].first()` both work; each resolves through its
+own source's registry.
+
+Two constraints come with that:
+
+- **Same name, same `source:`** is an error: the dispatch members are keyed to
+  the name alone on that source's registry, so nothing can tell the two
+  declarations apart. What the rest of the signature agrees on only changes
+  how the error reads. Agreeing on everything gives a redeclaration of the
+  generated interface; differing in `kind:` gives a return-type clash on
+  `__downcast_method_<name>` instead, which is a blunter message than you may
+  expect.
+- **Same name, different `args:`** is allowed over different sources, since the
+  members sit on different registries and both declarations stay usable. If you
+  meant them to be one optic, the mismatched `args:` will not warn you.
 
 ### Naming the slots
 

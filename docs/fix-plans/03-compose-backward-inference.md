@@ -20,7 +20,7 @@ only trim the tail). When `needB=false`, skip the backward half entirely:
    composeOptics fallback and regular chains.
 
 ## Verification
-In src/tests/user_optics_ns.cj, re-add firstClassMidChain (the exact
+In tests/src/user_optic_name_reuse.cj, re-add firstClassMidChain (the exact
 test body is in git history, commit 579a90a): a block read
 `@f(o.{ .i.@use(lens); .n })` must compile and pass. Then the full gate
 (scripts/check.sh) — 210+ tests, 22 probes, zero warnings.

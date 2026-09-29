@@ -193,26 +193,48 @@ func z(): Unit {
 }
 EOF
 
-probe "namespace duplicate same-name optic" "declared more than once" <<'EOF'
-package tests
-import lucida.*
-import lucida.macrodsl.*
-@Optics({
-    @Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
-    struct dup {}
-    @Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
-    struct dup {}
-})
-func z8(): Unit { }
-EOF
-
-probe "namespace kind macro outside @Optics" "must be used inside an @Optics block" <<'EOF'
+probe "same name and signature twice" "redefinition of declaration '__dup_impl" <<'EOF'
 package tests
 import lucida.*
 import lucida.macrodsl.*
 @Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
-struct stray {}
-func z9(): Unit { }
+struct dup {}
+@Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
+struct dup {}
+func z8(): Unit { }
+EOF
+
+probe "alias rejects an explicit kind" "takes no 'kind' field" <<'EOF'
+package tests
+import lucida.*
+import lucida.macrodsl.*
+@Lens[source: String, focus: Int64, kind: Lens, forward: { source.size }, backward: { focus.toString() }]
+struct dupKind {}
+func z7b(): Unit { }
+EOF
+
+probe "alias blames itself, not @Optic" "@Prism: field 'forward' must be a { ... } block" <<'EOF'
+package tests
+import lucida.*
+import lucida.macrodsl.*
+@Prism[source: String, focus: Int64, forward: source.size, backward: { [focus] }]
+struct badAlias {}
+func z7c(): Unit { }
+EOF
+
+# Same name and source, different kind: the generated interfaces differ (kind is
+# part of the mangle) but the dispatch members live on RegistryMagical<String>,
+# so the clash surfaces as a cjc type error rather than a bespoke message. Pin
+# it so the failure mode cannot silently change.
+probe "same name and source, different kind" "__downcast_method_mix" <<'EOF'
+package tests
+import lucida.*
+import lucida.macrodsl.*
+@Lens[source: String, focus: Int64, forward: { source.size }, backward: { focus.toString() }]
+struct mix {}
+@Prism[source: String, focus: Int64, forward: { if (source.size > 0) { Some(source.size) } else { None } }, backward: { [focus] }]
+struct mix {}
+func z8(): Unit { }
 EOF
 
 probe "block update arity mismatch" "requires a tuple target" <<'EOF'
