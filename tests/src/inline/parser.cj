@@ -1,7 +1,89 @@
-macro package lucida.macrodsl
+macro package tests.inline
 
 import std.ast.*
+import std.env.*
 import std.collection.*
+
+// This file is a COPY of the chain parser in lucida.macrodsl
+// (core/src/macrodsl/parsing.cj), plus the three helpers and four token names
+// that parser needs. It is duplicated rather than imported on purpose: the
+// harness must not reach into lucida.macrodsl's internals, and making them
+// public to let it would turn private macro machinery into API surface.
+//
+// The consequence is stated plainly: two parsers for one grammar, and the copy
+// can drift. What catches drift is mechanical, not editorial —
+// tests/src/inline_optics.cj expands every @f form both ways and compares
+// values, and scripts/check_diagnostics.sh pins the failure surface. A grammar
+// change in core that the copy does not learn shows up as a failing probe or a
+// mismatched value, not as a quietly different benchmark.
+//
+// When core's parser changes, change it here too. The substitution to watch
+// for: every diagnostic says `@InlineOptics`, not `@f`.
+
+/// Token names the copied parser matches on. These are the same fakes
+/// lucida.macrodsl's inner macros expand to; the harness sees their output.
+let typeFakeCallexprId     = Token(IDENTIFIER, "__lucida_type_fake_callexpr")
+let typeOfFakeCallexprId   = Token(IDENTIFIER, "__lucida_type_of_fake_callexpr")
+let opticFakeCallexprId    = Token(IDENTIFIER, "__lucida_optic_fake_callexpr")
+let coercionFakeCallexprId = Token(IDENTIFIER, "coerce")
+
+class DiagReportException <: Exception {
+    DiagReportException(
+        message: String,
+        public let tokens: Tokens,
+        public let hint!: String = ""
+    ) { super(message) }
+}
+
+// Re-emit a caught macro failure so it is always visible. diagReport is the
+// compiler-facing channel; LUCIDA_VERBOSE_DIAGS=1 additionally printlns the
+// message, which survives the paths where diagReport output is swallowed.
+func reportCaughtDiag(tokens: Tokens, message: String, hint: String): Unit {
+    if (let Some(_) <- getVariable("LUCIDA_VERBOSE_DIAGS")) {
+        if (hint == "") {
+            println("@MACRO-DIAG: ${message}")
+        } else {
+            println("@MACRO-DIAG: ${message} | hint: ${hint}")
+        }
+    }
+    // Tokens handed to a macro can span several files once a nested macro has
+    // expanded, and diagReport rejects that. Narrow to the first token so the
+    // message still reaches the user.
+    try {
+        diagReport(DiagReportLevel.ERROR, tokens, message, hint)
+    } catch (_: Exception) {
+        if (tokens.size == 0) {
+            return
+        }
+        diagReport(DiagReportLevel.ERROR, tokens[0..1].toTokens(), message, hint)
+    }
+}
+
+func commaSeparated<T>(things: Iterable<T>): Tokens where T <: ToTokens {
+    let tokens = Tokens()
+    let it = things.iterator()
+    let first = it.next()
+
+    (first?.toTokens() ?? return tokens) |> tokens.append
+
+    for (e in it) {
+        tokens.append(Token(COMMA)).append(e.toTokens())
+    }
+    return tokens
+}
+
+func assert<T>(expr: Bool, message: () -> T): Unit where T <: ToString {
+    if (!expr) {
+        throw Exception(message().toString())
+    }
+}
+
+func parseCommaSeparatedExpressions(input: Tokens): Array<Expr> {
+    let parsedFakeCall = (parseExpr(quote(dummy($input))) as CallExpr).getOrThrow()
+    return parsedFakeCall.arguments |> map { arg: Argument => arg.expr } |> collectArray
+}
+
+// ===== chain parser: copy of core/src/macrodsl/parsing.cj =====
 
 /// One entry of a sibling block: a prefix chain from the block's anchor to
 /// the entry's focus, optionally a nested block operating on that focus, and
@@ -100,7 +182,7 @@ func parseModifier(attr: Tokens): Bool {
         return true
     }
     throw DiagReportException(
-        "${mainMacroName}: unknown modifier '${attr[0].value}'",
+        "${inlineMacroName}: unknown modifier '${attr[0].value}'",
         attr
     )
 }
@@ -125,7 +207,7 @@ private func scanBlockSpec(toks: Tokens, startIdx: Int64, input: Tokens): BlockS
         if (t.kind == TokenKind.NL) { k += 1; continue }
         if (depth == 0 && t.value == ";") {
             if (entry.size == 0) {
-                throw DiagReportException("${mainMacroName}: empty block chain", t.toTokens())
+                throw DiagReportException("${inlineMacroName}: empty block chain", t.toTokens())
             }
             appendBlockEntry(entry, entries, leafPaths, input)
             entry = ArrayList<Token>()
@@ -141,7 +223,7 @@ private func scanBlockSpec(toks: Tokens, startIdx: Int64, input: Tokens): BlockS
         if (expectField) {
             if (t.kind != TokenKind.DOT) {
                 throw DiagReportException(
-                    "${mainMacroName}: expected a block chain starting with '.'",
+                    "${inlineMacroName}: expected a block chain starting with '.'",
                     t.toTokens(),
                     hint: "Chains are ';'-separated and start at a field: { .field1.sub; .field2 }")
             }
@@ -152,7 +234,7 @@ private func scanBlockSpec(toks: Tokens, startIdx: Int64, input: Tokens): BlockS
         if (entry.size == 0) {
             if (t.kind != TokenKind.IDENTIFIER) {
                 throw DiagReportException(
-                    "${mainMacroName}: block chains must start at a field access",
+                    "${inlineMacroName}: block chains must start at a field access",
                     t.toTokens(),
                     hint: "The starting segment must be a plain '.' field")
             }
@@ -160,7 +242,7 @@ private func scanBlockSpec(toks: Tokens, startIdx: Int64, input: Tokens): BlockS
             while (j < toks.size && toks[j].kind == TokenKind.NL) { j += 1 }
             if (j < toks.size && toks[j].kind == TokenKind.LPAREN) {
                 throw DiagReportException(
-                    "${mainMacroName}: block chains must start at a field access",
+                    "${inlineMacroName}: block chains must start at a field access",
                     toks[j].toTokens(),
                     hint: "The starting segment must be a plain '.' field, not a call")
             }
@@ -173,7 +255,7 @@ private func scanBlockSpec(toks: Tokens, startIdx: Int64, input: Tokens): BlockS
     }
     if (entries.size == 0) {
         throw DiagReportException(
-            "${mainMacroName}: the block lists no chains", input)
+            "${inlineMacroName}: the block lists no chains", input)
     }
     return BlockSpec(entries.toArray())
 }
@@ -205,7 +287,7 @@ private func appendBlockEntry(entry: ArrayList<Token>, entries: ArrayList<BlockE
         for (prev in leafPaths) {
             if (blockChainsConflict(prev, nodes)) {
                 throw DiagReportException(
-                    "${mainMacroName}: block chains conflict on a shared prefix",
+                    "${inlineMacroName}: block chains conflict on a shared prefix",
                     input,
                     hint: "Two leaf chains writing the identical path would overwrite each other; diverge them or drop one")
             }
@@ -235,7 +317,7 @@ private func appendBlockEntry(entry: ArrayList<Token>, entries: ArrayList<BlockE
         for (prev in leafPaths) {
             if (blockChainsConflict(prev, leaf)) {
                 throw DiagReportException(
-                    "${mainMacroName}: block chains conflict on a shared prefix",
+                    "${inlineMacroName}: block chains conflict on a shared prefix",
                     input,
                     hint: "Two leaf chains writing the identical path would overwrite each other; diverge them or drop one")
             }
@@ -285,12 +367,12 @@ private func parseBlockChain(entry: ArrayList<Token>, input: Tokens): Array<Comp
         parseCommaSeparatedExpressions(Tokens(entry))
     } catch (e: Exception) {
         throw DiagReportException(
-            "${mainMacroName}: cannot parse the block chain", Tokens(entry),
+            "${inlineMacroName}: cannot parse the block chain", Tokens(entry),
             hint: "Chains are ';'-separated and start at a field: { .field1.sub; .field2 }")
     }
     if (exprs.size != 1) {
         throw DiagReportException(
-            "${mainMacroName}: cannot parse the block chain", Tokens(entry))
+            "${inlineMacroName}: cannot parse the block chain", Tokens(entry))
     }
     let (base, nodes): (?Expr, Array<CompositionNode>) = match (exprs[0]) {
         case re: RefExpr => (Some(re), Array<CompositionNode>())
@@ -309,7 +391,7 @@ private func parseBlockChain(entry: ArrayList<Token>, input: Tokens): Array<Comp
         }
     }
     throw DiagReportException(
-        "${mainMacroName}: block chains must start at a field access",
+        "${inlineMacroName}: block chains must start at a field access",
         exprs[0].toTokens(),
         hint: "The starting segment must be a plain '.' field")
 }
@@ -349,7 +431,7 @@ private func leafCount(spec: BlockSpec): Int64 {
 private func resolveSpecTargets(spec: BlockSpec, tl: TupleLiteral): Unit {
     if (tl.elements.size != spec.entries.size) {
         throw DiagReportException(
-            "${mainMacroName}: the nested entry's target has ${tl.elements.size} values but its block lists ${spec.entries.size} entries",
+            "${inlineMacroName}: the nested entry's target has ${tl.elements.size} values but its block lists ${spec.entries.size} entries",
             tl.toTokens())
     }
     for (i in 0..spec.entries.size) {
@@ -375,14 +457,14 @@ private func parseBlockAnchor(toks: Tokens, blockIdx: Int64, input: Tokens): (Ex
     for (t in 0..blockIdx) { anchorTokens.append(toks[t]) }
     if (anchorTokens.size == 0) {
         throw DiagReportException(
-            "${mainMacroName}: the block needs an anchor before '{'",
+            "${inlineMacroName}: the block needs an anchor before '{'",
             input,
             hint: "e.g. @f(s.{ .field1 .field2 }) or @f(s.{ .field1 .field2 } <- (v1, v2))")
     }
     let anchorExprs = parseCommaSeparatedExpressions(anchorTokens)
     if (anchorExprs.size == 0) {
         throw DiagReportException(
-            "${mainMacroName}: invalid anchor before the block", anchorTokens)
+            "${inlineMacroName}: invalid anchor before the block", anchorTokens)
     }
     // A bare identifier anchor (`o.{ ... }`) has no chain segments yet.
     let (baseExpr, anchorNodes): (?Expr, Array<CompositionNode>) = match (anchorExprs[0]) {
@@ -393,7 +475,7 @@ private func parseBlockAnchor(toks: Tokens, blockIdx: Int64, input: Tokens): (Ex
         return (src, anchorNodes)
     }
     throw DiagReportException(
-        "${mainMacroName}: blocks require a value anchor (e.g. s.{ ... })",
+        "${inlineMacroName}: blocks require a value anchor (e.g. s.{ ... })",
         input)
 }
 
@@ -402,7 +484,7 @@ private func parseSiblingForward(input: Tokens, blockIdx: Int64, blockOpen: Int6
     let k = blockEnd(input, blockOpen)
     if (k < input.size) {
         throw DiagReportException(
-            "${mainMacroName}: unexpected content after the block", input[k].toTokens())
+            "${inlineMacroName}: unexpected content after the block", input[k].toTokens())
     }
     let (src, anchorNodes) = parseBlockAnchor(input, blockIdx, input)
     return SiblingForward(src, anchorNodes, spec)
@@ -419,24 +501,24 @@ private func parseSiblingBackward(
     let k = blockEnd(leftTokens, blockOpen)
     if (k < leftTokens.size) {
         throw DiagReportException(
-            "${mainMacroName}: unexpected content after the update block", leftTokens[k].toTokens())
+            "${inlineMacroName}: unexpected content after the update block", leftTokens[k].toTokens())
     }
     let rightExprs = parseCommaSeparatedExpressions(rightTokens)
     if (rightExprs.size == 0) {
         throw DiagReportException(
-            "${mainMacroName} expects a value after '<-'", input)
+            "${inlineMacroName} expects a value after '<-'", input)
     }
     let targetExpr = rightExprs[0]
     var targets = ArrayList<Expr>()
     targets.add(targetExpr)
     if (spec.entries.size >= 2) {
         let tl = targetExpr as TupleLiteral ?? throw DiagReportException(
-            "${mainMacroName}: updating ${spec.entries.size} entries requires a tuple target",
+            "${inlineMacroName}: updating ${spec.entries.size} entries requires a tuple target",
             targetExpr.toTokens(),
             hint: "e.g. <- (v1, v2)")
         if (tl.elements.size != spec.entries.size) {
             throw DiagReportException(
-                "${mainMacroName}: tuple target has ${tl.elements.size} elements but the block lists ${spec.entries.size} entries",
+                "${inlineMacroName}: tuple target has ${tl.elements.size} elements but the block lists ${spec.entries.size} entries",
                 targetExpr.toTokens())
         }
         // Resolve each entry's target: a flat entry takes its element; a
@@ -460,12 +542,12 @@ private func classifyLead(lead: Expr, input: Tokens): (?Expr, Array<CompositionN
             decomposeMemberAccessExpr(cexpr)
         case cexpr: CallExpr where cexpr.callFunc is RefExpr =>
             let id = (cexpr.callFunc as RefExpr)?.identifier ?? throw DiagReportException(
-                "${mainMacroName}: unexpected callee form",
+                "${inlineMacroName}: unexpected callee form",
                 cexpr.toTokens()
             )
             if (id.value != opticFakeCallexprId.value) {
                 throw DiagReportException(
-                    "Unknown expression, passed to ${mainMacroName} macro",
+                    "Unknown expression, passed to ${inlineMacroName} macro",
                     input
                 )
             }
@@ -473,7 +555,7 @@ private func classifyLead(lead: Expr, input: Tokens): (?Expr, Array<CompositionN
             (None, compositionNodes)
         case _ =>
             throw DiagReportException(
-                "Unknown expression, passed to ${mainMacroName} macro",
+                "Unknown expression, passed to ${inlineMacroName} macro",
                 input
             )
     }
@@ -523,13 +605,13 @@ func parseOpticalExpression(input: Tokens): OpticalExpr {
         let rightExprs = parseCommaSeparatedExpressions(rightTokens)
         if (leftExprs.size == 0) {
             throw DiagReportException(
-                "${mainMacroName} expects a lens chain before '<-'",
+                "${inlineMacroName} expects a lens chain before '<-'",
                 input
             )
         }
         if (rightExprs.size == 0) {
             throw DiagReportException(
-                "${mainMacroName} expects a value after '<-'",
+                "${inlineMacroName} expects a value after '<-'",
                 input
             )
         }
@@ -564,7 +646,7 @@ func parseOpticalExpression(input: Tokens): OpticalExpr {
         let exprs = parseCommaSeparatedExpressions(input)
         if (exprs.size == 0) {
             throw DiagReportException(
-                "${mainMacroName} expects at least one argument",
+                "${inlineMacroName} expects at least one argument",
                 input
             )
         }
@@ -598,10 +680,10 @@ enum CompositionNode {
 private func getCompositionNode(input: Expr, total!: Bool = true): CompositionNode {
     match (input) {
         case ce: CallExpr =>
-            let re = ce.callFunc as RefExpr ?? throw DiagReportException("${mainMacroName}: unsupported callee form in a chain segment", ce.toTokens())
+            let re = ce.callFunc as RefExpr ?? throw DiagReportException("${inlineMacroName}: unsupported callee form in a chain segment", ce.toTokens())
             if (re.identifier.value == typeFakeCallexprId.value) {
                 Type(ce.arguments[0].expr as RefExpr ?? throw DiagReportException(
-                    "${mainMacroName}: '@ty' expects a plain type name, e.g. @ty(GBox)",
+                    "${inlineMacroName}: '@ty' expects a plain type name, e.g. @ty(GBox)",
                     ce.arguments[0].expr.toTokens()
                 ))
             } else if (re.identifier.value == typeOfFakeCallexprId.value) {
@@ -611,7 +693,7 @@ private func getCompositionNode(input: Expr, total!: Bool = true): CompositionNo
                 Optic(re.identifier)
             } else if (re.identifier.value == coercionFakeCallexprId.value && ce.arguments.size == 0) {
                 if (re.typeArguments.size != 1) { throw DiagReportException(
-                    "${mainMacroName}: coerce expects exactly one type argument, e.g. coerce<Int64>()",
+                    "${inlineMacroName}: coerce expects exactly one type argument, e.g. coerce<Int64>()",
                     re.toTokens()
                 )}
                 Coerce(re.typeArguments[0])
@@ -621,7 +703,7 @@ private func getCompositionNode(input: Expr, total!: Bool = true): CompositionNo
         case re: RefExpr =>
             if (re.typeArguments.size != 0) {
                 throw DiagReportException(
-                    "${mainMacroName}: type arguments on a bare field access are not supported",
+                    "${inlineMacroName}: type arguments on a bare field access are not supported",
                     re.toTokens(),
                     hint: "Drop the type arguments, or call it as a method: field<T>()"
                 )
@@ -629,7 +711,7 @@ private func getCompositionNode(input: Expr, total!: Bool = true): CompositionNo
             Derived(re.identifier, Lens)   // default kind; decomposeMemberAccessExpr overrides to Prism for ?.
         case _ => 
             throw DiagReportException(
-                "${mainMacroName}: unsupported expression in a chain",
+                "${inlineMacroName}: unsupported expression in a chain",
                 input.toTokens(),
                 hint: "Chains support field accesses, method calls, and the @ty/@typeof/@use anchors"
             )
@@ -677,7 +759,7 @@ private func decomposeMemberAccessExpr(maccess: Expr): (?Expr, Array<Composition
                     // getCompositionNode) because ce2 is synthesized and its tokens
                     // carry no positions for diagReport.
                     if (funcName.value == coercionFakeCallexprId.value && !segTotal) { throw DiagReportException(
-                        "${mainMacroName}: '?.' on a total optic (coerce) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.",
+                        "${inlineMacroName}: '?.' on a total optic (coerce) — its forward cannot miss, so there is no Option to unwrap. Use '.' for a plain read.",
                         ce.toTokens()
                     )}
                     nodes.add(getCompositionNode(ce2, total: segTotal))

@@ -12,6 +12,8 @@ echo "== library: law tests =="
 cjpm test --rel "$@"
 echo "== examples: build (consumer + benches) =="
 ( cd examples && cjpm build -i --rel )
+echo "== codegen: @InlineOptics expands to reconstruct =="
+./scripts/check_codegen.sh
 echo "== diagnostics (negative tests) =="
 ./scripts/check_diagnostics.sh
 echo "check.sh: OK"

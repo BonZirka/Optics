@@ -46,7 +46,7 @@ mutated.
 - [Benchmarks](docs/benchmarks.md) — recorded numbers for fused vs unfused chains, and how to reproduce them.
 - Examples — [lenses](docs/examples/lenses.md), [prisms](docs/examples/prisms.md), [chains](docs/examples/chains.md), [deriving](docs/examples/deriving.md), [user optics](docs/examples/user-optics.md).
 - API reference — [first-class optics](docs/api/first-class.md) (with the per-kind laws), [composition](docs/api/composition.md), [the `@f` DSL](docs/api/dsl.md), [diagnostics](docs/api/diagnostics.md), [internals & reserved names](docs/api/internals.md).
-- Architecture & research — [the macro system](docs/architecture/macro-system.md), [registry plumbing](docs/architecture/registry-plumbing.md), [the fusion walk](docs/architecture/fusion-walk.md), [design decisions](docs/architecture/design-decisions.md), [compiler notes](docs/compiler-issues.md).
+- Architecture & research — [the macro system](docs/architecture/macro-system.md), [registry plumbing](docs/architecture/registry-plumbing.md), [the fusion walk](docs/architecture/fusion-walk.md), [design decisions](docs/architecture/design-decisions.md), [the `@InlineOptics` benchmark harness](docs/architecture/inline-harness.md), [compiler notes](docs/compiler-issues.md).
 
 ## Stability
 

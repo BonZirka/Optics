@@ -1,7 +1,7 @@
 [package]
   cjc-version = "0.57.3"
   compile-option = ""
-  description = "lucida: the law suite and feature tests"
+  description = "lucida: the law suite, feature tests and the @InlineOptics harness"
   link-option = ""
   name = "tests"
   output-type = "static"
@@ -19,6 +19,18 @@
 [profile.build]
   performance_analysis = true
 
+# The generated shapes in src/generated are the benchmark matrix, so they are
+# built the way examples builds its benchmarks: thin LTO, and warnings off for
+# the test and bench profiles. Without this the recorded numbers would come from
+# a differently optimised binary than the one they were measured on.
+[profile.build.lto]
+  level = "thin"
+
+[profile.test.build]
+  compile-option = "-Woff unused"
+
+[profile.bench.build]
+  compile-option = "-Woff unused"
 
 [profile.customized-option]
   rel = "-O2"

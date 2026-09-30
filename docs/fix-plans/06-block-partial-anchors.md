@@ -77,6 +77,16 @@ Both degraded cases are pinned by probes in `scripts/check_diagnostics.sh` —
 `takes no 'kind' field` / alias-blames-itself pair — so a future change in how
 they surface will fail the gate rather than pass quietly.
 
+The harness covers the same shape now: `@InlineOptics` expands a block anchored
+on a partial (a case or a registered affine) into one `match` whose hit arm
+rebuilds the anchor around the block and whose miss arm is the source, pinned
+against a hand-written form by the codegen gate (`PrismBlock` in
+`tests/src/generated/`) and asserted against `@f` per form in
+`tests/src/inline_optics.cj`. The harness reads `?.` the way the library does --
+as applying to the optic before it -- so `x?.s` over a struct is refused rather
+than reinterpreted as "unwrap the Option field `s`", which is not a form `@f`
+accepts.
+
 ## Verification
 A: `@f(j.caches?.at(0).{ .dir; .size } <- (...))` compiles and passes.
 B: two same-named optics over different source types compile in one package

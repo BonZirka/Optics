@@ -209,6 +209,8 @@ returns new values by design — wrong tool.
   [prisms](examples/prisms.md), [chains](examples/chains.md),
   [deriving](examples/deriving.md), [user optics](examples/user-optics.md).
 - The DSL reference — [api/dsl.md](api/dsl.md).
+- What the DSL costs — [benchmarks.md](benchmarks.md), and the
+  [harness](architecture/inline-harness.md) that measures it.
 
 ---
 

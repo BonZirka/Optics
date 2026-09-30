@@ -159,6 +159,26 @@ context it fires in, is in
 [the DSL reference](dsl.md) — see
 [grammar](dsl.md#grammar) and [starting a chain](dsl.md#starting-a-chain).
 
+## @InlineOptics (benchmark harness)
+
+`@InlineOptics` reports against the `shapes:` metadata it was handed, since a
+macro cannot see a declaration — see
+[the harness](../architecture/inline-harness.md), which is development tooling
+rather than part of the API. Every message names the spelling that would work.
+The full list, grouped by cause, lives there; the shape of them is:
+
+- metadata — `missing required field 'shapes'`, `no shape registered for type
+  'T'`, `shape 'T' has no field 'f'`;
+- chains — `case 'C' needs a partial segment`, `'?.' needs an Option-typed
+  value`, `'?.' on a total optic (Lens/Iso)`, `optic 'x' focuses 'T', but the
+  chain is at 'U'`, `cannot inline coerce<T> on 'T'`;
+- blocks — `a sibling block anchor cannot cross a partial segment`, `a sibling
+  block anchored on a case needs a single payload field`;
+- value forms — `this chain mints a Setter value, not an update`.
+
+`scripts/check_diagnostics.sh` pins each one with a `probe: name — message`
+pair.
+
 ## Gotchas
 
 > **Gotcha:** These messages are compile-time only. Runtime behavior has

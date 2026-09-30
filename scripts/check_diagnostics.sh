@@ -276,6 +276,158 @@ func z12(): Unit {
 }
 EOF
 
+probe "@InlineOptics total case segment" "needs a partial segment" <<'EOF'
+package tests
+import lucida.*
+import lucida.macrodsl.*
+import tests.inline.*
+@DeriveOptics
+public enum InlC { | Empty | Held(Int64) }
+func z21(): Unit {
+    let x = InlC.Held(1)
+    let r = @InlineOptics[shapes: (InlC, (Empty, ()), (Held, (v, Int64))), root: InlC](x.Held)
+    let _ = r
+}
+EOF
+
+probe "@InlineOptics block anchored above a case" "block anchor cannot cross a partial segment" <<'EOF'
+package tests
+import lucida.*
+import lucida.macrodsl.*
+import tests.inline.*
+@DeriveOptics
+public struct InlOptE { public InlOptE(public let q: Int64) { } }
+@DeriveOptics
+public struct InlOptM { public InlOptM(public let e: InlOptE) { } }
+@DeriveOptics
+public enum InlOptF { | Off | On(InlOptM) }
+@DeriveOptics
+public struct InlOptG { public InlOptG(public let f: InlOptF, public let t: Int64) { } }
+func z21c(): Unit {
+    let x = InlOptG(InlOptF.On(InlOptM(InlOptE(2))), 3)
+    let r = @InlineOptics[shapes: (InlOptG, (f, InlOptF), (t, Int64)), (InlOptF, (Off, ()), (On, (m, InlOptM))), (InlOptM, (e, InlOptE)), (InlOptE, (q, Int64)), root: InlOptG](x.f?.On.e.{ .q } <- (5))
+    let _ = r
+}
+EOF
+
+probe "@InlineOptics question-dot before a struct field" "on a total optic (Lens/Iso)" <<'EOF'
+package tests
+import lucida.*
+import lucida.macrodsl.*
+import tests.inline.*
+@DeriveOptics
+public struct InlOptH { public InlOptH(public let s: Option<InlOptE>) { } }
+func z21d(): Unit {
+    let x = InlOptH(Some(InlOptE(1)))
+    let r = @InlineOptics[shapes: (InlOptH, (s, Option<InlOptE>)), (InlOptE, (q, Int64)), root: InlOptH](x?.s.q <- 5)
+    let _ = r
+}
+EOF
+
+probe "@InlineOptics block anchored on a struct field" "on a total optic (Lens/Iso)" <<'EOF'
+package tests
+import lucida.*
+import lucida.macrodsl.*
+import tests.inline.*
+@DeriveOptics
+public struct InlOptI { public InlOptI(public let s: Option<InlOptE>) { } }
+func z21e(): Unit {
+    let x = InlOptI(Some(InlOptE(1)))
+    let r = @InlineOptics[shapes: (InlOptI, (s, Option<InlOptE>)), (InlOptE, (q, Int64)), root: InlOptI](x?.s.{ .q } <- (5))
+    let _ = r
+}
+EOF
+
+probe "@InlineOptics unknown field" "has no field 'zz'" <<'EOF'
+package tests
+import lucida.*
+import lucida.macrodsl.*
+import tests.inline.*
+@DeriveOptics
+public struct InlC { public InlC(public let a: Int64) { } }
+func z22(): Unit {
+    let x = InlC(1)
+    let r = @InlineOptics[shapes: (InlC, (a, Int64)), root: InlC](x.zz <- 5)
+    let _ = r
+}
+EOF
+
+probe "@InlineOptics unregistered segment" "no inlining metadata registered" <<'EOF'
+package tests
+import lucida.*
+import lucida.macrodsl.*
+import tests.inline.*
+@DeriveOptics
+public struct InlD { public InlD(public let a: Int64) { } }
+func z23(): Unit {
+    let x = InlD(1)
+    let r = @InlineOptics[shapes: (InlD, (a, Int64)), root: InlD](x.pick() <- 5)
+    let _ = r
+}
+EOF
+
+probe "@InlineOptics first-class anchor" "macro should be contained inside '@f'" <<'EOF'
+package tests
+import lucida.*
+import lucida.macrodsl.*
+import tests.inline.*
+@DeriveOptics
+public struct InlD2 { public InlD2(public let a: Int64) { } }
+let inlD2Optic = @f(@typeof(InlD2(0)).a)
+func z23b(): Unit {
+    let x = InlD2(1)
+    let r = @InlineOptics[shapes: (InlD2, (a, Int64)), root: InlD2, registry: (inlD2Optic, InlD2, a)](x.@use(inlD2Optic) <- 5)
+    let _ = r
+}
+EOF
+
+probe "@InlineOptics missing shapes" "missing required field 'shapes'" <<'EOF'
+package tests
+import lucida.*
+import lucida.macrodsl.*
+import tests.inline.*
+@DeriveOptics
+public struct InlE { public InlE(public let a: Int64) { } }
+func z24(): Unit {
+    let x = InlE(1)
+    let r = @InlineOptics[root: InlE](x.a <- 5)
+    let _ = r
+}
+EOF
+
+probe "@InlineOptics coerce on a multi-field shape" "a coercion needs a one-field shape" <<'EOF'
+package tests
+import lucida.*
+import lucida.macrodsl.*
+import tests.inline.*
+@DeriveOptics
+public struct InlG2 { public InlG2(public let a: Int64, public let b: Int64) { } }
+@DeriveOptics
+public struct InlG { public InlG(public let m: InlG2, public let t: Int64) { } }
+func z25(): Unit {
+    let x = InlG(InlG2(1, 2), 3)
+    let r = @InlineOptics[
+        shapes: (InlG, (m, InlG2), (t, Int64)), (InlG2, (a, Int64), (b, Int64)),
+        root: InlG
+    ](x.m.coerce<Int64>() <- 5)
+    let _ = r
+}
+EOF
+
+probe "@InlineOptics coerce to the wrong type" "is an iso to 'Int64', not to 'String'" <<'EOF'
+package tests
+import lucida.*
+import lucida.macrodsl.*
+import tests.inline.*
+@DeriveOptics
+public struct InlH { public InlH(public let m: Int64) { } }
+func z26(): Unit {
+    let x = InlH(1)
+    let r = @InlineOptics[shapes: (InlH, (m, Int64)), root: InlH](x.coerce<String>())
+    let _ = r
+}
+EOF
+
 echo "diagnostics gate: $PASS passed, $FAIL failed"
 if [ "$FAIL" -ne 0 ]; then exit 1; fi
 exit 0

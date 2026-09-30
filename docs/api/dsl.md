@@ -25,8 +25,9 @@ accepts. The kinds behind the segments are the five structs of
   read `@f(o.name)`. If a write didn't take, check for the arrow. An
   empty call fails with `@f expects at least one argument`.
 - A read evaluates to the focus. If any segment is partial (`?.`), the read
-  evaluates to `Option` — `Some(payload)` on a match, `None`
-  carrying the original source on a miss.
+  evaluates to `Option` — `Some(payload)` on a match, `None` on a miss. `None`
+  carries nothing (it is nullary); the source only comes back on a *write* miss,
+  below.
 - A write evaluates to a new whole with `newValue` at the focus; the source
   comes out untouched. A partial write is unconditional: when a segment
   misses, the write returns the source unchanged — the miss is an identity,
@@ -234,6 +235,9 @@ fallback shape ([composition](composition.md) documents the composed calls;
   resolves to, and the values the sourceless forms mint.
 - [Composition](composition.md) — the kind-pair table a chain walks one
   step at a time, and what `[unfuse]` switches to.
+- [`@InlineOptics`](../architecture/inline-harness.md) — the benchmark harness:
+  the same grammar translated into plain constructor calls, to measure `@f`
+  against. Development tooling, not part of the API.
 - [Lenses](../examples/lenses.md), [prisms](../examples/prisms.md) and
   [chains](../examples/chains.md) — the segments in action, one kind at a
   time, then mixed.
