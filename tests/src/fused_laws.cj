@@ -515,7 +515,7 @@ func hugeMiss(): Huge1 {
     Huge1.H1(Huge2.H2(Huge3.H3(Huge4.H4(Huge5.H5(Huge6.H6(Huge7.H7(Huge8.H8(Huge9.H9(Huge10.M10(5))))))))))
 }
 
-// Ten Option-producing segments — deeper than the historical hand-unrolled
+// Ten Option-producing slots — deeper than the historical hand-unrolled
 // pyramid (8). Read chains at this depth used to silently fall back to
 // library composition.
 @Test

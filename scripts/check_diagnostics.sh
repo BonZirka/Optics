@@ -72,21 +72,21 @@ import lucida.macrodsl.*
 struct BadOptic3 { public BadOptic3(public let v: Int64) { } }
 EOF
 
-probe "optic source in sourceless backward" "has no source slot" <<'EOF'
+probe "optic source in sourceless backward" "has no source parameter" <<'EOF'
 package tests
 import lucida.macrodsl.*
 @Optic[source: Int64, focus: Int64, kind: Prism, forward: { Some(source) }, backward: { source }]
 struct BadOptic4 {}
 EOF
 
-probe "optic rename arity forward" "binds 2 names but this kind has 1 slots" <<'EOF'
+probe "optic rename arity forward" "binds 2 parameters; expected 1" <<'EOF'
 package tests
 import lucida.macrodsl.*
 @Optic[source: Int64, focus: Int64, kind: Lens, forward: { a, b => a }, backward: { a, b => a }]
 struct BadOpticRen1 {}
 EOF
 
-probe "optic rename arity sourceless backward" "has no source slot" <<'EOF'
+probe "optic rename arity sourceless backward" "has no source parameter" <<'EOF'
 package tests
 import lucida.macrodsl.*
 @Optic[source: Int64, focus: Int64, kind: Prism, forward: { s => Some(s) }, backward: { s, d => d }]
@@ -276,7 +276,7 @@ func z12(): Unit {
 }
 EOF
 
-probe "@InlineOptics total case segment" "needs a partial segment" <<'EOF'
+probe "@InlineOptics total case slot" "needs a partial slot" <<'EOF'
 package tests
 import lucida.*
 import lucida.macrodsl.*
@@ -290,7 +290,7 @@ func z21(): Unit {
 }
 EOF
 
-probe "@InlineOptics block anchored above a case" "block anchor cannot cross a partial segment" <<'EOF'
+probe "@InlineOptics block anchored above a case" "block anchor cannot cross a partial slot" <<'EOF'
 package tests
 import lucida.*
 import lucida.macrodsl.*
@@ -352,7 +352,7 @@ func z22(): Unit {
 }
 EOF
 
-probe "@InlineOptics unregistered segment" "no inlining metadata registered" <<'EOF'
+probe "@InlineOptics unregistered slot" "no inlining metadata registered" <<'EOF'
 package tests
 import lucida.*
 import lucida.macrodsl.*

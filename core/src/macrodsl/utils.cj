@@ -67,11 +67,11 @@ func generics(targs: ArrayList<TypeNode>): Tokens {
 // ===== Fused emission helpers =====
 
 /// Emits `let __magicalI = ...; let __opticsI = ...; let __fwdI = ...; let __bwdI = ...;`
-/// for a Derived (struct field) segment. The caller threads the next magical
+/// for a Derived (struct field) slot. The caller threads the next magical
 /// expression (referencing the local `__magical${index}` binding) into the next
-/// segment via `derivedNextMagicalExpr`.
+/// slot via `derivedNextMagicalExpr`.
 // `bindBackward`: reads never rebuild — the forward walk consumes only the
-// gated forwards. `isLast`: the deepest segment's next-hop magical binding
+// gated forwards. `isLast`: the deepest slot's next-hop magical binding
 // has no continuation consumer.
 func emitDerivedLeafBindings(
     index: Int64,
@@ -104,7 +104,7 @@ func emitDerivedLeafBindings(
     )
 }
 
-/// Returns the next magical expression for a Derived segment, referencing the
+/// Returns the next magical expression for a Derived slot, referencing the
 /// local `__magical${index}` binding (bound by `emitDerivedLeafBindings`) so the
 /// generated code stays linear in chain depth rather than exponential.
 func derivedNextMagicalExpr(index: Int64, fieldTok: Token): Tokens {
@@ -114,7 +114,7 @@ func derivedNextMagicalExpr(index: Int64, fieldTok: Token): Tokens {
 }
 
 /// Emits `let __magicalI = ...; let __opticsI = ...; let __fwdI = ...; let __bwdI = ...`
-/// for an affine method segment (`at` / `selectFirst`). The impl members take the
+/// for an affine method slot (`at` / `selectFirst`). The impl members take the
 /// registry plus the original call arguments and return the forward/backward
 /// function values, which is exactly the shape the fused walkers consume.
 func emitUserDefinedLeafBindings(
@@ -152,7 +152,7 @@ func emitUserDefinedLeafBindings(
     )
 }
 
-/// Returns the next magical expression for an affine method segment, referencing
+/// Returns the next magical expression for an affine method slot, referencing
 /// the local `__magical${index}` binding (bound by `emitUserDefinedLeafBindings`).
 func userDefinedNextMagicalExpr(index: Int64, name: Token, targs: ArrayList<TypeNode>): Tokens {
     let currMagical = Token(IDENTIFIER, "__magical${index}")
@@ -162,9 +162,9 @@ func userDefinedNextMagicalExpr(index: Int64, name: Token, targs: ArrayList<Type
 }
 
 /// Emits `let __magicalI = ...; let __nmagicI = ...; let __opticsI = ...;
-/// let __fwdI = ...; let __bwdI = ...` for a coerce (iso) segment. The coerce
+/// let __fwdI = ...; let __bwdI = ...` for a coerce (iso) slot. The coerce
 /// impl members take BOTH the source and the target registry; the target
-/// registry is `magic<Target>()`, which also becomes the next segment's
+/// registry is `magic<Target>()`, which also becomes the next slot's
 /// magical expression.
 func emitCoerceLeafBindings(
     index: Int64,

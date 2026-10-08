@@ -128,7 +128,7 @@ class UpcastLaws {
     }
 
     // ===== behavioral: the upcasted registry continues a chain =====
-    // The walk upcasts after every segment so the next compose row can be
+    // The walk upcasts after every slot so the next compose row can be
     // selected. lens ∘ prism composes to an Affine registry; feeding that
     // registry (with the hop's composed halves) into the (Affine, Affine)
     // row must continue the chain: partial forward, source kept on miss.

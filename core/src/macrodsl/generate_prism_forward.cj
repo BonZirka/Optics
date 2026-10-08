@@ -4,7 +4,7 @@ import std.ast.*
 import std.collection.*
 
 /// Generates `pinPrismForward1..N`, the fused forward walkers for chains with
-/// 1..N partial (Option-producing) segments. Each generated function has the same
+/// 1..N partial (Option-producing) slots. Each generated function has the same
 /// signature and body shape as the historical hand-written `pinPrismForwardK`:
 /// a named generic function is what lets call-site inference pin S/Ti/Ai/B —
 /// the macro cannot inline the match pyramid because lambda parameter types

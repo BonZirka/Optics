@@ -100,7 +100,7 @@ private func parseOpticArgs(macroName: String, value: Tokens): ArrayList<(Token,
             throw DiagReportException(
                 "@${macroName}: arg name '${p.identifier.value}' is reserved",
                 p.toTokens(),
-                hint: "source/_source/focus are fixed slots of the generated lambdas"
+                hint: "source/_source/focus are fixed parameters of the generated lambdas"
             )
         }
         out.add((p.identifier, p.paramType.toTokens()))
@@ -123,12 +123,12 @@ private func stripOuterBraces(macroName: String, field: String, value: Tokens): 
     return Tokens(inner)
 }
 
-/// Sourceless backwards (Prism/Iso) have no `source` slot. Scan only at brace
+/// Sourceless backwards (Prism/Iso) have no `source` parameter. Scan only at brace
 /// depth 0 of the body so nested lambdas that shadow `source` don't false-positive.
 private func rejectSourceInSourcelessBackward(macroName: String, body: Tokens, kindTok: Token): Unit {
     if (referencesAtDepth0(body, "source")) {
         throw DiagReportException(
-            "@${macroName}: backward of kind '${kindTok.value}' has no source slot",
+            "@${macroName}: backward of kind '${kindTok.value}' has no source parameter",
             body,
             hint: "Lens/Affine backwards receive source; Prism/Iso rebuild from focus"
         )
@@ -154,7 +154,7 @@ private func referencesAtDepth0(body: Tokens, name: String): Bool {
 }
 
 /// True when `name` appears as a bare identifier anywhere in `body` — the
-/// right predicate for naming the generated src/focus slots: a use inside
+/// right predicate for naming the generated src/focus parameters: a use inside
 /// an `if` block or `match` arm is as much a use as one at the top level.
 /// (Nested lambdas that rebind the name only cause over-naming, which is
 /// harmless; the depth-0 variant is reserved for src-rejection, where
@@ -169,11 +169,11 @@ private func referencesAtAnyDepth(body: Tokens, name: String): Bool {
 }
 
 /// A body is *param-form* when it starts with `IDENT|_ (, IDENT|_)* =>`:
-/// those names bind the kind's slots positionally (source first, then focus)
+/// those names bind the kind's parameters positionally (source first, then focus)
 /// and the remainder is the body. Returns the names and the remainder, or
-/// None for a bare body. `_` names a slot to skip. Leading newlines and
+/// None for a bare body. `_` names a parameter to skip. Leading newlines and
 /// newlines around commas are tolerated.
-private func parseSlotRenames(body: Tokens): ?(ArrayList<Token>, Tokens) {
+private func parseParamRenames(body: Tokens): ?(ArrayList<Token>, Tokens) {
     let toks = ArrayList<Token>()
     body |> forEach { t: Token => toks.add(t) }
     var i: Int64 = 0
@@ -202,9 +202,9 @@ private func parseSlotRenames(body: Tokens): ?(ArrayList<Token>, Tokens) {
     return Some((names, Tokens(rest)))
 }
 
-/// One generated lambda parameter for a slot rename: the user's name, or
-/// `_ : T` for a skipped slot.
-private func slotParam(name: Token, ty: Tokens): Tokens {
+/// One generated lambda parameter for a parameter rename: the user's name, or
+/// `_ : T` for a skipped parameter.
+private func renamedParam(name: Token, ty: Tokens): Tokens {
     if (name.value == "_") { return quote(_ : $ty) }
     return quote($name: $ty)
 }
@@ -464,21 +464,21 @@ private func expandUserOptic(macroName: String, kindOverride: String, attr: Toke
 /// Builds the forward member body (lambda) for a user optic of the given kind.
 /// Shared by every user-optic emission.
 func buildUserFwdLambda(macroName: String, _: String, source: Tokens, _: Tokens, forwardBody: Tokens): Tokens {
-// Bind a slot only when the body uses it; otherwise name the parameter _
+// Bind a parameter only when the body uses it; otherwise name the parameter _
 // so no unused-variable warning is emitted for user bodies like
 // `forward: { 1 }` or single-field `backward: { GBox(focus) }`.
 // Param-form bodies (`{ s => ... }`, `{ s, f => ... }`) bind their names
-// positionally to the kind's slots and replace the fixed slots entirely;
-// bare bodies keep fixed slots with auto-`_` naming for unused ones.
-let (fwdParam, fwdRest): (Tokens, Tokens) = match (parseSlotRenames(forwardBody)) {
+// positionally to the kind's parameters and replace the fixed parameters entirely;
+// bare bodies keep fixed parameters with auto-`_` naming for unused ones.
+let (fwdParam, fwdRest): (Tokens, Tokens) = match (parseParamRenames(forwardBody)) {
     case Some((names, rest)) =>
         if (names.size != 1) {
             throw DiagReportException(
-                "@${macroName}: forward binds ${names.size} names but this kind has 1 slots",
+                "@${macroName}: forward binds ${names.size} parameters; expected 1",
                 forwardBody,
-                hint: "Use _ to skip a slot")
+                hint: "Use _ to skip a parameter")
         }
-        (slotParam(names[0], quote($source)), rest)
+        (renamedParam(names[0], quote($source)), rest)
     case None =>
         let p = if (referencesAtAnyDepth(forwardBody, "source")) {
             quote(source: $source)
@@ -494,25 +494,25 @@ return quote({ $fwdParam => $fwdRest })
 /// Shared by every user-optic emission.
 func buildUserBwdLambda(macroName: String, kind: String, source: Tokens, focus: Tokens, backwardBody: Tokens): Tokens {
     let isSourceful = kind == "Lens" || kind == "Affine"
-    let bwdSlotCount: Int64 = if (isSourceful) { 2 } else { 1 }
-    return match (parseSlotRenames(backwardBody)) {
+    let bwdParamCount: Int64 = if (isSourceful) { 2 } else { 1 }
+    return match (parseParamRenames(backwardBody)) {
     case Some((names, rest)) =>
-        if (names.size != bwdSlotCount) {
+        if (names.size != bwdParamCount) {
             if (!isSourceful && names.size == 2) {
                 throw DiagReportException(
-                    "@${macroName}: backward of kind '${kind}' has no source slot",
+                    "@${macroName}: backward of kind '${kind}' has no source parameter",
                     backwardBody,
                     hint: "Lens/Affine backwards receive source; Prism/Iso rebuild from focus")
             }
             throw DiagReportException(
-                "@${macroName}: backward binds ${names.size} names but this kind has ${bwdSlotCount} slots",
+                "@${macroName}: backward binds ${names.size} parameters; expected ${bwdParamCount}",
                 backwardBody,
-                hint: "Use _ to skip a slot")
+                hint: "Use _ to skip a parameter")
         }
         if (isSourceful) {
-            quote({ $(slotParam(names[0], quote($source))), $(slotParam(names[1], quote($focus))) => $rest })
+            quote({ $(renamedParam(names[0], quote($source))), $(renamedParam(names[1], quote($focus))) => $rest })
         } else {
-            quote({ $(slotParam(names[0], quote($focus))) => $rest })
+            quote({ $(renamedParam(names[0], quote($focus))) => $rest })
         }
     case None =>
         let lam = match (kind) {

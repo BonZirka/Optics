@@ -1,70 +1,93 @@
-# Optics (lucida)
+# Lucida
 
-An optics library for [Cangjie](https://cangjie-lang.cn): lenses, prisms,
-affines, isos and setters with a `@f` update DSL, a `@DeriveOptics` code
-generator, and a generated composition table.
+Lucida is a Cangjie library for reading and updating nested data. An update
+returns a rebuilt value, so callers can keep the original.
 
 ```cangjie
+package example
+
+import lucida.*
+import lucida.macrodsl.*
+
 @DeriveOptics
-public struct GBox<T> {
-    public GBox(public let v: T) { }
+public struct Address {
+    public Address(public let city: String, public let zip: Int64) {}
 }
 
-let b = GBox<Int64>(5)
-@f(b.v)                  // res: 5 — a read evaluates the focus
-@f(b.v <- 7)             // res: a new GBox(7); b still holds 5
+@DeriveOptics
+public struct Person {
+    public Person(public let name: String, public let address: Address) {}
+}
 
-let nums = [10, 20, 30]
-@f(nums?.at(1) <- 99)    // res: [10, 99, 30]
-@f(nums?.at(7) <- 99)    // res: [10, 20, 30] — a miss returns the source unchanged
+main() {
+    let person = Person("Ada", Address("London", 10001))
+    let moved = @f(person.address.city <- "Oslo")
+
+    println(moved.address.city)  // Oslo
+    println(person.address.city) // London
+}
 ```
 
-Updates are **immutable** — they return a new value; the original is never
-mutated.
+The expression after `@f` describes a path through the data. Lucida generates
+the code that follows that path and rebuilds its enclosing values. This is
+useful when an update crosses several records, an enum case, or an array
+selection and the rest of the value should be preserved.
 
-## Why Lucida
+The library represents these paths with **optics**: operations that describe
+how to read a value and how to put a replacement back into its source. You can
+use the path syntax directly or keep an optic in a variable and pass it to
+other functions.
 
-- **Kind-exact operators.** `.` marks a total segment (the part is always
-  there), `?.` a partial one (it may miss). Mark the wrong pair and it fails
-  to compile — with a message that says what was illegal and which operator
-  to use.
-- **`@DeriveOptics`.** One line on a type: a lens per constructor field, a
-  prism per enum case — the payload for single-payload cases, a tuple of
-  payloads for multi-payload cases, `Unit` for payloadless ones — and an iso
-  per one-field wrapper.
-- **`@Optic`.** Declare the optics a derive cannot: an array slot at an
-  index, a hand-built segment, a generic carrier.
-- **Fused chains.** A chain compiles to direct nested calls — no optic values
-  composed at runtime.
-- **First-class optics.** Hold a lens in a value, pass it around; 25 kind
-  pairs compose with upcasting.
+## Start here
 
-## Documentation
+- [Getting started](docs/getting-started.md): dependencies, a complete program,
+  and build commands.
+- [Understanding optics](docs/introduction-to-optics.md): the model, explained
+  using ordinary Cangjie functions.
+- [API reference](docs/api/index.md): declarations, members, and behavior of
+  each optic type, macro, and standard slot.
+- [Documentation index](docs/README.md): examples, reference, and implementation
+  notes.
 
-- [Getting started](docs/getting-started.md) — a runnable program, five minutes.
-- [Introduction to optics](docs/introduction-to-optics.md) — what optics are and why.
-- [Benchmarks](docs/benchmarks.md) — recorded numbers for fused vs unfused chains, and how to reproduce them.
-- Examples — [lenses](docs/examples/lenses.md), [prisms](docs/examples/prisms.md), [chains](docs/examples/chains.md), [deriving](docs/examples/deriving.md), [user optics](docs/examples/user-optics.md).
-- API reference — [first-class optics](docs/api/first-class.md) (with the per-kind laws), [composition](docs/api/composition.md), [the `@f` DSL](docs/api/dsl.md), [diagnostics](docs/api/diagnostics.md), [internals & reserved names](docs/api/internals.md).
-- Architecture & research — [the macro system](docs/architecture/macro-system.md), [registry plumbing](docs/architecture/registry-plumbing.md), [the fusion walk](docs/architecture/fusion-walk.md), [design decisions](docs/architecture/design-decisions.md), [the `@InlineOptics` benchmark harness](docs/architecture/inline-harness.md), [compiler notes](docs/compiler-issues.md).
+## What is supported
 
-## Stability
+`@DeriveOptics` supplies field optics for records, case optics for enums, and
+conversions for records with one constructor field. `@Optic` and its kind
+aliases declare custom operations. The `lucida_stdlib` package supplies array
+index and predicate selections. Tuple element optics cover arities 2 through 16.
 
-Public API: the five optic structs, `Either`, the DSL macros, and the
-`lucida.stdlib` optics. Identifiers starting with `__` and the `Registry*`
-structs are **reserved** — they are macro plumbing, not API, and may change
-in any minor release ([internals](docs/api/internals.md)).
+The `@f` syntax supports reads, replacements, blocks of several updates, and
+composition with optic values. Use `.` for a total slot and `?.` for a
+slot that may not find a value. A partial read returns `Option`; a partial
+update preserves the source on a miss.
 
-## Repository layout
+An update does not deep-copy the entire object graph. Derived optics rebuild
+records along the path and retain the other fields. Custom optics supply their
+own functions and must preserve the behavior they claim to implement.
 
+## Project status
+
+The workspace contains `core` (`lucida` and `lucida.macrodsl`), `stdlib`
+(`lucida_stdlib`), and `tests`. `examples` is a separate consumer project.
+
+After loading the Cangjie SDK environment, run:
+
+```sh
+./scripts/check.sh
 ```
-src/                      lucida               — optics core + composition table + stdlib
-src/macrodsl/             lucida.macrodsl      — compiler macros (@f, @DeriveOptics, ...)
-src/tests/                lucida.tests         — the law test suite
-examples/                 optics_experiments   — runnable demo + benchmarks
-scripts/check.sh          verification gate (build + law tests + examples + diagnostics)
-scripts/bench.sh          benchmark runner (results: docs/benchmarks.md)
-```
 
-Imports: `import lucida.*` for the optics API, `import lucida.macrodsl.*`
-for the macros, `import lucida_stdlib.*` for the standard optic library.
+The gate builds the workspace and example consumer, runs the law and feature
+tests, compares generated benchmark expressions, and checks expected compiler
+diagnostics. See [development](docs/development.md) for setup and failure logs.
+
+The current implementation has limits, including unsupported `where` clauses
+in optic declarations and no built-in optic for unwrapping `Option` fields.
+[Benchmarks](docs/benchmarks.md) record the cost of generated updates; fusion
+does not imply that an update costs the same as handwritten reconstruction.
+
+The supported application surface is the five optic types, the documented DSL
+and declaration macros, and the standard optics. Generated names and registry
+helpers are implementation details, even where they are publicly visible.
+See [API boundaries](docs/api/internals.md) and the [changelog](CHANGELOG.md).
+
+Licensed under [MIT](LICENSE).

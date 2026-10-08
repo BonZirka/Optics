@@ -329,7 +329,7 @@ private func optPairEq(a: Option<(Int64, Int64)>, b: Option<(Int64, Int64)>): Bo
     }
 }
 
-// ===== partial segments, prisms and sibling blocks =====
+// ===== partial slots, prisms and sibling blocks =====
 
 @Test
 class InlineOpticsPartial {
@@ -540,7 +540,7 @@ class InlineOpticsPartial {
         @Assert(viaInline == InlBox(1, InlLeaf(10, InlTip(20, 4)), 5))
     }
 
-    // Two partial segments in a row nest their Options.
+    // Two partial slots in a row nest their Options.
     @TestCase
     func inlinesPartialThenPrism(): Unit {
         let b = InlSlotBox(Some(InlSlot.Held(4)))
@@ -608,10 +608,10 @@ class InlineOpticsCoerce {
         @Assert(got == @f(b.w.u.coerce<Int64>() <- 5))
     }
 
-    // Segments below the coercion: they read the coerced type, and the rebuild
+    // Slots below the coercion: they read the coerced type, and the rebuild
     // below it has to wrap the new value before the coercion rebuilds.
     @TestCase
-    func inlinesCoerceWithSegmentsBelow(): Unit {
+    func inlinesCoerceWithSlotsBelow(): Unit {
         let b = InlWrapBox(InlWrap(InlUnit(7)), 1)
         let read = @InlineOptics[
             shapes: (InlWrapBox, (w, InlWrap), (tag, Int64)),
@@ -632,7 +632,7 @@ class InlineOpticsCoerce {
         @Assert(written == @f(b.w.coerce<InlUnit>().n <- 9))
     }
 
-    // A sibling block anchored on a partial segment: the case's `match` wraps the
+    // A sibling block anchored on a partial slot: the case's `match` wraps the
     // whole block rebuild, so a hit rebuilds the payload inside the arm and a
     // miss hands back the source untouched. `@f` composes the same way.
     @TestCase

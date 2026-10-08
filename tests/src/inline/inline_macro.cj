@@ -7,11 +7,11 @@ import std.env.*
 let inlineMacroName = "@InlineOptics"
 
 
-// Slot names an inlining body binds. They match the slot names user optics
+// Parameter names an inlining body binds. They match the parameter names user optics
 // themselves are written against, so a `@Lens` body can be pasted into the
 // registry verbatim.
-let inlineSourceSlot = "source"
-let inlineFocusSlot = "focus"
+let inlineSourceParam = "source"
+let inlineFocusParam = "focus"
 let inlineBodyKeyword = "body"
 
 // ===== token cursor over a macro attribute =====
@@ -93,7 +93,7 @@ class InlineToks {
 
     /// A type name plus, for `Option<M>`, the inner name `M`.
     ///
-    /// A partial segment `?.f` focuses the payload of an `Option`, so the shape
+    /// A partial slot `?.f` focuses the payload of an `Option`, so the shape
     /// table has to be able to say which type the chain continues on. Every
     /// other generic (`Array<Int64>`) is a leaf as far as rebuilding goes and
     /// its argument is dropped.
@@ -145,7 +145,7 @@ class InlineToks {
 private func shapeHint(): String {
     "shapes: (TypeA, (field, FieldType), ...), (TypeB, ...) lists every type on the chain with "
     + "its fields in constructor order; an enum is (TypeE, (CaseName, (field, FieldType)), ...); "
-    + "an Option field is written (field, Option<InnerType>) so a '?.' segment knows what it "
+    + "an Option field is written (field, Option<InnerType>) so a '?.' slot knows what it "
     + "focuses; root: TypeA names the source value's type; "
     + "registry: (opticName, OwnerType, field) inlines a first-class derived-field optic"
 }
@@ -155,7 +155,7 @@ private func shapeHint(): String {
 class InlineField {
     let name: String
     let typeName: String
-    // `Some(M)` when the declared type is `Option<M>`: a `?.` segment on this
+    // `Some(M)` when the declared type is `Option<M>`: a `?.` slot on this
     // field focuses `M`, and the chain continues there rather than on `Option`.
     let optionInner: ?String
 
@@ -257,7 +257,7 @@ class InlineOpticMeta {
     let ownerType: String
     let fieldIndex: Int64
     // Body entries only: the focus type the chain continues on once the optic
-    // segment has been rebuilt.
+    // slot has been rebuilt.
     let focusType: String
     let forward: Tokens
     let backward: Tokens
@@ -459,7 +459,7 @@ private func shapeOf(shapes: HashMap<String, InlineShape>, typeName: String, at:
 // ===== registry parsing =====
 
 /// Captures the expression part of `{ params => EXPR }`, rejecting anything else.
-private func parseInlineBody(cur: InlineToks, what: String, slotCount: Int64): Tokens {
+private func parseInlineBody(cur: InlineToks, what: String, paramCount: Int64): Tokens {
     cur.expect(TokenKind.LCURL, "'{' starting " + what)
     let toks = cur.raw()
     let paramStart = cur.i
@@ -482,18 +482,18 @@ private func parseInlineBody(cur: InlineToks, what: String, slotCount: Int64): T
         throw DiagReportException(
             "${inlineMacroName}: ${what} has no '=>'",
             cur.curTokens(),
-            hint: inlineBodyHint(slotCount)
+            hint: inlineBodyHint(paramCount)
         )
     }
     let params = ArrayList<Token>()
     for (j in paramStart..arrow) {
         if (toks[j].kind == TokenKind.IDENTIFIER) { params.add(toks[j]) }
     }
-    if (params.size != slotCount) {
+    if (params.size != paramCount) {
         throw DiagReportException(
-            "${inlineMacroName}: ${what} binds ${params.size} names, expected ${slotCount}",
+            "${inlineMacroName}: ${what} binds ${params.size} names, expected ${paramCount}",
             cur.curTokens(),
-            hint: inlineBodyHint(slotCount)
+            hint: inlineBodyHint(paramCount)
         )
     }
     cur.i = arrow + 1
@@ -514,11 +514,11 @@ private func parseInlineBody(cur: InlineToks, what: String, slotCount: Int64): T
     return Tokens(exprToks)
 }
 
-private func inlineBodyHint(slotCount: Int64): String {
-    if (slotCount == 1) {
-        "write it as { ${inlineSourceSlot} => EXPR }"
+private func inlineBodyHint(paramCount: Int64): String {
+    if (paramCount == 1) {
+        "write it as { ${inlineSourceParam} => EXPR }"
     }
-    "write it as { ${inlineSourceSlot}, ${inlineFocusSlot} => EXPR }; use _ to skip a slot"
+    "write it as { ${inlineSourceParam}, ${inlineFocusParam} => EXPR }; use _ to skip a parameter"
 }
 
 private func parseInlineRegistry(
@@ -643,7 +643,7 @@ private func missingRegistryDiag(tok: Token): DiagReportException {
         tok.toTokens(),
         hint: "a derived field optic registers as registry: (${tok.value}, OwnerType, field); "
             + "a hand-written one registers as registry: (${tok.value}, ${inlineBodyKeyword}, "
-            + "{ ${inlineSourceSlot} => FWD }, { ${inlineSourceSlot}, ${inlineFocusSlot} => BWD }, FocusType)"
+            + "{ ${inlineSourceParam} => FWD }, { ${inlineSourceParam}, ${inlineFocusParam} => BWD }, FocusType)"
     )
 }
 
@@ -832,7 +832,7 @@ private func access(base: Tokens, field: String): Tokens {
 
 /// The payload type of an Option-typed field, found by its declared type.
 ///
-/// A `?.` segment needs this when the *owner* is the Option rather than one of
+/// A `?.` slot needs this when the *owner* is the Option rather than one of
 /// its fields: `o.m?.a` unwraps `o.m`, so the chain resumes on `InlBox`.
 private func optionInnerOf(shapes: HashMap<String, InlineShape>, typeName: String): ?String {
     for ((_, shape) in shapes) {
@@ -958,7 +958,7 @@ private func resolveInlineSteps(
                     }
                     if (!kind.isPartial()) {
                         throw DiagReportException(
-                            "${inlineMacroName}: case '${tok.value}' needs a partial segment",
+                            "${inlineMacroName}: case '${tok.value}' needs a partial slot",
                             tok.toTokens(),
                             hint: "write '?.${tok.value}': an enum case cannot be focused totally"
                         )
@@ -1040,7 +1040,7 @@ private func resolveInlineSteps(
 
 /// The rebuild for steps `lo..steps.size`, entering at `src`.
 ///
-/// A partial segment decides whether the update happens at all, so its `match`
+/// A partial slot decides whether the update happens at all, so its `match`
 /// is hoisted over the *whole* chain: the hit arm carries every level, and the
 /// miss arm hands back the source as it was. Wrapping the levels above the
 /// partial around the `match` instead would keep the types right but allocate a
@@ -1186,15 +1186,15 @@ private func emitOuterWrap(
 /// source so the chain below can rebuild it, then the backward wraps the new
 /// focus back up.
 private func emitInlineBodyRebuild(st: InlineStep, names: InlineNames, src: Tokens, target: Tokens): Tokens {
-    let oldFocus = substituteInlineSlots(st.forward, src, word(inlineFocusSlot))
+    let oldFocus = substituteInlineParams(st.forward, src, word(inlineFocusParam))
     let newFocus = target
-    return substituteInlineSlots(st.backward, oldFocus, newFocus)
+    return substituteInlineParams(st.backward, oldFocus, newFocus)
 }
 
 /// The Option type an inline forward at `idx` evaluates to.
 ///
-/// Every partial segment threads one Option: `?.` unwraps without producing a
-/// nested Option of its own unless another partial segment follows it, which is
+/// Every partial slot threads one Option: `?.` unwraps without producing a
+/// nested Option of its own unless another partial slot follows it, which is
 /// how `@f` composes adjacent affines.
 private func inlineForwardOptionType(steps: ArrayList<InlineStep>, idx: Int64, finalType: String): String {
     var nested = false
@@ -1233,9 +1233,9 @@ private func emitInlineForward(
             let bound = names.fresh()
             let inner = match (st.forward.size == 0) {
                 case true => emitInlineForward(steps, shapes, names, idx + 1, bound.toTokens(), chainFinal: chainFinal)
-                case false => substituteInlineSlots(st.forward, bound.toTokens(), word(inlineFocusSlot))
+                case false => substituteInlineParams(st.forward, bound.toTokens(), word(inlineFocusParam))
             }
-            // When a later partial segment follows, the rest of the chain already
+            // When a later partial slot follows, the rest of the chain already
             // produces the Option; wrapping it again would nest the channels.
             let hit = if (inlineForwardOptionType(steps, idx, chainFinal) == chainFinal) {
                 some(inner)
@@ -1253,11 +1253,11 @@ private func emitInlineForward(
                 case 1 => word(binders[0].value)
                 case _ => tupleOf(binders.toArray().map({ it => word(it.value) }))
             }
-            // Segments below the case read the payload, not the enum: a case
+            // Slots below the case read the payload, not the enum: a case
             // holding a struct continues into that struct's fields, and a case
             // holding a tuple continues into its elements. The payload is
             // therefore the subject for the rest of the walk, and the same
-            // Option-nesting rule as a partial segment decides whether this
+            // Option-nesting rule as a partial slot decides whether this
             // level opens a channel or lets a later one.
             let below = emitInlineForward(steps, shapes, names, idx + 1, payload, chainFinal: chainFinal)
             let hit = if (inlineForwardOptionType(steps, idx, chainFinal) == chainFinal) {
@@ -1268,20 +1268,20 @@ private func emitInlineForward(
             return matchCase(src, c.name, binders, hit,
                              noneTokOf(inlineForwardOptionType(steps, idx, chainFinal)))
         case InlineStepKind.Body =>
-            let oldFocus = substituteInlineSlots(st.forward, src, word(inlineFocusSlot))
+            let oldFocus = substituteInlineParams(st.forward, src, word(inlineFocusParam))
             return emitInlineForward(steps, shapes, names, idx + 1, oldFocus, chainFinal: chainFinal)
     }
 }
 
-/// Replaces the `source`/`focus` slot names in a registered body with real
+/// Replaces the `source`/`focus` parameter names in a registered body with real
 /// token runs.
-private func substituteInlineSlots(body: Tokens, src: Tokens, focus: Tokens): Tokens {
+private func substituteInlineParams(body: Tokens, src: Tokens, focus: Tokens): Tokens {
     let out = Tokens()
     for (i in 0..body.size) {
         let t = body[i]
-        if (t.kind == TokenKind.IDENTIFIER && t.value == inlineSourceSlot) {
+        if (t.kind == TokenKind.IDENTIFIER && t.value == inlineSourceParam) {
             out.append(src)
-        } else if (t.kind == TokenKind.IDENTIFIER && t.value == inlineFocusSlot) {
+        } else if (t.kind == TokenKind.IDENTIFIER && t.value == inlineFocusParam) {
             out.append(focus)
         } else {
             out.append(t)
@@ -1293,7 +1293,7 @@ private func substituteInlineSlots(body: Tokens, src: Tokens, focus: Tokens): To
 // ===== sibling blocks =====
 
 /// A block entry resolved against the anchor type: the steps down to the field
-/// it writes, plus the tuple slot holding its target.
+/// it writes, plus the tuple element holding its target.
 private class BlockWrite {
     let steps: ArrayList<InlineStep>
     let inner: ?BlockSpec
@@ -1450,7 +1450,7 @@ private func guardedMatch(
             }
             return matchCase(subject, c.name, [bound], onHit, onMiss)
         case _ => throw DiagReportException(
-            "${inlineMacroName}: a sibling block anchor cannot cross a partial segment",
+            "${inlineMacroName}: a sibling block anchor cannot cross a partial slot",
             st.forward.toTokens(),
             hint: "anchor the block on a value that is always there"
         )
@@ -1471,9 +1471,9 @@ private func blockHasPartialStep(steps: ArrayList<InlineStep>): Bool {
 
 private func blockStepUnsupported(w: BlockWrite, input: Tokens): Nothing {
     throw DiagReportException(
-        "${inlineMacroName}: a sibling block entry cannot cross a partial segment",
+        "${inlineMacroName}: a sibling block entry cannot cross a partial slot",
         input,
-        hint: "inline the partial segment as its own chain, then compare"
+        hint: "inline the partial slot as its own chain, then compare"
     )
 }
 
@@ -1783,7 +1783,7 @@ private func translateInline(
             }
             if (blockHasPartialStep(anchorSteps)) {
                 throw DiagReportException(
-                    "${inlineMacroName}: a sibling block anchor cannot cross a partial segment",
+                    "${inlineMacroName}: a sibling block anchor cannot cross a partial slot",
                     input,
                     hint: "read the value out first, then build the block from the non-Option value"
                 )
@@ -1810,7 +1810,7 @@ private func translateInline(
             }
             if (blockHasPartialStep(anchorSteps)) {
                 throw DiagReportException(
-                    "${inlineMacroName}: a sibling block anchor cannot cross a partial segment",
+                    "${inlineMacroName}: a sibling block anchor cannot cross a partial slot",
                     input,
                     hint: "read the value out first, then build the block from the non-Option value"
                 )
@@ -1844,7 +1844,7 @@ private func translateInline(
  * as `(name, OwnerType, field)`, which inlines to a field access, or a
  * hand-written one as `(name, body, { source => FWD }, { source, focus => BWD },
  * FocusType)`. Anything with no constructor-call equivalent -- prisms, affine
- * and iso segments, block updates, and chains that mint an optic value -- is a
+ * and iso slots, block updates, and chains that mint an optic value -- is a
  * compile error rather than a silent fallback to runtime dispatch.
  */
 public macro InlineOptics(attr: Tokens, input: Tokens): Tokens {

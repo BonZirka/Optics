@@ -1,147 +1,105 @@
-# Prisms
+# Enum cases and partial access
 
-A lens is a total focus: the part is *always* there, so a read cannot miss.
-A prism is the other bargain — a partial focus on a part that may not be
-there. Ask a `Square` for its `Circle` payload and there is nothing to hand
-back, so the prism answers in a type that can say so: the standard
-`Option<T>` everyone knows — `Some(payload)` on a match, `None` on a miss
-(see [first-class optics](../api/first-class.md)). A miss carries nothing:
-the source is the very value you passed in and it is untouched. The operator
-changes with it: `?.` marks a partial segment where `.` marks a total one.
+An enum case is available only when the source has that case. A read must
+therefore account for both a match and a miss.
 
-All the code below runs against one derived enum from the test suite,
-`Shape` — a `Circle(Nested)` or a `Square(Int64)` — where `Nested` is a
-one-field struct whose single field is `n`.
+The following declarations are used throughout this page:
 
-## Deriving a prism
+```cangjie
+import lucida.*
+import lucida.macrodsl.*
+
+@DeriveOptics
+public struct FileInfo {
+    public FileInfo(public let name: String, public let size: Int64) {}
+}
+
+@DeriveOptics
+public enum Entry {
+    | Missing
+    | File(FileInfo)
+}
+```
+
+## Read a case
+
+Inside a function:
+
+```cangjie
+let entry = Entry.File(FileInfo("notes.txt", 120))
+let info = @f(entry?.File)
+let name = @f(entry?.File.name)
+```
+
+`info` is `Option<FileInfo>` and `name` is `Option<String>`. Both reads
+succeed for this value. If `entry` were `Entry.Missing`, both would return
+`None`.
+
+Use `?.File` for the case and `.name` for the payload's ordinary field.
+The partial result belongs to the whole read; you do not insert another
+`?.` before every subsequent field.
+
+## Update a matching case
+
+```cangjie
+let renamed = @f(entry?.File.name <- "draft.txt")
+let missing = Entry.Missing
+let unchanged = @f(missing?.File.name <- "draft.txt")
+```
+
+`renamed` is `Entry.File(FileInfo("draft.txt", 120))`.
+`unchanged` is still `Entry.Missing`. Both results have type `Entry`.
+
+Derived case optics have type `Affine<Entry, FileInfo>` when kept as values:
+
+```cangjie
+let file = @f(@ty(Entry)?.File)
+let updated = file.update(entry, FileInfo("draft.txt", 140))
+let stillMissing = file.update(missing, FileInfo("draft.txt", 140))
+```
+
+An affine update takes the source so it can preserve an unmatched case.
+
+## A prism also provides construction
+
+A prism's backward operation is named `build`. It constructs a source from
+a focus without consulting an existing source:
+
+```cangjie
+let file = Prism<Entry, FileInfo>(
+    { entry: Entry =>
+        match (entry) {
+            case File(info) => Some(info)
+            case Missing => Option<FileInfo>.None
+        }
+    },
+    { info: FileInfo => Entry.File(info) }
+)
+```
+
+`file.preview(entry)` tries to read a file. `file.build(info)` always
+constructs an `Entry.File`. There is no old entry to preserve in that call.
+This is the distinction between the `Prism` and `Affine` APIs.
+
+For an update that should preserve other cases, use the derived case optic
+or a partial DSL update. Do not substitute `build` for a guarded update.
+
+## Other enum payload shapes
+
+`@DeriveOptics` also handles cases with no payload and with several payloads:
 
 ```cangjie
 @DeriveOptics
-public enum Shape {
-    | Circle(Nested)
-    | Square(Int64)
+public enum ResultInfo {
+    | Pending
+    | Done(String, Int64)
 }
 ```
 
-One derive, one prism per case: `@DeriveOptics` emits a prism for every case
-of the enum, whatever its shape. `Circle` gets a prism focusing its `Nested`
-payload, `Square` one focusing its `Int64` — and the payload type derives the
-same way, which is what lets a chain keep going into `Nested`'s field `n`.
-(The library kinds a case optic as an *affine* — same partial `?.` contract,
-same miss-is-identity; [deriving](deriving.md) uses that name.)
+`@f(result?.Pending)` returns `Option<Unit>`. `@f(result?.Done)` returns
+`Option<(String, Int64)>`. Update the `Done` payload with a tuple of the same
+shape, or continue into its elements using `._0` and `._1`.
 
-A multi-payload case — `Cons(head, tail)`, say — derives a prism whose focus
-is the tuple of payloads, and a payloadless case focuses `Unit`, turning a
-read into a match check. The full rules are in [deriving](deriving.md).
-
-## Reading with ?.
-
-`?.` reads through a case that may not match. Pin one source of each case and
-read `Circle` out of both:
-
-```cangjie
-let c = Shape.Circle(Nested(3))
-let s = Shape.Square(2)
-@Assert(isSomeCircle(@f(c?.Circle), 3))
-@Assert(isNoneSquare(@f(s?.Circle)))
-```
-
-`@f(c?.Circle)` is a partial read: it evaluates to `Option<Nested>`.
-`c` is a `Circle`, so the answer is `Some(payload)` — the `Nested(3)` inside
-`c`. `s` is a `Square`, so the read misses and the answer is `None` — no
-object comes back at all; the original `s` is still right where you left it,
-untouched. The miss is a value, not an error.
-
-The two helpers spell out both sides:
-
-```cangjie
-func isSomeCircle(e: Option<Nested>, expectedN: Int64): Bool {
-    if (let Some(p) <- e) {
-        return p.n == expectedN
-    }
-    return false
-}
-
-// Mismatched-case forward is a miss: None, no object handed back.
-func isNoneSquare(e: Option<Int64>): Bool {
-    match (e) {
-        case None => return true
-        case _ => return false
-    }
-}
-```
-
-The same read works the other way around: `s?.Square` comes back `Some(2)`,
-and `c?.Square` — asking a circle for a square's payload — comes back `None`.
-
-## Writing — and what a miss does
-
-```cangjie
-let sq = Shape.Square(5)
-let updated = @f(sq?.Circle <- Nested(99))
-// updated is still Square(5)
-```
-
-`sq` is a `Square`; the prism aims at `Circle`. There is no `Circle` payload
-in `sq` to replace, so the write does the only honest thing: it returns the
-source unchanged. No error, no branch to guard the write — the miss is an
-identity, wired in by the kind. The suite checks it with a plain match:
-
-```cangjie
-var identityKept = false
-match (updated) {
-    case Square(v) => identityKept = v == 5
-    case _ => ()
-}
-@Assert(identityKept)
-```
-
-That is the lesson this page exists for: a partial write is unconditional.
-Write `@f(src?.Case <- newValue)` without checking anything first. When
-the case matches, the write rebuilds it around the new payload and you get a
-new value — nothing mutates (the matching side is the next section's write).
-When it misses, the same source comes back — nothing mutates either.
-
-## Chaining through a prism
-
-A prism composes with the lenses after it. `n` is a total segment — a lens on
-the payload — so the chain marks the partial step with `?.` and continues
-with `.`:
-
-```cangjie
-let c = Shape.Circle(Nested(3))
-let updated = @f(c?.Circle.n <- 7)
-// updated is Circle(Nested(7)); a Square source would stay untouched
-```
-
-On a `Circle` the write lands: `updated` is `Circle(Nested(7))`. The same
-write on a `Square` misses at `?.Circle` and returns the source untouched —
-the miss rule from the last section, with a lens riding after the prism:
-
-```cangjie
-let sq = Shape.Square(4)
-let untouched = @f(sq?.Circle.n <- 7)
-var untouchedOk = false
-match (untouched) {
-    case Square(v) => untouchedOk = v == 4
-    case _ => ()
-}
-@Assert(untouchedOk)
-```
-
-One expression, two outcomes, decided by the source alone: a rebuilt `Circle`
-or the untouched `Square` — and either way, nothing mutates.
-
-## Gotchas
-
-> **Gotcha:** `.Circle` (no `?.`) on a prism is a compile error — a total read
-> of a partial optic is impossible. Use `?.` on partial segments.
-
-## Where to go next
-
-- [Introduction to optics](../introduction-to-optics.md) — where the prism
-  sits among lenses, affines, isos and setters, and *a miss is an identity*
-  from the ideas side.
-- [The DSL reference](../api/dsl.md) — every `@f` form on one page.
-- [Deriving](deriving.md) — what `@DeriveOptics` generates for each type.
-- Next example: [chains](chains.md) — mixing `.` and `?.` in one chain.
+The [derivation reference](deriving.md) explains these shapes. The
+[composition reference](../api/composition.md) explains how a partial slot
+affects the kind of a longer path.

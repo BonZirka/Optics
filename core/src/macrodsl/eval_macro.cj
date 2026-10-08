@@ -21,7 +21,7 @@ private func lucidaDispatch(unfuse: Bool, input: Tokens): Tokens {
         reportCaughtDiag(e.tokens, e.message, e.hint)
         quote($input)
     } catch (e: Exception) {
-        reportCaughtDiag(input, "evaluation failed: ${e.message}", "an uncaught non-diagnostic exception; see docs/fix-plans/02")
+        reportCaughtDiag(input, "evaluation failed: ${e.message}", "an uncaught non-diagnostic exception; see docs/diagnostics.md#investigating-a-macro-failure")
         println("@STACK: ${e.getStackTrace()}")
         quote($input)
     }
@@ -50,7 +50,7 @@ private func isFusible(nodes: Array<CompositionNode>): Bool {
             // A first-class optic is allowed anywhere: emitFusedBackwardWalk
             // and emitFusedForwardWalk split the chain at it and re-anchor
             // the rest on its focus (its own tail handling remains for the
-            // last segment).
+            // last slot).
             case Optic(_) => ()
             case _ => return false
         }
@@ -114,7 +114,7 @@ private func evalOptics(expr: OpticalExpr, unfuse: Bool): Tokens {
 }
 
 // `needF`/`needB`: which halves the terminal continuation consumes — the
-// last segment emits only those (plus the expect upcast, which no terminal
+// last slot emits only those (plus the expect upcast, which no terminal
 // consumes).
 private func composeOptics(nodes: Array<CompositionNode>, needF: Bool, needB: Bool): ((Token, Token) -> Tokens) -> Tokens {
     let iter = nodes.iterator()
@@ -171,7 +171,7 @@ private func composeOptics(nodes: Array<CompositionNode>, needF: Bool, needB: Bo
         let tail: Bool = (pos == nodes.size - 1)
         match (node) {
             case Derived(input, _) =>
-                compositionCont = wireSegment(first, tail, needF, needB, magicCont, currentCont,
+                compositionCont = wireSlot(first, tail, needF, needB, magicCont, currentCont,
                     derivedSplices(input, 0), { i: UInt64 => derivedSplices(input, i) })
             case Type(input)        => throw DiagReportException(
                 "${mainMacroName}: @ty is only allowed at the start of a chain",
@@ -182,13 +182,13 @@ private func composeOptics(nodes: Array<CompositionNode>, needF: Bool, needB: Bo
                 input.toTokens()
             )
             case Optic(input)       =>
-                compositionCont = wireSegment(first, tail, needF, needB, magicCont, currentCont,
+                compositionCont = wireSlot(first, tail, needF, needB, magicCont, currentCont,
                     opticSplices(input, 0), { i: UInt64 => opticSplices(input, i) })
             case Coerce(input)      =>
-                compositionCont = wireSegment(first, tail, needF, needB, magicCont, currentCont,
+                compositionCont = wireSlot(first, tail, needF, needB, magicCont, currentCont,
                     coercionSplices(input, 0), { i: UInt64 => coercionSplices(input, i) })
             case UserDefined(name, targs, args, _) =>
-                compositionCont = wireSegment(first, tail, needF, needB, magicCont, currentCont,
+                compositionCont = wireSlot(first, tail, needF, needB, magicCont, currentCont,
                     userDefinedSplices(name, targs, args, 0),
                     { i: UInt64 => userDefinedSplices(name, targs, args, i) })
         }
@@ -213,7 +213,7 @@ private func isFusableChain(nodes: Array<CompositionNode>): Bool {
             // A first-class optic is allowed anywhere: emitFusedBackwardWalk
             // and emitFusedForwardWalk split the chain at it and re-anchor
             // the rest on its focus (its own tail handling remains for the
-            // last segment).
+            // last slot).
             case Optic(_) => ()
             case _ => return false
         }
@@ -221,7 +221,7 @@ private func isFusableChain(nodes: Array<CompositionNode>): Bool {
     return true
 }
 
-// Partial (Option-producing) segments: derived prisms and partially-marked
+// Partial (Option-producing) slots: derived prisms and partially-marked
 // user optics ('?.') return Option<A> and occupy the pinned prism slots; totally-marked
 // ('.') user optics walk like derived lenses.
 private func isPartialProducing(node: CompositionNode): Bool {
@@ -234,7 +234,7 @@ private func isPartialProducing(node: CompositionNode): Bool {
 
 // Which halves the walk consumes — the leaf bindings are demand-driven:
 // reads never bind backward halves, writes never bind what their fold does
-// not consume, and the deepest segment binds no next-hop magical.
+// not consume, and the deepest slot binds no next-hop magical.
 enum LeafWalk {
     | Forward
     | Backward
@@ -262,12 +262,12 @@ private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>, walk: LeafWal
     for (i in 1..n) {
         let idx: Int64 = Int64(i - 1)
         // Forward walks consume every forward; backward walks consume the
-        // forward of segment j only through its partial guard or a consumed
+        // forward of slot j only through its partial guard or a consumed
         // probe binding (see backwardProbeMask) — anything else is dead.
         let bindFwd: Bool = match (walk) {
             case Forward => true
             // A sibling-block tail consumes the owner probe, so every anchor
-            // segment's forward probe is live (forceForwardAll).
+            // slot's forward probe is live (forceForwardAll).
             case Backward => forceForwardAll || isPartialProducing(nodes[i]) || backwardProbeMask(nodes)[idx]
         }
         let bindBwd: Bool = match (walk) {
@@ -297,7 +297,7 @@ private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>, walk: LeafWal
                 // Tail-only: the first-class optic's forward/backward are
                 // pinned straight from the optic object — no registry, no
                 // magical threading. Its backward is a total (S, F) -> S
-                // call on the value entering the segment.
+                // call on the value entering the slot.
                 let fwdId = Token(IDENTIFIER, "__fwd${idx}")
                 let bwdId = Token(IDENTIFIER, "__bwd${idx}")
                 if (i != n - 1) {
@@ -322,7 +322,7 @@ private func emitLeafBindingsAndIds(nodes: Array<CompositionNode>, walk: LeafWal
                 fwdIds.add(Token(IDENTIFIER, "__fwd${idx}"))
                 bwdIds.add(Token(IDENTIFIER, "__bwd${idx}"))
             case _ => throw DiagReportException(
-                "${mainMacroName}: internal: unsupported segment in fused emission",
+                "${mainMacroName}: internal: unsupported slot in fused emission",
                 quote()
             )
         }
@@ -377,7 +377,7 @@ private func emitLensRunLambda(fwdIds: ArrayList<Token>, from: Int64, upto: Int6
 /// Emits the fused forward for a Derived-only chain containing 1..4 prisms.
 /// The whole walk lives inside pinPrismForwardK; the macro emits only
 /// top-level sibling lambdas (lens runs between prisms) whose parameter and
-/// return types are pinned by the pre-bound segment forward ids, so Cangjie
+/// return types are pinned by the pre-bound slot forward ids, so Cangjie
 /// can infer them. Mirrors the library's composed semantics: any prism miss
 /// short-circuits to None (source preserved), a full match yields Some(focus).
 private func emitPinnedPrismForward(nodes: Array<CompositionNode>, fwdIds: ArrayList<Token>, source: Expr): Tokens {
@@ -447,9 +447,9 @@ private func buildBackwardWalk(
         backwardInner = match (nodes[bi + 1]) {
             case Coerce(_) => quote($bwdId($backwardInner))
             case UserDefined(_, _, _, total) =>
-                // Total-marked segments go through the registry-gated apply so a
+                // Total-marked slots go through the registry-gated apply so a
                 // '.'-marked PRISM write (unconditional rebuild on miss) fails to
-                // compile; partial-marked segments accept either backward arity.
+                // compile; partial-marked slots accept either backward arity.
                 if (total) {
                     let opticsId = Token(IDENTIFIER, "__optics${Int64(bi)}")
                     quote($bwdApplyTotalCallexprId($opticsId, $bwdId, $(intermediates[bi]), $backwardInner))
@@ -503,10 +503,10 @@ private func emitFusedForwardWalk(nodes: Array<CompositionNode>, source: Expr): 
             }()
         )
     }
-    if (countPartialSegments(nodes) == 0) {
+    if (countPartialSlots(nodes) == 0) {
         // All-plain chain (pure lens, or lens/iso mixes): direct nested calls.
-        // The READ walk runs through gated copies of the segment forwards so
-        // the operator mark is checked against each segment's kind registry
+        // The READ walk runs through gated copies of the slot forwards so
+        // the operator mark is checked against each slot's kind registry
         // (writes keep the ungated forwards: a '.'-write through an affine is
         // legal — its backward is sourceful).
         let (allBindings, fwdIds, _) = emitLeafBindingsAndIds(nodes, LeafWalk.Forward)
@@ -528,7 +528,7 @@ private func emitFusedForwardWalk(nodes: Array<CompositionNode>, source: Expr): 
         )
     } else {
         // Prism, affine, or non-lens chain
-        if (!isFusableChain(nodes) || countPartialSegments(nodes) > 16) {
+        if (!isFusableChain(nodes) || countPartialSlots(nodes) > 16) {
             // Non-fusable chains, or more pinned slots than the generated
             // walkers support (see @GeneratePrismForward) — library composition
             return composeOptics(nodes, true, false)({ forward: Token, _ : Token =>
@@ -547,9 +547,9 @@ private func emitFusedForwardWalk(nodes: Array<CompositionNode>, source: Expr): 
 }
 
 // Emits `let __gfwdI = __fwdApplyTotal|Partial(__opticsI, __fwdI)` for every
-// segment: a registry-checked identity for READ walks. Total-marked segments
+// slot: a registry-checked identity for READ walks. Total-marked slots
 // gate through Lenses/Isos (a Prisms/Affines registry is a '.'-on-partial
-// mis-mark); partial-marked segments gate through Prisms/Affines (a
+// mis-mark); partial-marked slots gate through Prisms/Affines (a
 // Lenses/Isos registry is a '?.'-on-total mis-mark). Strict-deprecated
 // overloads turn mis-marks into bespoke errors mid-chain or at the tail.
 private func emitFwdGateBindings(nodes: Array<CompositionNode>, fwdIds: ArrayList<Token>): (Tokens, ArrayList<Token>) {
@@ -577,7 +577,7 @@ private func emitFwdGateBindings(nodes: Array<CompositionNode>, fwdIds: ArrayLis
     return (bindings, gatedIds)
 }
 
-private func countPartialSegments(nodes: Array<CompositionNode>): Int64 {
+private func countPartialSlots(nodes: Array<CompositionNode>): Int64 {
     var count: Int64 = 0
     for (i in 1..nodes.size) {
         if (isPartialProducing(nodes[i])) {
@@ -677,7 +677,7 @@ private func emitBlockBackwardWalk(
     let (anchorBindings, fwdIds, bwdIds) = emitLeafBindingsAndIds(anchorNodes, LeafWalk.Backward, forceForwardAll: true)
     let src = idTok("src")
     let anchorCount = anchorNodes.size - 1
-    // A partial anchor tail (an affine or prism segment) makes the owner
+    // A partial anchor tail (an affine or prism slot) makes the owner
     // exist only on a forward hit: the last probe becomes a Some-guard, the
     // block applies on the hit and the write is an identity on the miss.
     let partialTail = isPartialProducing(anchorNodes[anchorCount])
@@ -691,14 +691,14 @@ private func emitBlockBackwardWalk(
     } else {
         src
     }
-    // Values entering anchor segments: [src, t0, ..., t_{anchorCount-2}].
+    // Values entering anchor slots: [src, t0, ..., t_{anchorCount-2}].
     let intermediates = ArrayList<Token>()
     intermediates.add(src)
     for (j in 0..anchorCount - 1) {
         intermediates.add(Token(IDENTIFIER, "__t${j}"))
     }
     // Anchor-chain forward probes, bound inside the shell. For a partial
-    // tail the last segment's probe IS the guard.
+    // tail the last slot's probe IS the guard.
     var probeStmts = quote()
     var probePrev = src
     let probeCount = if (partialTail) { anchorCount - 1 } else { anchorCount }
@@ -912,7 +912,7 @@ private func emitFusedBackwardWalk(nodes: Array<CompositionNode>, source: Expr, 
     let src = idTok("src")
     let fcs = idTok("fcs")
 
-    // Values entering each segment: [src, t0, ..., t_{n-1}]; the backward fold
+    // Values entering each slot: [src, t0, ..., t_{n-1}]; the backward fold
     // consumes them right-to-left. Prism payloads bind t_i in the guard pattern.
     let intermediates = ArrayList<Token>()
     intermediates.add(src)
@@ -931,10 +931,10 @@ private func emitFusedBackwardWalk(nodes: Array<CompositionNode>, source: Expr, 
     )
 }
 
-/// Which total segments' forward probes (`__tI`) have a consumer in the
-/// fused backward walk: the next probe binding (`fwdI+1(__tI)`) or segment
+/// Which total slots' forward probes (`__tI`) have a consumer in the
+/// fused backward walk: the next probe binding (`fwdI+1(__tI)`) or slot
 /// I+1's fold row — every row reads the value entering it except Coerce,
-/// whose backward is sourceless. The deepest segment never binds. Binding
+/// whose backward is sourceless. The deepest slot never binds. Binding
 /// an unconsumed probe is dead work and trips the unused-variable warning.
 /// The mask is independent of the walk's `from` offset: entry J depends
 /// only on entries J+1.., so both the leaf binder and the recursive body
@@ -956,7 +956,7 @@ private func backwardProbeMask(nodes: Array<CompositionNode>): Array<Bool> {
     return mask
 }
 
-/// Emits the guarded forward walk plus right-to-left backward fold for segments
+/// Emits the guarded forward walk plus right-to-left backward fold for slots
 /// `from..n-1`, consuming the value named `enterTok`. Derived backwards are all
 /// `(T_in, focus) -> T_in` with prism guards baked in, so a prism miss simply
 /// yields the original source; every emitted type is concrete. For pure lens
@@ -977,7 +977,7 @@ private func emitFusedBackwardBody(
     var i = from
     let bindProbe = backwardProbeMask(nodes)
     while (i < n) {
-        // Partial segments (prisms and affines) need their forward
+        // Partial slots (prisms and affines) need their forward
         // unwrapped in the backward walk too — a miss keeps the source as-is.
         if (isPartialProducing(nodes[i + 1])) { break }
         if (i + 1 < n && bindProbe[i]) {
@@ -999,7 +999,7 @@ private func emitFusedBackwardBody(
             $fold
         )
     }
-    // Segment i is partial: its payload binds t_i; a miss keeps the source
+    // Slot i is partial: its payload binds t_i; a miss keeps the source
     // as-is. A TRAILING partial has no consumer for the payload (its
     // backward consumes the value entering it) — bind nothing.
     let tId = Token(IDENTIFIER, "__t${Int64(i)}")
@@ -1017,23 +1017,23 @@ private func emitFusedBackwardBody(
     )
 }
 
-// ===== Segment emission (unified start/mid chain walkers) =====
+// ===== Slot emission (unified start/mid chain walkers) =====
 //
-// Every non-anchor segment kind (Derived, Optic, Coerce, UserDefined) emits the
-// same shape: bind the registry (downcast), bind the segment's forward/backward,
-// and hand the next magical expression to the continuation. A START segment
-// binds plain copies; a MID segment first upcasts the expected registry and
+// Every non-anchor slot kind (Derived, Optic, Coerce, UserDefined) emits the
+// same shape: bind the registry (downcast), bind the slot's forward/backward,
+// and hand the next magical expression to the continuation. A START slot
+// binds plain copies; a MID slot first upcasts the expected registry and
 // composes with the accumulated forward/backward. All per-kind differences live
 // entirely in the spliced expressions built by the *Splices functions below.
 
 // Everything the two emission templates splice, for one (kind, index) pair.
-private struct SegmentSplices {
+private struct SlotSplices {
     let currMagical: Token
     let opticsId: Token
     let fwdId: Token
     let bwdId: Token
-    // Optic segments anchor themselves: no incoming magical binding is emitted,
-    // and their downcast registry is consumed only by a FOLLOWING segment —
+    // Optic slots anchor themselves: no incoming magical binding is emitted,
+    // and their downcast registry is consumed only by a FOLLOWING slot —
     // never by a tail.
     let bindsCurrMagical: Bool
     let opticsIdUsedAtTail: Bool
@@ -1058,19 +1058,19 @@ private struct SegmentSplices {
     }
 }
 
-private func segmentIds(index: UInt64): (Token, Token, Token, Token) {
+private func slotIds(index: UInt64): (Token, Token, Token, Token) {
     (Token(IDENTIFIER, "magic${index}"),
      Token(IDENTIFIER, "optics${index}"),
      Token(IDENTIFIER, "optics${index}ImplForward"),
      Token(IDENTIFIER, "optics${index}ImplBackward"))
 }
 
-private func derivedSplices(input: Token, index: UInt64): SegmentSplices {
-    let (currMagical, opticsId, fwdId, bwdId) = segmentIds(index)
+private func derivedSplices(input: Token, index: UInt64): SlotSplices {
+    let (currMagical, opticsId, fwdId, bwdId) = slotIds(index)
     let accessForward  = Token(IDENTIFIER, "__${input.value}_impl_forward")
     let accessBackward = Token(IDENTIFIER, "__${input.value}_impl_backward")
     let accessMagic = Token(IDENTIFIER, "__${input.value}_optics")
-    SegmentSplices(currMagical, opticsId, fwdId, bwdId, true, true,
+    SlotSplices(currMagical, opticsId, fwdId, bwdId, true, true,
         quote($currMagical.__downcast($currMagical)),
         quote($opticsId.$accessForward),
         quote($opticsId.$accessBackward),
@@ -1079,8 +1079,8 @@ private func derivedSplices(input: Token, index: UInt64): SegmentSplices {
 
 // START: plain registry + ungated forward/backward bindings. At the tail the
 // terminal continuation consumes only the halves it demands, and an Optic
-// segment's downcast registry has no consumer at all.
-private func unwrapStart(splices: SegmentSplices, tail: Bool, needF: Bool, needB: Bool): (Tokens) -> ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens {
+// slot's downcast registry has no consumer at all.
+private func unwrapStart(splices: SlotSplices, tail: Bool, needF: Bool, needB: Bool): (Tokens) -> ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens {
     { currMagicalExpr: Tokens =>
         { cont: (Tokens, Token, Token, Token, UInt64) -> Tokens =>
             let prelude = if (splices.bindsCurrMagical) {
@@ -1113,7 +1113,7 @@ private func unwrapStart(splices: SegmentSplices, tail: Bool, needF: Bool, needB
 // MID: upcast the expected registry, compose with the accumulated halves.
 // At the tail the upcast result and the half the terminal does not demand
 // are not emitted.
-private func unwrapMid(splices: SegmentSplices, currMagicalExpr: Tokens, expectOptics: Token, forward: Token, backward: Token, index: UInt64, tail: Bool, needF: Bool, needB: Bool): ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens {
+private func unwrapMid(splices: SlotSplices, currMagicalExpr: Tokens, expectOptics: Token, forward: Token, backward: Token, index: UInt64, tail: Bool, needF: Bool, needB: Bool): ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens {
     let newExpect = Token(IDENTIFIER, "__expect${index}")
     { cont: (Tokens, Token, Token, Token, UInt64) -> Tokens =>
         let prelude = if (splices.bindsCurrMagical) {
@@ -1143,18 +1143,18 @@ private func unwrapMid(splices: SegmentSplices, currMagicalExpr: Tokens, expectO
     }
 }
 
-// Wires one segment into the composition CPS: START segments anchor on the
-// magicCont chain, MID segments thread the accumulated
+// Wires one slot into the composition CPS: START slots anchor on the
+// magicCont chain, MID slots thread the accumulated
 // (magical, expected-registry, forward, backward, index) state.
-private func wireSegment(
+private func wireSlot(
     first: Bool,
     tail: Bool,
     needF: Bool,
     needB: Bool,
     magicCont: ((Tokens) -> Tokens) -> Tokens,
     currentCont: ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens,
-    startSplices: SegmentSplices,
-    midSplices: (UInt64) -> SegmentSplices
+    startSplices: SlotSplices,
+    midSplices: (UInt64) -> SlotSplices
 ): ((Tokens, Token, Token, Token, UInt64) -> Tokens) -> Tokens {
     if (first) {
         { cont: (Tokens, Token, Token, Token, UInt64) -> Tokens =>
@@ -1189,33 +1189,33 @@ private func unwrapTypeOf(input: Tokens): ((Tokens) -> Tokens) -> Tokens {
     }
 }
 
-private func opticSplices(input: Token, index: UInt64): SegmentSplices {
-    let (currMagical, opticsId, fwdId, bwdId) = segmentIds(index)
-    SegmentSplices(currMagical, opticsId, fwdId, bwdId, false, false,
+private func opticSplices(input: Token, index: UInt64): SlotSplices {
+    let (currMagical, opticsId, fwdId, bwdId) = slotIds(index)
+    SlotSplices(currMagical, opticsId, fwdId, bwdId, false, false,
         quote(magicFirstClassDowncast($input)),
         quote($forwardFieldId($input)),
         quote($backwardFieldId($input)),
         quote(magicFirstClass($input)))
 }
 
-private func coercionSplices(input: TypeNode, index: UInt64): SegmentSplices {
-    let (currMagical, opticsId, fwdId, bwdId) = segmentIds(index)
+private func coercionSplices(input: TypeNode, index: UInt64): SlotSplices {
+    let (currMagical, opticsId, fwdId, bwdId) = slotIds(index)
     let nextMagicalExpr = quote($magicCallexprId<$input>())
-    SegmentSplices(currMagical, opticsId, fwdId, bwdId, true, true,
+    SlotSplices(currMagical, opticsId, fwdId, bwdId, true, true,
         quote($downcastMethodCoerceId($currMagical, $nextMagicalExpr)),
         quote($opticsId.$coerceForwardId($currMagical, $nextMagicalExpr)),
         quote($opticsId.$coerceBackwardId($currMagical, $nextMagicalExpr)),
         nextMagicalExpr)
 }
 
-private func userDefinedSplices(name: Token, targs: ArrayList<TypeNode>, args: ArrayList<Argument>, index: UInt64): SegmentSplices {
-    let (currMagical, opticsId, fwdId, bwdId) = segmentIds(index)
+private func userDefinedSplices(name: Token, targs: ArrayList<TypeNode>, args: ArrayList<Argument>, index: UInt64): SlotSplices {
+    let (currMagical, opticsId, fwdId, bwdId) = slotIds(index)
     let accessForward  = Token(IDENTIFIER, "__method_${name.value}_impl_forward")
     let accessBackward = Token(IDENTIFIER, "__method_${name.value}_impl_backward")
     let accessMagic = Token(IDENTIFIER, "__method_${name.value}_optics")
     let downcastName = Token(IDENTIFIER, "__downcast_method_${name.value}")
     let gen = generics(targs)
-    SegmentSplices(currMagical, opticsId, fwdId, bwdId, true, true,
+    SlotSplices(currMagical, opticsId, fwdId, bwdId, true, true,
         quote($currMagical.$downcastName$gen($currMagical)),
         quote($opticsId.$accessForward$gen($currMagical, $(commaSeparated(args)))),
         quote($opticsId.$accessBackward$gen($currMagical, $(commaSeparated(args)))),

@@ -1,93 +1,142 @@
-# Getting Started
+# Getting started
 
-One complete, runnable program gets you from zero to nested immutable updates.
-Save the file, build it with `cjpm build -i`, and run it.
+This guide builds a small program that changes a person's city while retaining
+the original value. It then updates one person in an array. You need a Cangjie
+SDK with `cjc` and `cjpm` available in your shell.
 
-## A runnable example
+The commands and program were checked with Cangjie 1.0.0 on macOS arm64. This
+is a verified setup, not a claim that every SDK version is compatible.
+
+## Create a consumer project
+
+Keep your checkout of this repository and the new project next to each other:
+
+```text
+workspace/
+  Optics/
+    core/
+    stdlib/
+  optics_guide/
+    cjpm.toml
+    src/
+      main.cj
+```
+
+From `workspace`, create the source directory:
+
+```sh
+mkdir -p optics_guide/src
+```
+
+Save this as `optics_guide/cjpm.toml`:
+
+```toml
+[package]
+name = "optics_guide"
+version = "0.1.0"
+cjc-version = "1.0.0"
+output-type = "executable"
+src-dir = "src"
+
+[dependencies]
+lucida = { path = "../Optics/core" }
+lucida_stdlib = { path = "../Optics/stdlib" }
+```
+
+The paths point to the workspace members. `lucida` provides the optic types
+and macros. `lucida_stdlib` adds the array selections used below.
+
+## Write the program
+
+Save this as `optics_guide/src/main.cj`:
 
 ```cangjie
-package getting_started
+package optics_guide
 
 import lucida.*
-import lucida_macro.*
-import lucida.stdlib.*
+import lucida.macrodsl.*
+import lucida_stdlib.*
 
 @DeriveOptics
 public struct Address {
-    public Address(public let street: String, public let zip: Int64) { }
+    public Address(public let city: String, public let zip: Int64) {}
 }
 
 @DeriveOptics
-public struct Employee {
-    public Employee(public let name: String, public let salary: Int64, public let address: Address) { }
-}
-
-@DeriveOptics
-public struct Company {
-    public Company(public let name: String, public let employees: Array<Employee>) { }
+public struct Person {
+    public Person(public let name: String, public let address: Address) {}
 }
 
 main() {
-    let co = Company(
-        "Acme",
-        [
-            Employee("Ada", 100000, Address("1 High St", 10001)),
-            Employee("Bob", 80000, Address("2 High St", 10002)),
-        ],
-    )
-    let ada = co.employees[0]
+    let ada = Person("Ada", Address("London", 10001))
 
-    // One expression reaching several levels deep (all lenses — always present).
-    println(@f(ada.address.street))    // res: 1 High St
+    let city = @f(ada.address.city)
+    let moved = @f(ada.address.city <- "Oslo")
+    println(city)
+    println(moved.address.city)
+    println(ada.address.city)
 
-    // Update the first employee's salary; the array is untouched otherwise.
-    let raised = @f(co.employees?.at(0).salary <- 120000)
-    println(raised.employees[0].salary)     // res: 120000
-    println(co.employees[0].salary)         // res: 100000
+    let people = [ada, Person("Bo", Address("Paris", 20002))]
+    let updated = @f(people?.at(1).address.city <- "Rome")
+    println(updated[1].address.city)
+    println(people[1].address.city)
 
-    // selectFirst updates only the matching element.
-    let moved = @f(co.employees?.selectFirst({ e: Employee => e.name == "Bob" }).address.zip <- 20002)
-    println(moved.employees[1].address.zip) // res: 20002
-    println(moved.employees[0].address.zip) // res: 10001
+    let missing = @f(people?.at(5).name)
+    match (missing) {
+        case Some(name) => println(name)
+        case None => println("No person at index 5")
+    }
 }
 ```
 
-## What's happening
+Load your SDK environment using its installation instructions. For an SDK
+that provides `envsetup.sh`, the commands have this form:
 
-**Deriving.** `@DeriveOptics` registers optics for each public `let` field of a
-struct, so `Employee` gets optics for `name`, `salary`, and `address` — and
-`Address` for `street` and `zip`.
-
-**Reading.** `@f(ada.address.street)` walks the chain `ada.address.street`
-and evaluates to the value:
-
-```
-// res: 1 High St
+```sh
+source /path/to/cangjie/envsetup.sh
+cd optics_guide
+cjpm build -i
+cjpm run
 ```
 
-**Writing.** `@f(<chain> <- <newValue>)` returns a *new* value with the
-focused part replaced. The array updates show two ways to aim a chain:
+Expected output:
 
-- `co.employees?.at(0).salary <- 120000` — the first element's salary:
-  `res: 120000` on the result, `res: 100000` on the original.
-- `co.employees?.selectFirst({ e => e.name == "Bob" }).address.zip <- 20002` —
-  only the matching element changes; `co.employees[0]` is untouched.
+```text
+London
+Oslo
+London
+Rome
+Paris
+No person at index 5
+```
 
-**The whole point:** nothing ever mutates. Each update builds a new `Company`
-from the old one; `co` keeps its original values throughout. Precisely because
-updates are immutable, updating nested data is safe and easy — the parts you
-didn't touch are carried over for you.
+## Read the expressions
 
-## Next steps
+`@DeriveOptics` generates operations for the fields in each primary
+constructor. Those operations tell `@f` how to read a field and how to
+reconstruct its containing record with a replacement.
 
-- [Introduction to optics](introduction-to-optics.md) — why lenses, prisms, and
-  friends exist, and the ideas behind the examples.
-- Then the examples in order: [lenses](examples/lenses.md),
-  [prisms](examples/prisms.md), [chains](examples/chains.md),
-  [deriving](examples/deriving.md), [user optics](examples/user-optics.md).
+`@f(ada.address.city)` returns a `String`. For this read, ordinary
+`ada.address.city` would also work. The optic syntax becomes useful when the
+same path is used for an update or combined with a selection that can fail.
 
----
+`@f(ada.address.city <- "Oslo")` returns a `Person`. It constructs the new
+address and then a person containing that address. `<-` is syntax interpreted
+by the macro; the expression does not assign to `ada`.
 
-Curious what `@f` expands to? It is a compile-time macro. See
-[registry plumbing](architecture/registry-plumbing.md) for the internals — not
-required reading to use the library.
+`people?.at(1)` selects an array element if the index is valid. The `?.`
+marks `at` as a partial operation. `.address.city` continues through ordinary
+fields after that selection succeeds. The array optic copies the array
+before replacing the element.
+
+A read through a partial slot returns `Option`. An update through a
+partial slot returns the whole source type: on a miss, it preserves the
+source. You therefore do not need to handle `None` merely to attempt an
+update.
+
+## Continue
+
+[Understanding optics](introduction-to-optics.md) explains how reads and
+reconstruction form a reusable operation. [Longer paths and blocks](examples/chains.md)
+adds predicate selection and several updates in one expression. Keep the
+[`@f` reference](api/macros/f.md) available when looking up a particular form.

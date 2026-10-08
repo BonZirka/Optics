@@ -1,157 +1,100 @@
-# Chains
+# Longer paths and blocks
 
-A chain is one focus spelled left to right — a source value, then segment
-after segment, down to the part you care about: `o.customer.address.city.name`
-on the [lenses](lenses.md) page, `sq?.Circle.n` on the [prisms](prisms.md)
-page. Each page used one kind of segment; real data mixes them — an array
-inside a struct, a field inside a matched case — so this page is about the
-operator each segment carries. However long the chain, it is one optic, not a
-sequence of steps: one expression reads it, one expression writes it, and one
-new value comes back — nothing mutates.
+A path can combine record fields, enum cases, array selections, and custom
+optics. Each slot starts from the value selected by the preceding slot.
 
-## The two operators
+These snippets use the `Person` and `Address` declarations from
+[Getting started](../getting-started.md), with all three imports shown there.
 
-Every segment is marked with the guarantee the optic behind it makes:
-
-| Operator | Meaning | Segments it matches |
-|---|---|---|
-| `.` | total — the part is always there; read and write cannot miss | derived lens fields, isos — e.g. `coerce<T>()`, `.`-marked user optics |
-| `?.` | partial — a read evaluates to `Option`: `Some(payload)` on a match, `None` on a miss | derived case optics, `Array.at`, `Array.selectFirst`, `?.`-marked user optics |
-
-The mark is not decoration — it names the kind, and the compiler checks it.
-A partial write is unconditional: when the segment misses, the write returns
-the source unchanged. The miss is an identity, wired in by the kind. The
-library's `at` and `selectFirst` are partial, so the segment that uses either
-carries `?.` — and total segments after it go back to `.`.
-
-## Mixed chains
-
-Start with an array of numbers and one index:
+## Select an array element
 
 ```cangjie
-let nums = [10, 20, 30]
-let bumped = @f(nums?.at(1) <- 99)
-@Assert(bumped[0] == 10)
-@Assert(bumped[1] == 99)
-@Assert(bumped[2] == 30)
-@Assert(bumped.size == 3)
-// immutability: the caller's array must be untouched (CoW aliasing bug class)
-@Assert(nums[1] == 20)
+let people = [
+    Person("Ada", Address("London", 10001)),
+    Person("Bo", Address("Paris", 20002))
+]
+let moved = @f(people?.at(1).address.city <- "Rome")
 ```
 
-`at` takes an index, and an index can be out of bounds — `nums` has no
-element at index `7` — so the segment is partial and carries `?.`. In bounds,
-the write lands: `bumped` is a new array
-with `99` at index `1`, size still `3`, both neighbors carried over. And
-`nums[1]` is still `20` — the write builds a new array rather than editing the
-one it was given, so the caller's array comes out untouched; that is the
-aliasing hazard copy-on-write semantics exist to prevent.
+`at(1)` is partial because the index may not exist. The address and city
+fields are total once a person has been selected. On a miss, the whole
+update preserves the original array.
 
-Out of bounds, there is no element to replace, so the same write returns the
-source unchanged:
+`at` checks the index before writing and copies the array before replacement.
+It does not mutate the input array. A negative index or an index past the end
+is a miss.
+
+## Select by a condition
 
 ```cangjie
-let untouched = @f(nums?.at(7) <- 99)
-@Assert(untouched.size == 3)
-@Assert(untouched[0] == 10 && untouched[1] == 20 && untouched[2] == 30)
+let moved = @f(people?.selectFirst({ p: Person => p.name == "Bo" }).address.city <- "Rome")
 ```
 
-No guard, no branch: write through the focus and let the kind decide. (The
-reverse mix — a field first, then the array inside it — works the same; see
-[getting started](../getting-started.md).) The read side says which way it
-went, in the same `Option` the prisms page introduced:
+`selectFirst` updates the first matching element. Later matches retain their
+old values. If no element matches, the returned array has the same elements
+as the source.
+
+Use a predicate whose result is stable and has no side effects. The current
+implementation may evaluate it during both selection and reconstruction;
+the number of predicate calls is not a useful application contract.
+
+## Read or update several fields
+
+A block lists paths relative to one source:
 
 ```cangjie
-// source-form read returns Option: Some(focus) / None
-var noneOk = false
-if (let None <- @f(nums?.at(7))) {
-    noneOk = true
-}
-@Assert(noneOk)
-var rightOk = false
-if (let Some(fv) <- @f(nums?.at(0))) {
-    rightOk = fv == 10
-}
-@Assert(rightOk)
+let person = people[0]
+let fields = @f(person.{ .name; .address.city })
+let changed = @f(person.{ .name; .address.city } <- ("Adele", "Oslo"))
 ```
 
-`nums?.at(7)` misses, so the read is `None` — nothing handed back; the
-original array is untouched. `nums?.at(0)` matches, so it is `Some(fv)` — the focused element,
-`10`.
+`fields` is a `(String, String)`. Replacement values follow the same order
+as the block entries. A block with two or more entries requires a tuple
+literal at the outer update level. A block with one entry returns or accepts
+a single value.
 
-## selectFirst
+Entries are separated by semicolons. Each entry starts with a field access,
+including a tuple element such as `._0`.
 
-`selectFirst` aims at the first element of an array that matches a predicate.
-The fixture is a derived struct — `Employee2` has a `name` and a `salary` —
-and an array holding three employees, the first two named `"dup"`:
+## Group a shared path
 
 ```cangjie
-let staff = ArrayList<Employee2>()
-staff.add(Employee2("dup", 100))
-staff.add(Employee2("dup", 200))
-staff.add(Employee2("other", 300))
-let arr = staff.toArray()
-
-let raised = @f(arr?.selectFirst({ e: Employee2 => e.name == "dup" }).salary <- 999)
-@Assert(raised[0].salary == 999)
-@Assert(raised[1].salary == 200)
-@Assert(raised[2].salary == 300)
+let changed = @f(person.{ .address.{ .city; .zip }; .name } <- (("Oslo", 30003), "Adele"))
 ```
 
-Two employees match `"dup"`; only the first is touched — `raised[0]` carries
-`999`, `raised[1]` keeps its `200`, `raised[2]` its `300`. This is the full
-mix: `?.` marks the partial step, because a match may not exist, and `.` takes
-over after it — `salary` is a derived lens on the matched element, and a lens
-cannot miss.
+The nested block reads `address` once, changes both of its fields, and then
+rebuilds the person. Its target has the same nesting as the block. A read of
+this block returns `((String, Int64), String)`.
 
-No match, no write:
+Flat entries can also share a field prefix, as in `.address.city` and
+`.address.zip`. Nested blocks make the shared traversal explicit. Do not
+list the same field path twice; the parser rejects duplicate paths.
+
+## Update a selected element with a block
 
 ```cangjie
-let miss = @f(arr?.selectFirst({ e: Employee2 => e.name == "nobody" }).salary <- 999)
-@Assert(miss.size == 3)
-@Assert(miss[0].salary == 100)
-@Assert(miss[1].salary == 200)
-@Assert(miss[2].salary == 300)
+let changed = @f(people?.at(0).{ .name; .address.city } <- ("Adele", "Oslo"))
 ```
 
-`"nobody"` matches nothing, so the miss is an identity: the same three
-salaries come back, size and all. One expression, two outcomes, decided by the
-data alone — and either way, a new value — nothing mutates.
+The block runs only when the final anchor slot, `at(0)`, finds an element.
+A read at the same anchor returns an `Option` containing the block result.
 
-## Coerce segments
+Blocks have a narrower supported shape than ordinary chains. They need a
+value source, and a partial slot in the anchor should be its final
+slot. To update several fields below that selection, place the remaining
+paths inside the block, as above. See [block syntax](../api/macros/f.md#blocks).
 
-Isos are total, so they ride on `.`. The suite derives `Meters`, a one-field
-struct whose single field is an `Int64`, and coerces it:
+## Reuse an optic in a path
 
 ```cangjie
-let m = Meters(7)
-let unwrapped = @f(m.coerce<Int64>())
-@Assert(unwrapped == 7)
+let address = @f(@ty(Person).address)
+let changed = @f(person.@use(address).city <- "Oslo")
 ```
 
-`coerce<Int64>()` unwraps the derivation: `Meters` and its `Int64` payload are
-the same information in different clothes, so the focus evaluates to `7` — a
-plain `Int64`, no wrapper. Total means no `Option` and no miss, hence `.`.
+`@use` inserts an existing optic value. In this example the value is a lens
+from `Person` to `Address`, so `.city` continues from an address. The macro
+expects an optic identifier; bind a computed optic to a variable first.
 
-And the negative: because `coerce<T>()` is total, it never takes `?.` —
-`x?.coerce<T>()` does not compile. Every chain form `@f` accepts is on
-the [DSL reference](../api/dsl.md) page.
-
-## Gotchas
-
-> **Gotcha:** Wrong operator for the kind fails at compile time with a bespoke
-> message (see [docs/api/diagnostics.md](../api/diagnostics.md)). `.` on a
-> partial, `?.` on a total, or `.`-write through a prism — none compile.
-
-## Where to go next
-
-- [Introduction to optics](../introduction-to-optics.md) — why chains need two
-  operators: the marks are kind annotations, and the chain compiles to one
-  fused walk.
-- [Lenses](lenses.md) and [prisms](prisms.md) — the two ingredients this page
-  mixes, one page each.
-- [The DSL reference](../api/dsl.md) — every `@f` form on one page.
-- Next example: [deriving](deriving.md) — what `@DeriveOptics` generates for
-  each type, including the single-field isos that `coerce<T>()` rides on; then
-  [user optics](user-optics.md) — bringing your own segments, marked `.` or
-  `?.`.
+[Optic values](optic-values.md) covers construction and direct use.
+[The syntax reference](../api/macros/f.md) covers all source forms and the
+`[unfuse]` modifier.

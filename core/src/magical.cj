@@ -132,7 +132,7 @@ public func __bwdApply<S, A>(backward: (A) -> S, _ : S, focus: A): S {
 }
 
 /// Total-expectation backward apply for user optics: the macro passes the
-/// segment's optics registry as a pure phantom. Sourceful kinds (Lens/Affine)
+/// slot's optics registry as a pure phantom. Sourceful kinds (Lens/Affine)
 /// and total sourceless kinds (Iso) have matching overloads; a '.'-marked
 /// PRISM write has none — unconditional rebuild on miss is exactly the
 /// semantics '.' must not grant a partial optic, so it fails to compile.
@@ -153,12 +153,12 @@ public func __bwdApplyTotal<T, S, A>(_: RegistryPrisms<T>, backward: (A) -> S, _
     backward(focus)
 }
 
-// ===== Per-segment forward gates =====
-// The macro wraps EVERY segment's forward binding with one of these, so the
-// operator mark is checked against the segment's kind registry right at the
+// ===== Per-slot forward gates =====
+// The macro wraps EVERY slot's forward binding with one of these, so the
+// operator mark is checked against the slot's kind registry right at the
 // binding site — mid-chain or tail, derived, user, or stdlib. Total-marked
-// ('.') segments pass through Lenses/Isos; a Prisms/Affines registry means
-// the mark contradicts a partial kind. Partial-marked ('?.') segments pass
+// ('.') slots pass through Lenses/Isos; a Prisms/Affines registry means
+// the mark contradicts a partial kind. Partial-marked ('?.') slots pass
 // through Prisms/Affines (Option forward); a Lenses/Isos registry means the
 // mark contradicts a total kind. Bodies are identities: the gates exist for
 // overload resolution, and inlining makes them free at runtime.
@@ -199,8 +199,8 @@ public func __fwdApplyPartial<T, S, A>(_: RegistryIsos<T>, forward: (S) -> A): (
 }
 
 // ===== Fused prism-chain forward =====
-// The macro emits only top-level sibling lambdas (segment runs); every lambda's
-// parameter and return type is pinned by the concrete pre-bound segment forward
+// The macro emits only top-level sibling lambdas (slot runs); every lambda's
+// parameter and return type is pinned by the concrete pre-bound slot forward
 // arguments, never by another lambda's body. Semantics mirror the library's
 // composed forward: any prism miss short-circuits to Left(original source),
 // a full match yields Right(final focus).

@@ -1,427 +1,119 @@
-# The fused walk
+# Fusion
 
-When `@f` evaluates a chain — a read like `o.customer.name` or a write
-like `o.customer.name <- "Denver"` — the default emission is the *fused
-walk*: the macro binds each segment's forward and backward halves once as
-locals, then emits one straight-line pass over them. The big idea is that a
-chain lowers to *direct nested calls*, not to repeated runtime compositions:
-a read becomes one application of a pre-shaped walk
-(`__gfwd1(__gfwd0(src))`, where `__gfwdI` is segment *I*'s mark-checked
-forward — [mark gates](#mark-gates) below), a write one right-to-left
-rebuild, and no per-segment optic value is ever constructed. Both emissions
-produce the same results; they differ only in closures allocated.
+The fused emitter generates the operations for an applied path directly.
+It uses the same registered reads and backwards as composition, but avoids
+building a composed function pair at every intermediate step.
 
-Which chains fuse is decided at the end of [the macro
-system](macro-system.md#fused-or-composed)'s pipeline. This page is the
-fused emission itself: what fusion is, the pin helpers that make the emitted
-lambdas type-check, the pinned prism walkers that carry partial reads, the
-operator-mark gates wrapped around every segment, and the conditions under
-which the macro skips fusion and composes instead. The composed path the
-fallback takes, and the `[unfuse]` switch that forces it, are
-[composition](../api/composition.md#when-to-unfuse)'s subject; the registry
-values every binding rides on are [registry
-plumbing](registry-plumbing.md)'s.
+The entry points are `emitFusedForwardWalk` and `emitFusedBackwardWalk` in
+[`eval_macro.cj`](../../core/src/macrodsl/eval_macro.cj).
 
-## What fusion is
+## Total paths
 
-Fusion is the compiler trick of eliminating an intermediate structure that
-one stage builds only for the next stage to consume. In the
-functional-programming literature the elimination of such intermediate data
-is called *deforestation*: a pipeline of list transformations, evaluated
-naively, builds and immediately discards an entire list per stage, and
-deforestation rewrites the pipeline into one pass that never materializes
-them. A database query planner makes the same move when it fuses a scan, a
-filter and a projection into a single pipeline instead of executing each
-stage to completion. What plays the intermediate structure here is a
-function value. The composed path is itself a pipeline: per segment it
-upcasts the kind the chain has committed to and builds a *new* composed
-function from the halves walked so far, one per direction ([the macro
-system](macro-system.md#the-composed-walk) shows the expansion). Each of
-those composed functions exists only to be handed to the next segment's
-composition step — built, consumed, discarded. The fused path never builds
-them. It binds the halves the segments already ship with and emits the
-application directly, so the only per-segment function values left in the
-expansion are the halves themselves — the intermediate composed functions
-are gone.
-
-Two properties make the elimination safe to attempt. First, the macro sees
-the whole chain at expansion time: it knows every segment's node kind, so it
-can choose the walk's shape instead of discovering it at runtime. Second,
-fusion is a code-shape decision, not a semantic one — the composed path
-remains for every chain the walk cannot carry, and both emissions produce
-the same results. A gate that can fail safely is worth having; one that had
-to be right about every chain would not be.
-
-The easy way to evaluate a chain would be to always compose — one mechanism,
-no special cases. The fused walk exists because the composed closures are a
-real runtime cost the macro can see and remove: it holds the entire chain
-statically, so the per-segment wrapping can be replaced with the plain
-nested calls the wrapping would have ended up applying anyway. What the
-macro cannot see — a first-class value's pre-composed halves, or a chain
-whose segments it cannot address by name — falls back to composition
-([when fusion is skipped](#when-fusion-is-skipped)). Why the system settled
-on this division of labor — the model journey from declaration to emission,
-and the shape of the emissions themselves — is [design
-decisions](design-decisions.md)' subject.
-
-## The pin helpers
-
-Every fused emission binds a walk as a lambda literal — `{ src => ... }`
-for a read, `{ src, fcs => ... }` for a write — and a bare lambda literal is
-exactly what Cangjie cannot type on its own. The runtime package's pin
-helpers (`magical.cj`) are the workaround, and their header comment is the
-whole rationale:
+For a two-lens update, the essential work is the following pseudocode:
 
 ```text
-// ===== Fusion type-pinning helpers =====
-// Cangjie cannot infer lambda parameter types from the lambda body alone.
-// The macro passes a source-providing thunk () -> S whose return type pins S,
-// allowing the walk lambda (S) -> R / (S, R) -> S to be typed without an IIFE.
+part = outer.view(source)
+changedPart = inner.update(part, replacement)
+result = outer.update(source, changedPart)
 ```
 
-The three helpers:
+A longer path stores the intermediate sources required by each backward.
+It applies the backwards from the focus towards the original source.
+A source-free backward, such as an iso conversion, uses only the newly
+rebuilt focus.
 
-```cangjie
-@Frozen
-public func pinForward<S, R>(sourceThunk: () -> S, walk: (S) -> R): (S) -> R {
-    { s: S => walk(s) }
-}
+Leaf binding is demand-driven. Forward walks bind the forwards they use;
+backward walks bind the functions needed for probing and reconstruction.
+The last slot does not need to produce a witness for another slot.
 
-@Frozen
-public func pinBackward<S, R>(sourceThunk: () -> S, targetThunk: () -> R, walk: (S, R) -> S): (S, R) -> S {
-    { s: S, r: R => walk(s, r) }
-}
+This is still an expansion through registered functions. It is not
+necessarily the same code as directly spelling every constructor and field
+access. That distinction is measured by the
+[direct-expansion harness](inline-harness.md).
 
-@Frozen
-public func pinBackwardSourceless<S, R>(targetThunk: () -> R, walk: (R) -> S): (R) -> S {
-    { r: R => walk(r) }
-}
-```
+## Type inference helpers
 
-The mechanism is overload resolution doing type inference by proxy. The
-macro emits the walk lambda *unannotated* as an argument to `pinForward` or
-`pinBackward`; the helper's parameter types — `(S) -> R`, `(S, R) -> S` —
-are what the checker reads the lambda against, and `S` and `R` are pinned by
-the thunk arguments' return types, which the macro can produce because the
-source and target expressions are concrete tokens. The easy way — an
-immediately-invoked lambda with the parameter types written out, or an
-explicit annotation at every binding — would require the macro to name types
-it does not know: the macro is syntactic, and `S` is whatever the source
-expression's type turns out to be after type checking, not something the
-macro can spell. The thunks remove the need to spell it.
+The macro cannot generally write the inferred source and focus types into
+every lambda parameter. Helpers such as `pinForward` and `pinBackward`
+provide typed contexts by accepting source and target witnesses.
 
-The thunks are never called. Like the `magic` entry points they share the
-trick with, they exist to carry a type — the source and target expressions
-ride in as `() -> S` and `() -> R` so that a side-effecting expression is
-not evaluated just to pin the anchor. The expansion applies the source (or
-source and target) afresh at the tail of the walk, so the user's expressions
-are evaluated exactly once each, in the tail call — and the thunks must not
-evaluate them a second time on the way in.
+The witness function's type supplies information; the helper does not call
+it to obtain a source. The generated operation is subsequently applied to
+the actual source value.
 
-Where each helper is used:
+`pinBackwardSourceless` provides the analogous context for a backwards
+function that needs only the replacement.
 
-- `pinForward({ => source }, { src => walk })` binds the read walk of an
-  all-total chain — the plain nested applications of the gated forwards
-  (`eval_macro.cj`).
-- `pinBackward({ => source }, { => target }, { src, fcs => fold })` binds
-  the fused write's fold, then `evalBackward` applies it — the same
-  application the composed write tail uses. (`evalBackward`'s two overloads
-  pick sourceful or sourceless by the backward's function type; the fused
-  backward is always the sourceful `(S, R) -> S` shape.) The generated fused
-  write is shown in full in [the DSL
-  reference](../api/dsl.md#evaluation)'s evaluation section.
-- `pinBackwardSourceless({ => target }, { fcs => walk })` is the family's
-  sourceless shape — a walk consuming only the new focus, `(R) -> S`, pinned
-  by the target thunk alone. It sits in the macro's naming table
-  (`naming.cj`) beside the others, but no current emission calls it: the
-  fused write binds its fold with `pinBackward` even for chains containing
-  iso segments, because the fold applies a sourceless backward directly
-  where the chain coerces.
+## Partial reads
 
-The limits are the shape of the pin itself: the backward pin fixes the
-walk's arity at two (`src`, `fcs`), and the walk body must produce its
-result without further type annotations from the macro. Everything that
-needs more — Option construction, per-kind dispatch — is pushed into the
-library's pre-written walkers (below), whose signatures already carry the
-types.
+A partial read must stop when a slot returns `None`. The emitter groups
+total runs around the partial slots and passes them to a typed helper
+that performs the required sequence of matches.
 
-## Prism fusion
+`@GeneratePrismForward` generates `pinPrismForward1` through
+`pinPrismForward16` in the current core. The name covers both prism and
+affine partial steps. A supported forward walk with more than 16 partial
+slots falls back to ordinary composition.
 
-A read through an all-total chain is a plain nested call. A read through a
-chain with partial segments cannot be: a miss anywhere must yield
-`None`, and the result of the whole read is an `Option`.
-The macro's name for a segment whose forward returns an `Option` is
-*either-producing*, and the comment that defines it (`eval_macro.cj`) is
-precise about the two sources:
+The limit concerns the partial forward helper family. It is not a general
+16-slot limit on all paths or a claim about the backward implementation.
 
-```text
-// Option-producing segments: derived prisms and partially-marked user optics
-// ('?.') return Option<A> and occupy the pinned prism slots; totally-marked
-// ('.') user optics walk like derived lenses.
-```
+## Partial updates
 
-One clarification before the walkers. "Derived prism" is the node kind a
-`?.` mark creates on a derived segment; the registry beneath it may be
-`RegistryAffines`, since a case optic is affine-kind — [the macro
-system](macro-system.md) covers the derive's registries. The gates below key
-on the registry, so the mark check stays kind-exact either way.
+For a partial step, the backward emitter probes for a match before continuing
+towards the focus. A successful walk reconstructs outward. A miss preserves
+the original source instead of constructing an unrelated prism case.
 
-Partial reads walk through the pinned prism family, `pinPrismForward1` –
-`pinPrismForward8` (`magical.cj`, all `@Frozen`). The smallest member shows
-the shape the whole family repeats:
+Total and partial operator checks are applied through the resolved kind
+registries. Custom backwards may have one argument or two; the `__bwdApply`
+family handles that difference. Total-marked custom writes also use a check
+that rejects an unconditional prism reconstruction.
 
-```cangjie
-@Frozen
-public func pinPrismForward1<S, T1, A1, B>(
-    sourceThunk: () -> S,
-    fwd1: (T1) -> Option<A1>,
-    run0: (S) -> T1,
-    cont1: (A1) -> B
-): (S) -> Option<B> {
-    { s: S =>
-        match (fwd1(run0(s))) {
-            case Some(a1) => Some<B>(cont1(a1))
-            case None => None
-        }
-    }
-}
-```
+The emitted guards do not make arbitrary supplied functions pure. An optic
+body or constructor can still mutate shared objects or perform effects.
 
-The walkers are not curried pipelines — each takes its pieces as one flat
-argument list and returns a single lambda, `(S) -> Option<B>`. For `K`
-either-producing segments, `pinPrismForwardK` takes:
+## First-class slots
 
-- the source thunk, pinning `S`;
-- one `fwdI` per partial segment — the segment's pre-bound forward (its
-  gated copy, [mark gates](#mark-gates)), typed `(TI) -> Option<AI>`;
-- one run lambda per total stretch *before* each partial segment — the
-  first takes the source `s`, the rest take the previous partial's payload
-  (the emission names those parameters `__eI`);
-- one continuation after the last partial segment — the total stretch
-  trailing the chain, or the identity when the chain ends on a partial.
+The emitter can split a value path at an interior `@use` slot, apply that
+optic's functions, and continue from its focus. The regression suite covers
+an interior lens and its following derived fields.
 
-So for a schematic chain `x?.a.b?.c` (two partial segments around one total
-segment `b`), the macro emits `pinPrismForward2` with an identity `run0`
-(nothing total before `a`), a `run1` applying `b`'s gated forward, and an
-identity `cont2` (nothing after `c`). Any `None` short-circuits to
-`None` — the walker's own
-own parameter, the original source, not an intermediate — and a full match
-input; the walk threads each payload through the next run into `Some(final focus)`.
+This is not a reason to assume every combination of partial first-class
+values and nested blocks is handled by the same path. The actual split code
+has its own function-shape assumptions; changes need tests for the relevant
+kind and position. A chain beginning with `@use` constructs an optic through
+the composition route.
 
-The family exists because of the same constraint the pin helpers solve, one
-level down. The macro cannot emit the nested `match` itself: the library's
-walkers spell the `Some`/`None` constructors out with their type arguments
-(`Some<B>(...)`), and the macro — which never resolves a type — cannot
-name `S` or the payload types. The comment above the family (`magical.cj`)
-states the division this forces:
+## Blocks
 
-```text
-// ===== Fused prism-chain forward =====
-// The macro emits only top-level sibling lambdas (segment runs); every lambda's
-// parameter and return type is pinned by the concrete pre-bound segment forward
-// arguments, never by another lambda's body. Semantics mirror the library's
-// composed forward: any prism miss short-circuits to None (source preserved),
-// a full match yields Some(final focus).
-```
+A block has an owner value and an ordered list of entries. Each entry's
+backward updates the accumulating owner. The anchor's backwards then rebuild
+the original source around that owner.
 
-The macro emits the *sibling* run lambdas — flat, one per total stretch —
-whose parameter and return types the walker's signature provides, and the
-library's pre-written body supplies all the nesting. The runs are built from
-the gated forwards, so a partial read is mark-checked at every segment,
-prisms included.
+A nested block binds its prefix focus once, applies the inner entries there,
+and rebuilds the prefix around their combined result. Flat entries sharing
+part of a path are still separate entries; automatic sharing of every common
+prefix is not implied.
 
-The family comes in fixed arities, one function per count, each typing its
-own nesting — but it is not hand-written: `@GeneratePrismForward(N)` (in
-`lucida.macrodsl`, applied in `magical.cj`) generates
-`pinPrismForward1..N`, and the macro counts the partial segments
-(`countPartialSegments` in `eval_macro.cj`) against N. A read with exactly N
-either-producing segments still fuses (`pinPrismForwardN`); more than N
-falls back to composition. Raising the cap is regenerating with a larger N,
-not unrolling more levels by hand. Writes only were never the problem: the
-backward walk is not capped, because it needs no fixed-arity family at all.
-Its partial segments are handled by inline guards — in the emission's own
-naming, schematic, for the first partial segment of a chain:
+A partial final anchor runs the block inside the successful branch and
+preserves the source on a miss. Block reads at such an anchor return an
+`Option` containing their tuple. General partial anchors and partial nested
+prefixes have a narrower supported set than ordinary chains.
 
-```cangjie
-if (let Some(__t0) <- __fwd0(src)) { /* the rest, nested */ } else { src }
-```
+The block emitter is selected directly by `SiblingForward` and
+`SiblingBackward`. The `[unfuse]` switch does not provide an independent
+composed implementation of blocks.
 
-— which only *destructure* (a pattern position needs no type arguments),
-while the forward walk must *construct* `Some`/`None` (a constructor
-position cannot avoid them). The guards nest as deep as the chain does, a
-miss at any depth yields the original source, and every emitted type stays
-concrete (`emitFusedBackwardBody` in `eval_macro.cj`). The write keeps the
-ungated forwards for a separate reason: a `.`-write through an affine is
-legal — its backward is sourceful — so gating the forwards would reject a
-legal write; the mark is checked on the backward side instead
-([mark gates](#mark-gates)).
+## Verify an emitter change
 
-## Mark gates
+Use the law and feature tests to compare successful reads, replacements,
+and misses. Check preservation of other fields and expression evaluation
+where effects are deliberately tested. Include ordinary and `[unfuse]`
+paths when both are available.
 
-The operator mark is a promise the call site makes; the kind is a fact about
-the members the segment resolves to. The two are made by different parties —
-the user writes `.` or `?.`, the derive or the optic declaration fixed the
-kind long before — and something must check that they agree. The macro
-cannot: it is syntactic and never resolves a member. The check therefore
-happens where all kind decisions in this system happen — in overload
-resolution — via the gate functions of `magical.cj`. The header comment is
-the section in miniature:
+The generated corpus compares selected values with a direct reconstruction
+and separately checks its token expansion. It covers a useful set of shapes,
+not every possible custom optic or grammar form.
 
-```text
-// ===== Per-segment forward gates =====
-// The macro wraps EVERY segment's forward binding with one of these, so the
-// operator mark is checked against the segment's kind registry right at the
-// binding site — mid-chain or tail, derived, user, or stdlib. Total-marked
-// ('.') segments pass through Lenses/Isos; a Prisms/Affines registry means
-// the mark contradicts a partial kind. Partial-marked ('?.') segments pass
-// through Prisms/Affines (Option forward); a Lenses/Isos registry means the
-// mark contradicts a total kind. Bodies are identities: the gates exist for
-// overload resolution, and inlining makes them free at runtime.
-```
-
-Four families, all in `magical.cj`:
-
-- `__fwdApplyTotal` — resolves for a `.`-mark against `RegistryLenses` or
-  `RegistryIsos`; the `RegistryPrisms`/`RegistryAffines` overloads are the
-  strict-`@Deprecated` traps (a partial optic's forward returns `Option`, so
-  a total read is impossible).
-- `__fwdApplyPartial` — resolves for a `?.`-mark against `RegistryPrisms` or
-  `RegistryAffines`; the `RegistryLenses`/`RegistryIsos` overloads are the
-  traps (a total optic's forward cannot miss, so there is no `Option` to
-  unwrap).
-- `__bwdApply` — the arity eraser for `?.`-marked user segments. A partial
-  user optic may be a Prism (sourceless backward) or an Affine (sourceful),
-  and the macro cannot tell them apart; the fold always calls the
-  two-argument form and the overload set picks by the backward's function
-  type:
-
-  ```text
-  /// Erases backward arity for kind-exact user optics: the fused backward fold
-  /// always calls this two-argument form; the overload set dispatches on the
-  /// bound backward's function type (sourceful (S, A) -> S vs sourceless (A) -> S).
-  ```
-
-- `__bwdApplyTotal` — the `.`-marked user segment's backward gate. Its own
-  doc comment carries the trap's reasoning verbatim:
-
-  ```text
-  /// Total-expectation backward apply for user optics: the macro passes the
-  /// segment's optics registry as a pure phantom. Sourceful kinds (Lens/Affine)
-  /// and total sourceless kinds (Iso) have matching overloads; a '.'-marked
-  /// PRISM write has none — unconditional rebuild on miss is exactly the
-  /// semantics '.' must not grant a partial optic, so it fails to compile.
-  ```
-
-Routing — which segments pass through which gate — differs between reads and
-writes, and the asymmetry is the point:
-
-- **Reads** gate every segment on the mark. The emission binds a gated copy
-  per segment, `let __gfwdI = __fwdApplyTotal|__fwdApplyPartial(__opticsI,
-  __fwdI)` (`emitFwdGateBindings`, `eval_macro.cj`), choosing the family by
-  the mark (`?.` → partial, `.` → total) and letting the registry argument
-  deliver the verdict. The read walk runs on the gated copies.
-- **Writes** keep the ungated forwards — the backward body walks them to
-  compute the values entering each segment — and check the mark on the
-  backward side instead. Gating the forwards would reject a *legal* write: a
-  `.`-write through an affine is fine (its backward is sourceful and keeps
-  the source on a miss), even though its forward returns `Option` and a
-  total forward gate would trap it. So the fold routes by segment kind:
-  derived segments call their backward directly (always sourceful, miss
-  guards baked into the derive's emission); coercions call theirs directly
-  (always sourceless); a `.`-marked user segment goes through
-  `__bwdApplyTotal` — legal for Lens/Affine/Iso registries, the
-  strict-deprecated trap for Prisms; a `?.`-marked user segment goes through
-  `__bwdApply`, legal either way.
-
-The backward-total gate is also where the phantom registry argument stops
-being ceremony and becomes load-bearing. A sourceless backward `(A) -> S`
-fits both an Iso — a legal `.`-write — and a Prism — an illegal one. The
-function type alone cannot separate two opposite verdicts; only the registry
-argument can, and that is what `__bwdApplyTotal` passes as its first
-argument. On the forward gates the function shapes already separate the
-families (a total forward is never `Option`-returning), and the registry
-keeps the check tied to the segment's kind rather than its shape.
-
-The forward gates return the function they were handed — identity bodies —
-so the entire mechanism costs nothing at runtime: resolution happens at
-compile time, and inlining erases the call. (The backward gates apply their
-backward rather than return it; their check is the same shape.) What the
-mechanism buys is the
-diagnostic: a mark that contradicts the kind resolves *only* to a
-strict-`@Deprecated` overload, which fails compilation with a message
-written for that exact mismatch — what was illegal, why, and which operator
-to use instead. The messages are collected in
-[diagnostics](../api/diagnostics.md); why the diagnostic takes the form of
-an overload at all is [design decisions](design-decisions.md)' subject. The
-gates have no `RegistrySetters` rows because no fused walk can hold one:
-setters are not declarable, a first-class setter enters through the composed
-path only, and the gate lattice covers exactly the registries a fused chain
-can bind.
-
-## When fusion is skipped
-
-The gate itself is small (`eval_macro.cj`): a read or write fuses when
-`[unfuse]` is absent and the chain passes `isFusible` — the first node must
-be an anchor that is not an `@use` splice, and every segment after it must
-be derived, user-defined, or a coercion (the emitters restate this check as
-`isFusableChain`). Shape selection then runs inside the
-emitters: an all-total read walks through `pinForward`; a read with partial
-segments walks through the pinned prism family if it has at most N
-(16 as generated today), otherwise composes; a write folds through `pinBackward` unless a
-non-fusable segment kind appears. Every failure lands on the same composed
-path — the same one `[unfuse]` forces — which is what makes the gate safe to
-fail.
-
-The triggers, in the order the source checks them:
-
-- **`[unfuse]`** — the attribute skips the gate entirely and forces the
-  composed path. It changes the code shape, not the results
-  ([composition](../api/composition.md#when-to-unfuse) shows the unfused read
-  and write expansions, and covers when to reach for it deliberately).
-- **An `@use` splice anywhere in the chain** — at the head (`isFusible`
-  rejects an `Optic` first node) or mid-chain (the segment-kind check
-  rejects it past the anchor). A first-class value already carries its
-  composed halves — there are no chain segments to bind, so there is nothing
-  to fuse; the walk binds the value's halves directly and composes from there ([registry plumbing](registry-plumbing.md) shows the splice
-  emission). Of the kinds a viable chain can carry, this is the only one the
-  "derived, user-defined, or coercion" check ever rejects: mid-chain
-  `@ty`/`@typeof` parse fine but fail outright as errors in the walk's
-  dispatch ([the DSL reference](../api/dsl.md#starting-a-chain) documents
-  that failure) — they never reach the shape decision at all.
-- **More than N partial segments in a read** — the pinned prism slots run
-  out at N (16 as generated today), and segment N+1 sends the read to
-  composition. Exactly N still fuses. Writes are not capped: the backward
-  fold's inline guards nest arbitrarily.
-- **Segments the walk cannot carry** — the same kind check, stated from the
-  emitter's side (`isFusableChain`): only derived segments, user-declared
-  optics used by name, and coercions have members the macro can address by
-  name, and only they bind. Anything else composes.
-
-One form never reaches the gate at all: a sourceless chain — rooted at
-`@ty`, `@typeof` or `@use` with no value to apply to — mints a
-first-class optic or a `Setter` instead of evaluating a focus. The fused
-walkers exist to apply a chain to a source and produce a result; a
-sourceless chain stops short of applying, and its composed halves go to
-`__FirstClassConstruction.perform`
-([the macro system](macro-system.md#the-composed-walk) covers the tail,
-[the DSL reference](../api/dsl.md#evaluation) the user-facing forms).
-
-## Where to go next
-
-- [The macro system](macro-system.md) — the emitter side of everything
-  above: how the chain is parsed into nodes, how the composed path's CPS
-  fold works, and where the fused-or-composed gate sits in the pipeline.
-- [Registry plumbing](registry-plumbing.md) — the registry types the gates
-  dispatch over and the downcasts that produce them; the
-  phantom-argument-as-message pattern the gates lean on.
-- [Composition](../api/composition.md) — the composed path this page's
-  fallback takes: the per-segment steps fusion eliminates, the upcast
-  lattice behind them, and the `[unfuse]` contract.
-- [The DSL reference](../api/dsl.md) — the user-facing contract all of this
-  implements: the operator table the gates police, and the generated fused
-  write in the evaluation section.
-- [Diagnostics](../api/diagnostics.md) — the strict-deprecated traps'
-  messages, each with its cause and fix, collected on one page.
-- [Design decisions](design-decisions.md) — why the diagnostics travel as
-  overload sets, and the reasoning behind the emission shapes this page
-  describes.
+Timing comes after those checks. [Benchmarks](../benchmarks.md) describe the
+recorded settings and distinguish performance measurements from equivalence.

@@ -75,7 +75,7 @@ struct guBoxNested<T> {}
 @Lens[source: GPair<T, U>, focus: T, , forward: { source.first }, backward: { GPair(focus, source.second) }]
 struct gpairFirst<T, U> {}
 
-// ===== renamed slots (spec docs/superpowers/specs/2026-09-29-optic-slot-renames-design.md) =====
+// ===== renamed body parameters =====
 
 @Lens[source: UBox, focus: Int64, , forward: { s => s.v }, backward: { s, d => UBox(s.v + d) }]
 struct uRenLens {}
@@ -428,7 +428,7 @@ class GenericUserOpticLaws {
 
     // Manual-registry multi-arg call site (the salary_bump pattern): member
     // generics that are pinned only by the receiver require explicit type
-    // arguments, so the walk must reconstruct the segment call with
+    // arguments, so the walk must reconstruct the slot call with
     // comma-separated type arguments before classification.
     @TestCase
     func manualRegistryMultiTypeArg(): Unit {
@@ -439,7 +439,7 @@ class GenericUserOpticLaws {
 }
 
 @Test
-class OpticSlotRenames {
+class OpticParamRenames {
     @TestCase
     func renamedLensRoundTrip(): Unit {
         let b = UBox(3)
@@ -476,7 +476,7 @@ class OpticSlotRenames {
     }
 
     @TestCase
-    func skippedSlot(): Unit {
+    func skippedParam(): Unit {
         let b = UBox(3)
         let got = @f(b.uRenSkip())
         @Assert(got == 42)
@@ -485,7 +485,7 @@ class OpticSlotRenames {
     }
 
     @TestCase
-    func renameEscapesSlotShadowing(): Unit {
+    func renameEscapesParamShadowing(): Unit {
         let b = UBox(3)
         let got = @f(b.uRenShadow())
         @Assert(got == 6)

@@ -1,219 +1,189 @@
-# Introduction to optics
+# Understanding optics
 
-This page is the *why* behind the [getting started](getting-started.md) example:
-where lenses, prisms, affines, isos and setters come from, why chains are
-written the way they are, and the one genuinely surprising result — an update
-through a focus that misses its match. No formal rules; the ideas, one per
-section.
+An optic describes access to a value within another value. It includes the
+operation needed to put an updated value back into its surroundings.
 
-## The pain
+This chapter develops that idea using ordinary functions before introducing
+the different optic types. The words **source** and **focus** will be used
+throughout: the source is the value you start with; the focus is the value an
+optic gives you access to.
 
-Cangjie structs are value types. `var x = S(...)` keeps `var` fields mutable and
-`let` fields immutable; `let x = S(...)` freezes everything. A plain nested
-struct update is easy to write by hand — that's *not* what optics solve.
+## Updating a nested record
 
-The pain arrives when the part you want isn't reachable by a chain of fields:
-
-- **through a collection, an enum, or a class** — "raise the salary of *the*
-  Mark" means scanning the array, rebuilding the matching entry, rebuilding the
-  array, then the enclosing structs;
-- **across shapes (iso/affine)** — you hold the *serialized* form and want to
-  change something *inside* the decoded object.
-
-Here is the second one, hand-written:
+Suppose a program uses these records:
 
 ```cangjie
-let decoded = Department.decode(encoded)
-let updated = Department(
-    decoded.name,
-    decoded.employees,
-    Info(
-        decoded.information.capitalization,
-        Address(
-            decoded.information.address.country,
-            "Melbourne"            // the one change
-        )
-    )
-).encode()
+@DeriveOptics
+public struct Address {
+    public Address(public let city: String, public let zip: Int64) {}
+}
+
+@DeriveOptics
+public struct Person {
+    public Person(public let name: String, public let address: Address) {}
+}
 ```
 
-One new value — `"Melbourne"`. Everything else is re-read, restated at every
-level, re-encoded. The update looks local; the code retypes the whole shape,
-twice.
-
-The same change, as an optic, is one expression:
+The annotations can be ignored for the moment. To move someone to another
+city while preserving the original record, a function can rebuild the two
+records explicitly:
 
 ```cangjie
-let updated = @f(encoded.serialization<Department>()
-    .information.address.city <- "Melbourne")
+func moveTo(person: Person, city: String): Person {
+    Person(person.name, Address(city, person.address.zip))
+}
 ```
 
-(a segment like `serialization<T>()` is hand-declared, not built in;
-[user optics](examples/user-optics.md) shows how)
+This is a reasonable solution for one update. It also shows what must be
+repeated when several operations reach into the same records: each update
+must know how to rebuild every enclosing value and which fields to retain.
+A constructor change can require changes in several such functions.
 
-Focus `encoded.serialization<Department>()`, walk to `.information.address.city`,
-set it to `"Melbourne"`: the decode, the per-layer rebuild, and the re-encode
-are all the optic's job. And as you'll see at the end, optics take you from one
-shape to another, *and back*.
-
-## The idea: a focus
-
-An optic pairs **get** (reach in and extract a part) with **rebuild** (take a
-value, a new part, and a new whole with that spot filled). The part is a
-*focus*: a named place, decoupled from the shape holding it.
-
-```
-      S (a whole value)                      the focus (a name)
-
-   ┌───────────────────────┐          ┌──────────────────────────┐
-   │                       │          │   customer.name          │
-   │  ┌─────────────────┐  │   get    │                          │
-   │  │   a part / hole │  │ ───────▶ │  a *place*, not a value. │
-   │  └─────────────────┘  │          │  the same focus names a  │
-   │                       │          │  hole in any S that has  │
-   └───────────────────────┘          │  it — shape and place    │
-              ▲                       │  are decoupled.          │
-              │ put                   └──────────────────────────┘
-              └──── a new S with ─────┘
-               the place refilled; S untouched
-```
-
-`@f` names a focus in one expression. The chain's first field — `o` here —
-is the *source*: a concrete value the focus is applied to. This is partial
-application — pin the source and the answer is already fixed — which is why
-reading it looks like a plain field access:
+Lucida lets the type declaration supply the field operations once. The
+corresponding update is:
 
 ```cangjie
-let name = @f(o.customer.address.city.name)
+let moved = @f(person.address.city <- "Oslo")
 ```
 
-The focus itself is the path after the source — `customer.address.city.name` —
-and that is the place, not a value: the same focus applies to any value of that
-shape. `@ty` makes that place a value: it names the focus *without* pinning a
-source, and hands you the path itself as a first-class optic (the explicit
-`@ty` spelling of the anchor — the value-rooted form earlier in this
-section is the implicit one):
+Use whichever form is clearer for the program. Explicit reconstruction is
+often sufficient for a small record. Optics are useful when paths are reused,
+passed to other functions, or extended through selections and enum cases.
+
+## A field needs two operations
+
+Access to `Address.city` can be written as two functions:
 
 ```cangjie
-let cityName = @f(@ty(Order).customer.address.city.name)
-let mapped = cityName.update(o, "Denver")
+func readCity(address: Address): String {
+    address.city
+}
+
+func replaceCity(address: Address, city: String): Address {
+    Address(city, address.zip)
+}
 ```
 
-There is no source in there — only the path. `cityName` *is* the place we
-described above: `customer → address → city.name` in any `Order`. `update`
-takes a source value and a new part, and returns the new whole. Read
-the focus from any `Order` with `cityName.view(o)`; write it with
-`cityName.update(o, ...)`. The write form fills the place and returns a new `o`:
+The replacement function needs the old address because the city alone does
+not tell it which zip code to retain.
+
+A **lens** stores these two operations together. `Lens<S, A>` uses `S` for
+the source type and `A` for the focus type:
 
 ```cangjie
-let updated = @f(o.customer.address.city.name <- "Denver")
+let cityLens = Lens<Address, String>(readCity, replaceCity)
+let city = cityLens.view(address)
+let changed = cityLens.update(address, "Oslo")
 ```
 
-"focusing on `o.customer.address.city.name`, set it to `"Denver"`" — the whole
-expression returns a new copy of `o` with one leaf swapped; `o` itself is never
-touched. The boilerplate from the first section is the `rebuild` half doing its
-job for you.
+You can pass `cityLens` to a function that accepts a `Lens<Address, String>`.
+The receiving function can read and replace a string without knowing which
+address field the lens selects.
 
-## The cast of kinds
+## Combining two lenses
 
-Kinds differ by *guarantees*: how sure you can be the part is there — and, after
-a write, what it takes to rebuild the whole. Each optic gets two arrows: the
-top one is the read (forward), the bottom one the rebuild (backward):
+A lens from `Person` to `Address` can be combined with a lens from `Address`
+to `String`. Reading the combined lens first reads the address, then the city.
+Updating it replaces the city in the address, then replaces the address in
+the person.
 
-```
-kind     read (forward)                rebuild (backward)         you'd use it on
+The types line up like this:
 
-Lens     S ──────always──▶ a
-         S ◀───────── (S, a)           needs the whole             a struct field
-
-Prism    S ──────maybe───▶ a
-         S ◀────────────── a           from the part alone         an enum case
-
-Affine   S ──────maybe───▶ a
-         S ◀───────── (S, a)           needs the whole             a prism's payload
-
-Iso      S ──────always──▶ a
-         S ◀────────────── a           from the part alone, exact  a one-field wrapper
-
-Setter   S ──────map─────▶ S
-         S ◀──(a→b)──────▶ S           a map, whole to whole       anything, as a map
+```text
+Person  ->  Address  ->  String
+  source    intermediate    focus
 ```
 
-The read arrow says whether the part is always there or may be missing. The
-rebuild arrow points the other way — back to the whole — and says what a write
-needs: for a **prism**, just the part (`a ─▶ S`); for a **lens** or **affine**,
-the original whole too (`(S, a) ─▶ S`) — exactly the difference between "rewrap
-the payload" and "put the part back where it came from".
+This operation is called **composition**. The intermediate type must match:
+an optic that produces an address can be followed by one that expects an
+address.
 
-- **Lens** — the part is always there (a field). Get never misses.
-- **Prism** — the part may not be there (an enum case), but given the part you
-  can always rebuild the whole. Get can miss; rebuild is total.
-- **Affine** — a prism whose part you keep exploring: read can miss, and now
-  rebuilding needs the whole, not just the part, because the part alone no
-  longer determines it: `department.employees.selectFirst({e => e.name ==
-  "Mark"}).salary` — "the salary of *the* Mark, if he exists".
-- **Iso** — the part *is* the whole in another shape: `Meters(7)` and `7` are
-  the same information in different clothes; nothing is lost, so rebuild is
-  exact.
-- **Setter** — the loosest: given a map over the whole, returns a new whole.
-
-More guarantee = more you may legally do with the optic. That ordering is also
-why chains need two operators — further down.
-
-## Aha: a miss is an identity
+The path `person.address.city` expresses this composition. To keep the path
+as an optic value, start it with a type instead of a source value:
 
 ```cangjie
-let sq = Shape.Square(5)
-let updated = @f(sq?.Circle <- Nested(99))
-// updated is still Square(5) — the miss was an identity
+let personCity = @f(@ty(Person).address.city)
+let moved = personCity.update(person, "Oslo")
 ```
 
-The chain is partial (`?.Circle` is a partial optic — the library kinds it
-an affine; same contract), so a write when the source
-doesn't match returns the source **unchanged** — no error, no crash, no
-branching to write. The "miss → identity" behavior is wired in by the kind.
+`@DeriveOptics` supplies the field operations, and `@f` combines them.
 
-## Why two operators
+## Access that can fail
 
-`.` vs `?.` is a kind annotation: `.` marks a **total** segment (Lens/Iso), `?.`
-a **partial** one (Prism/Affine). The chain's combined kind falls out of the
-marks.
+An array index may be out of bounds. An enum value may belong to another
+case. These operations cannot always return a focus, so their read operation
+returns `Option<A>`.
 
-Why annotate at all? **Fusion**: the library compiles the whole chain into one
-fused walk instead of composing N optics at runtime, and needs each segment's
-kind at compile time — that's what you're spelling (see
-[fusion walk](architecture/fusion-walk.md), [design decisions](architecture/design-decisions.md)).
-A side effect: impossible chains (`.` on a Prism, `?.` on a Lens) are rejected
-at compile time.
+```cangjie
+let name = @f(people?.at(3).name)
+```
 
-## Where optics shine
+The result is `Some(name)` when element 3 exists and `None` otherwise. The
+`?.` marks the partial `at` slot; the following `.name` is an ordinary
+field access on a successfully selected person.
 
-- **Update-through-a-view.** The same data in two shapes, kept in sync — the
-  view-update problem from databases (Furtado, Sevcik, dos Santos, 1979) and,
-  in this exact two-way form, Pierce & Foster's *Combinators for bidirectional
-  tree transformations* (2007).
-- **Reducer-style state trees.** "Next state, this one leaf changed" is a Lens
-  chain — one expression to focus, one to rebuild, a miss as an identity.
-- **Serialization round-trips.** When the focus is an Iso of the value in hand,
-  the update flows straight through the representation boundary.
+For an update, there is a natural behavior on a miss:
 
-They don't earn their keep everywhere: over a shallow value the hand-written
-rebuild is fine; in a hot loop over a giant flat array plain indexing is
-cheaper; and if you honestly want to mutate a `var` field in place, this DSL
-returns new values by design — wrong tool.
+```cangjie
+let changed = @f(people?.at(3).name <- "Ada")
+```
 
-## Where to go next
+If element 3 does not exist, the result preserves `people`. A successful
+update returns an array with that element replaced. The expression always
+has the array's type.
 
-- [Getting started](getting-started.md) — the full runnable example.
-- Examples, in order: [lenses](examples/lenses.md),
-  [prisms](examples/prisms.md), [chains](examples/chains.md),
-  [deriving](examples/deriving.md), [user optics](examples/user-optics.md).
-- The DSL reference — [api/dsl.md](api/dsl.md).
-- What the DSL costs — [benchmarks.md](benchmarks.md), and the
-  [harness](architecture/inline-harness.md) that measures it.
+An **affine** combines a partial read with a replacement operation that uses
+the original source. `Array.at` is an affine because the replacement must
+preserve the other elements.
 
----
+## Rebuilding without the old source
 
-Curious how `@f` finds the optic behind each segment of a chain? Those
-mechanics live in [registry plumbing](architecture/registry-plumbing.md) — not
-required reading to use the library.
+Some conversions can reconstruct a source from the focus alone. For a
+one-field wrapper such as `Meters(Int64)`, the two directions can unwrap and
+wrap the number. This is an **iso**, short for isomorphism, when the two
+functions undo one another.
+
+A **prism** has a partial read and a reconstruction function that also needs
+only the focus. For an enum case `Message.Text(String)`, a prism can try to
+extract a string, and can construct a `Text` from any string. Constructing a
+`Text` does not require an existing `Message`.
+
+Construction and updating an existing source are different operations. Calling
+a prism's `build` constructs its case unconditionally. A partial update in
+`@f` checks for a match and preserves an unmatched source. Lucida's derived
+enum case optics are affines: their `update` operation itself has this
+preserve-on-miss behavior.
+
+## The five types
+
+| Type | Reading | Rebuilding or modifying |
+|---|---|---|
+| `Lens<S, A>` | Always produces `A` | Needs the old `S` and a replacement `A` |
+| `Affine<S, A>` | Produces `Option<A>` | Needs the old `S`; an unmatched source is preserved |
+| `Iso<S, A>` | Converts `S` to `A` | Converts `A` back to `S` |
+| `Prism<S, A>` | Produces `Option<A>` | Constructs `S` from `A` |
+| `Setter<S, A>` | Provides no focus-reading operation | Applies a function `(A) -> A` within `S` |
+
+A setter is useful when a caller only needs to modify data. Its interface can
+also describe modification of several values. Lucida does not currently
+provide a separate traversal type for reading many focuses.
+
+## The behavior functions must satisfy
+
+The compiler checks function types. It cannot establish that a pair of
+functions behaves like a lens. For a field lens, callers normally expect:
+
+- Reading a field and writing that same value back leaves the source unchanged.
+- Reading after a replacement returns the replacement.
+- Replacing the same field twice has the same result as the final replacement.
+
+The last rule concerns two writes to the same focus. It does not say that
+arbitrary updates can be reordered. Each [optic type's reference page](api/index.md#structs)
+states its laws more precisely.
+
+Custom optics are responsible for these properties and for avoiding unwanted
+mutation. Derived record optics reconstruct the path; they do not deep-copy
+unrelated fields or make shared mutable objects immutable.
+
+For practical examples, continue with [fields](examples/lenses.md),
+[enum cases](examples/prisms.md), or [arrays and blocks](examples/chains.md).

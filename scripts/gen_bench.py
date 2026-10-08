@@ -27,13 +27,13 @@ first-class optics; `tests/src/inline_optics.cj` covers that.)
 
 Shapes come in six families, because the costs they isolate are different:
 
-  depth      a single chain of nested structs. Every segment of the path must be
-             rebuilt, so this measures per-segment DSL overhead.
-  width      one struct with many sibling fields. One segment, but a wide
+  depth      a single chain of nested structs. Every slot of the path must be
+             rebuilt, so this measures per-slot DSL overhead.
+  width      one struct with many sibling fields. One slot, but a wide
              rebuild, so this measures the cost of breadth in the constructor
              path.
   enum       a chain ending in an enum, updated through one of its cases. A
-             partial segment, so the rebuild also has a miss arm.
+             partial slot, so the rebuild also has a miss arm.
   option     a chain ending in an `Option`-typed field, updated through its
              payload. `@f` cannot express this shape at all -- a derived lens
              is total, so `?.` through it is rejected -- so this family
@@ -276,7 +276,7 @@ def _bench_class(
     checks that can actually fail instead.
 
     (For the record, because it explains the design: fused reads do cost real
-    per-segment work -- 8.2 ns at two segments to 128.7 ns at sixteen, flat-
+    per-slot work -- 8.2 ns at two slots to 128.7 ns at sixteen, flat-
     folding to nothing as a *hand-written* read, and +7.9 ns more when the
     receivers are structs instead of classes, because a successful read copies
     every intermediate value it passes. None of that is a reconstruction gap, so
@@ -426,7 +426,7 @@ class {label}Equivalence {{
 def emit_enum(n: int) -> str:
     """A chain of nested structs ending in an enum, updated through one case.
 
-    The case segment is partial, so both the hand-written baseline and the
+    The case slot is partial, so both the hand-written baseline and the
     inlined form carry a miss arm that hands the source back untouched.
     """
     structs = [f"EN{n}_S{i}" for i in range(1, n)]
@@ -492,7 +492,7 @@ def emit_enum(n: int) -> str:
         read_chain=f"{root}{x_path}.x?.Held",
         read_expr=read_expr,
         read_ty="Option<Int64>",
-        note="A partial segment: the case can miss, and a miss rebuilds nothing.",
+        note="A partial slot: the case can miss, and a miss rebuilds nothing.",
     )
 
 

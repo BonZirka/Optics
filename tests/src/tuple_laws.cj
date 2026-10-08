@@ -6,7 +6,7 @@ import lucida.*
 import lucida.macrodsl.*
 
 // Tuple-type support through the DSL. Tuple elements are addressed as `._0`,
-// `._1`, ... — total segments riding the generated tuple-lens plumbing
+// `._1`, ... — total slots riding the generated tuple-lens plumbing
 // (`RegistryLenses<(X0, X1, ...)>`, arities 2..3).
 
 @DeriveOptics
@@ -218,7 +218,7 @@ class TupleEnumChainLaws {
     }
 
     // Nested list traversal: prism -> tuple element -> prism -> tuple element.
-    // Mixed total/partial segments in one chain.
+    // Mixed total/partial slots in one chain.
     @TestCase
     func nestedListThroughTupleElements(): Unit {
         let l = IntList.Cons(1, IntList.Cons(2, IntList.Nil))

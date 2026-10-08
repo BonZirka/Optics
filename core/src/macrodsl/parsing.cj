@@ -154,7 +154,7 @@ private func scanBlockSpec(toks: Tokens, startIdx: Int64, input: Tokens): BlockS
                 throw DiagReportException(
                     "${mainMacroName}: block chains must start at a field access",
                     t.toTokens(),
-                    hint: "The starting segment must be a plain '.' field")
+                    hint: "The starting slot must be a plain '.' field")
             }
             var j = k + 1
             while (j < toks.size && toks[j].kind == TokenKind.NL) { j += 1 }
@@ -162,7 +162,7 @@ private func scanBlockSpec(toks: Tokens, startIdx: Int64, input: Tokens): BlockS
                 throw DiagReportException(
                     "${mainMacroName}: block chains must start at a field access",
                     toks[j].toTokens(),
-                    hint: "The starting segment must be a plain '.' field, not a call")
+                    hint: "The starting slot must be a plain '.' field, not a call")
             }
         }
         entry.add(t)
@@ -265,7 +265,7 @@ private func collectLeafPaths(spec: BlockSpec): ArrayList<Array<CompositionNode>
 
 /// Two leaf chains conflict iff identical — the same field written twice.
 /// Everything else composes through the threading; quirks from unlawful
-/// optics are accepted by design (see docs/fix-plans/06).
+/// optics are accepted by design (see docs/api/macros/f.md#blocks).
 private func blockChainsConflict(a: Array<CompositionNode>, b: Array<CompositionNode>): Bool {
     if (a.size != b.size) { return false }
     for (i in 0..a.size) {
@@ -311,7 +311,7 @@ private func parseBlockChain(entry: ArrayList<Token>, input: Tokens): Array<Comp
     throw DiagReportException(
         "${mainMacroName}: block chains must start at a field access",
         exprs[0].toTokens(),
-        hint: "The starting segment must be a plain '.' field")
+        hint: "The starting slot must be a plain '.' field")
 }
 
 private func blockEnd(toks: Tokens, blockOpen: Int64): Int64 {
@@ -384,7 +384,7 @@ private func parseBlockAnchor(toks: Tokens, blockIdx: Int64, input: Tokens): (Ex
         throw DiagReportException(
             "${mainMacroName}: invalid anchor before the block", anchorTokens)
     }
-    // A bare identifier anchor (`o.{ ... }`) has no chain segments yet.
+    // A bare identifier anchor (`o.{ ... }`) has no chain slots yet.
     let (baseExpr, anchorNodes): (?Expr, Array<CompositionNode>) = match (anchorExprs[0]) {
         case re: RefExpr => (Some(re), [TypeOf(re.toTokens())])
         case other => classifyLead(other, input)
@@ -598,7 +598,7 @@ enum CompositionNode {
 private func getCompositionNode(input: Expr, total!: Bool = true): CompositionNode {
     match (input) {
         case ce: CallExpr =>
-            let re = ce.callFunc as RefExpr ?? throw DiagReportException("${mainMacroName}: unsupported callee form in a chain segment", ce.toTokens())
+            let re = ce.callFunc as RefExpr ?? throw DiagReportException("${mainMacroName}: unsupported callee form in a chain slot", ce.toTokens())
             if (re.identifier.value == typeFakeCallexprId.value) {
                 Type(ce.arguments[0].expr as RefExpr ?? throw DiagReportException(
                     "${mainMacroName}: '@ty' expects a plain type name, e.g. @ty(GBox)",
@@ -669,7 +669,7 @@ private func decomposeMemberAccessExpr(maccess: Expr): (?Expr, Array<Composition
                     let genericParams = if (member.typeArguments.size == 0) { quote() } else { quote(<$(commaSeparated(member.typeArguments))>) }
                     let arguments = ce.arguments
                     let ce2 = CallExpr(quote($funcName$genericParams($arguments)))
-                    // The segment is partial ('?.') when an OptionalExpr is pending
+                    // The slot is partial ('?.') when an OptionalExpr is pending
                     // from above or wraps this call's own base: `xs?.at2(1)`.
                     let segTotal = !(forcePrism || (member.baseExpr is OptionalExpr))
                     // Coerce is fixed-total (RegistryIsos); a '?.' mark promises a
