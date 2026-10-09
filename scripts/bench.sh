@@ -2,6 +2,7 @@
 # Runs the benchmark suite (examples/bench plus the generated shapes in
 # tests/src/generated) and prints per-case statistics.
 # Requires CANGJIE_HOME; see docs/benchmarks.md for recorded results.
+# Arguments are passed to each benchmark binary, e.g. --filter='Enum8*Bench.*'.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -32,9 +33,9 @@ echo "== building benchmark binaries =="
 BIN=examples/target/release/unittest_bin
 for bench in general depth examples; do
     echo "== bench: $bench =="
-    "$BIN/optics_experiments.bench.$bench" --bench
+    "$BIN/optics_experiments.bench.$bench" --bench "$@"
 done
 
 # The generated shapes live with the harness they measure, in the test project.
 echo "== bench: generated =="
-tests/target/release/unittest_bin/tests.generated --bench
+tests/target/release/unittest_bin/tests.generated --bench "$@"

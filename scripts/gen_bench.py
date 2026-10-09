@@ -423,15 +423,17 @@ class {label}Equivalence {{
 
 
 
-def emit_enum(n: int) -> str:
+def emit_enum(n: int, hit: bool = False) -> str:
     """A chain of nested structs ending in an enum, updated through one case.
 
     The case slot is partial, so both the hand-written baseline and the
     inlined form carry a miss arm that hands the source back untouched.
     """
-    structs = [f"EN{n}_S{i}" for i in range(1, n)]
-    enum = f"EN{n}_E"
-    root, tick = f"v_en{n}", f"tick_en{n}"
+    suffix = "Hit" if hit else ""
+    prefix = f"EN{n}{suffix}"
+    structs = [f"{prefix}_S{i}" for i in range(1, n)]
+    enum = f"{prefix}_E"
+    root, tick = f"v_en{n}{suffix.lower()}", f"tick_en{n}{suffix.lower()}"
     x_path = ".x" * (len(structs) - 1)
 
     shape = []
@@ -456,7 +458,7 @@ def emit_enum(n: int) -> str:
             case _ => {root}
         }}"""
 
-    init = f"{enum}.Empty"
+    init = f"{enum}.Held(0)" if hit else f"{enum}.Empty"
     for name in reversed(structs):
         init = f"{name}({init}, 0)"
 
@@ -487,12 +489,13 @@ def emit_enum(n: int) -> str:
             case _ => Option<Int64>.None
         }}"""
     return _bench_class(
-        f"Enum{n}", root, tick, structs[0], shape, init, expr, chain, "{tick}",
+        f"Enum{n}{suffix}", root, tick, structs[0], shape, init, expr, chain, "{tick}",
         decls, equality=equality + eq_tail, binders=("p",),
         read_chain=f"{root}{x_path}.x?.Held",
         read_expr=read_expr,
         read_ty="Option<Int64>",
-        note="A partial slot: the case can miss, and a miss rebuilds nothing.",
+        note=("A partial slot on a hit: replace the payload and rebuild its owners."
+              if hit else "A partial slot on a miss: return the source without rebuilding."),
     )
 
 
@@ -817,9 +820,10 @@ def main(argv: list[str]) -> int:
         path.write_text(emit_width(n))
         written.append(path)
     for n in enums:
-        path = out / f"enum{n}.cj"
-        path.write_text(emit_enum(n))
-        written.append(path)
+        for hit in (False, True):
+            path = out / f"enum{n}{'hit' if hit else ''}.cj"
+            path.write_text(emit_enum(n, hit))
+            written.append(path)
     for n in options:
         path = out / f"option{n}.cj"
         path.write_text(emit_option(n))
@@ -854,7 +858,7 @@ def main(argv: list[str]) -> int:
     total = sum(path.read_text().count("@Bench") for path in written)
     print(
         f"\n{len(written)} shapes, {total} benchmarks ({len(depths)} depth, "
-        f"{len(widths)} width, {len(enums)} enum, {len(options)} option, "
+        f"{len(widths)} width, {2 * len(enums)} enum, {len(options)} option, "
         f"{len(block_depths)} block depth, {len(block_widths)} block width, "
         f"{len(isos)} iso, 1 prism block)"
     )
