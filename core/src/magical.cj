@@ -2,7 +2,10 @@ package lucida
 
 import lucida.macrodsl.*
 
-public struct RegistryMagical<T> { }
+public struct RegistryMagical<T> {
+    @Frozen
+    public init() { }
+}
 
 public func __downcast_method_coerce<T, G>(_: RegistryMagical<T>, _: RegistryMagical<G>): RegistryIsos<T> {
     RegistryIsos()

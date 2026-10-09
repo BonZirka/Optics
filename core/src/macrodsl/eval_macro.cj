@@ -909,8 +909,8 @@ private func emitFusedBackwardWalk(nodes: Array<CompositionNode>, source: Expr, 
         })
     }
     let (allBindings, fwdIds, bwdIds) = emitLeafBindingsAndIds(nodes, LeafWalk.Backward)
-    let src = idTok("src")
-    let fcs = idTok("fcs")
+    let src = idTok("__walkSource")
+    let fcs = idTok("__walkTarget")
 
     // Values entering each slot: [src, t0, ..., t_{n-1}]; the backward fold
     // consumes them right-to-left. Prism payloads bind t_i in the guard pattern.
@@ -918,16 +918,14 @@ private func emitFusedBackwardWalk(nodes: Array<CompositionNode>, source: Expr, 
     intermediates.add(src)
     let body = emitFusedBackwardBody(nodes, fwdIds, bwdIds, src, fcs, 0, src, intermediates)
 
-    let backwardId = idTok("__fusedBackward")
-    let backwardBinding = quote(
-        let $backwardId = $pinBackwardCallexprId({ => $source }, { => $target }, { $src, $fcs =>
-            $body
-        })
-    )
+    // Applied updates already have concrete source and replacement values.
+    // Bind them once, before any partial guard, and emit the walk in place.
+    // A typed walk closure here can survive -O2 as an out-of-line call with
+    // captured leaf functions even when every leaf is frozen.
     quote(
         $allBindings
-        $backwardBinding
-        $evalBackwardCallexprId($backwardId, $source, $target)
+        let ($src, $fcs) = ($source, $target)
+        $body
     )
 }
 

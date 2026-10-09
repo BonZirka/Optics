@@ -32,7 +32,6 @@ let composeBackwardCallexprId = quote(__OpticsCompositions.composeBackward)
 let opticsUpcastCallexprId = quote(__OpticsCompositions.opticsUpcast)
 
 let pinForwardCallexprId = Token(IDENTIFIER, "pinForward")
-let pinBackwardCallexprId = Token(IDENTIFIER, "pinBackward")
 let bwdApplyCallexprId = Token(IDENTIFIER, "__bwdApply")
 let bwdApplyTotalCallexprId = Token(IDENTIFIER, "__bwdApplyTotal")
 let fwdApplyTotalCallexprId = Token(IDENTIFIER, "__fwdApplyTotal")
